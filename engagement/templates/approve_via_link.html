@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Approbation de commentaire{% endblock %}
+{% block meta_robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 4rem 2rem; text-align: center; color: white;">
+    {% if state == 'approved' %}
+        <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-check-circle" style="color: var(--vert);"></i> Commentaire approuvé</h1>
+        <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+            Le commentaire de <strong>{{ comment.display_name }}</strong> est maintenant visible sur le site.
+        </p>
+    {% elif state == 'already' %}
+        <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-info-circle" style="color: var(--vert);"></i> Déjà approuvé</h1>
+        <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+            Ce commentaire est déjà publié sur le site.
+        </p>
+    {% elif state == 'expired' %}
+        <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-clock" style="color: var(--rouge);"></i> Lien expiré</h1>
+        <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+            Ce lien d'approbation n'est plus valide. Ouvrez la file de modération pour valider le commentaire.
+        </p>
+    {% elif state == 'not_found' %}
+        <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-question-circle" style="color: var(--rouge);"></i> Commentaire introuvable</h1>
+        <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+            Il a peut-être été supprimé entre-temps.
+        </p>
+    {% else %}
+        <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-exclamation-triangle" style="color: var(--rouge);"></i> Lien invalide</h1>
+        <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+            La signature du lien n'est pas valide.
+        </p>
+    {% endif %}
+</section>
+
+<div class="form-container">
+    <div style="display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
+        {% if state == 'approved' and comment %}
+        <a href="{{ url_for('articles.public_show', slug=comment.article.slug) }}#comments" class="btn btn-primary">
+            <i class="fas fa-eye"></i> Voir sur le site
+        </a>
+        {% endif %}
+        <a href="{{ url_for('admin_comments.list_comments') }}" class="btn btn-vert">
+            <i class="fas fa-cog"></i> Ouvrir la modération
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -31,9 +31,13 @@
                 <input type="text" name="prenom" required placeholder="Prénom (obligatoire)" maxlength="120">
                 <input type="text" name="nom" placeholder="Nom (facultatif)" maxlength="120">
             </div>
-            <input type="email" name="email" placeholder="E-mail (facultatif, non publié)" maxlength="255">
+            <input type="email" name="email" id="comment-email" placeholder="E-mail (facultatif, non publié)" maxlength="255">
             <textarea name="content" rows="4" required minlength="3" maxlength="5000"
                       placeholder="Votre commentaire…"></textarea>
+            <label class="comment-subscribe" id="comment-subscribe-row" style="display:none;">
+                <input type="checkbox" name="subscribe_newsletter" id="comment-subscribe">
+                <span>M'inscrire à la newsletter pour être informé des nouveaux articles.</span>
+            </label>
             <div class="comment-form-actions">
                 <small>
                     Les commentaires sont relus avant publication. Votre e-mail n'est pas publié.
@@ -45,3 +49,14 @@
         </form>
     </div>
 </section>
+<script>
+(function () {
+    // Show the "subscribe to newsletter" checkbox only when an e-mail is filled in.
+    const email = document.getElementById('comment-email');
+    const row = document.getElementById('comment-subscribe-row');
+    if (!email || !row) return;
+    const update = () => { row.style.display = email.value.trim() ? '' : 'none'; };
+    email.addEventListener('input', update);
+    update();
+})();
+</script>

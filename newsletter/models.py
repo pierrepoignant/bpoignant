@@ -22,6 +22,25 @@ class Subscriber(db.Model):
         full = ' '.join(p for p in (self.prenom, self.nom) if p)
         return full or None
 
+
+class Campaign(db.Model):
+    """One row per "send this article to all subscribers" action.
+
+    Lets the admin see what's been sent and avoid resending by accident.
+    """
+    __tablename__ = 'newsletter_campaigns'
+
+    id = db.Column(db.Integer, primary_key=True)
+    article_id = db.Column(db.Integer, db.ForeignKey('articles.id'), nullable=False, index=True)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    sent_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    recipient_count = db.Column(db.Integer, default=0, nullable=False)
+    success_count = db.Column(db.Integer, default=0, nullable=False)
+    error_count = db.Column(db.Integer, default=0, nullable=False)
+
+    article = db.relationship('Article')
+    sent_by = db.relationship('User')
+
     @property
     def is_active(self):
         return self.unsubscribed_at is None

@@ -75,6 +75,7 @@ def create_user():
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
+        email = (request.form.get('email') or '').strip().lower() or None
         is_admin = request.form.get('is_admin') == 'on'
 
         if not username or not password:
@@ -85,7 +86,7 @@ def create_user():
             flash(f'Utilisateur "{username}" déjà existant.', 'danger')
             return redirect(url_for('auth.create_user'))
 
-        user = User(username=username, is_admin=is_admin)
+        user = User(username=username, email=email, is_admin=is_admin)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -93,6 +94,16 @@ def create_user():
         return redirect(url_for('auth.list_users'))
 
     return render_template('user_form.html', user=None)
+
+
+@auth_bp.route('/users/<int:user_id>/email', methods=['POST'])
+@admin_required
+def set_email(user_id):
+    user = User.query.get_or_404(user_id)
+    user.email = (request.form.get('email') or '').strip().lower() or None
+    db.session.commit()
+    flash(f'E-mail mis à jour pour {user.username}.', 'success')
+    return redirect(url_for('auth.list_users'))
 
 
 @auth_bp.route('/users/<int:user_id>/password', methods=['POST'])

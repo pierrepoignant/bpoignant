@@ -14,8 +14,15 @@ from config import initialize_config
 def _build_database_uri(app, db_name):
     """Build a MySQL connection URI from the `database-<db_name>` config
     section. Falls back to a local SQLite file under instance/ only if no
-    DB credentials are configured at all — useful for first-run tests.
+    DB credentials are configured at all.
+
+    `DATABASE_URL` env var takes precedence over everything — explicit
+    escape hatch for local tests that must not touch the OVH MySQL.
     """
+    explicit = os.environ.get('DATABASE_URL')
+    if explicit:
+        return explicit, {}
+
     section = f'database-{db_name}'
     db_config = app.config.get(section) or {}
     host = db_config.get('host')
@@ -111,6 +118,7 @@ def create_app(db_name='ovh'):
 
     with app.app_context():
         db.create_all()
+        _migrate_schema()
         _seed_admin_user()
         _seed_default_author()
 
@@ -200,6 +208,20 @@ def create_app(db_name='ovh'):
         return render_template('404.html'), 404
 
     return app
+
+
+def _migrate_schema():
+    """Lightweight forward-only migrations. SQLAlchemy's create_all only
+    creates missing tables — it never ALTERs existing ones, so we run
+    a few targeted ALTERs here for columns added after launch."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if 'users' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('users')}
+        if 'email' not in cols:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL"))
+            db.session.commit()
 
 
 def _seed_admin_user():

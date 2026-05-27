@@ -863,6 +863,20 @@ a:hover { color: var(--rouge-fonce); }
 
 .comment-form textarea { resize: vertical; min-height: 100px; }
 
+.comment-subscribe {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--noir);
+    background: rgba(230,0,62,0.06);
+    border: 1px solid rgba(230,0,62,0.15);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+}
+.comment-subscribe input { width: auto; transform: scale(1.1); accent-color: var(--rouge); flex-shrink: 0; }
+
 .comment-form-actions {
     display: flex;
     align-items: center;

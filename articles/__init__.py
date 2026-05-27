@@ -98,8 +98,42 @@ def public_show(slug):
 @admin_articles_bp.route('/')
 @admin_required
 def list_articles():
+    from newsletter.models import Campaign
     articles = Article.query.order_by(Article.created_at.desc()).all()
-    return render_template('articles_admin_list.html', articles=articles)
+    last_campaign_by_article = {}
+    for c in Campaign.query.order_by(Campaign.sent_at.desc()).all():
+        if c.article_id not in last_campaign_by_article:
+            last_campaign_by_article[c.article_id] = c
+    return render_template(
+        'articles_admin_list.html',
+        articles=articles,
+        last_campaign_by_article=last_campaign_by_article,
+    )
+
+
+@admin_articles_bp.route('/<int:article_id>/send-newsletter', methods=['POST'])
+@admin_required
+def send_newsletter(article_id):
+    from flask_login import current_user
+    from newsletter import send_article_to_subscribers
+    from mail import is_configured
+
+    article = db.session.get(Article, article_id) or abort(404)
+    if not article.published:
+        flash("L'article doit être publié avant d'envoyer la newsletter.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if not is_configured():
+        flash("SendGrid n'est pas configuré (SENDGRID__API_KEY manquant).", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    campaign = send_article_to_subscribers(article, sent_by=current_user)
+    flash(
+        f"Newsletter envoyée à {campaign.success_count}/{campaign.recipient_count} abonnés"
+        + (f" ({campaign.error_count} échecs)" if campaign.error_count else "")
+        + ".",
+        'success' if campaign.error_count == 0 else 'warning',
+    )
+    return redirect(url_for('admin_articles.list_articles'))
 
 
 @admin_articles_bp.route('/new', methods=['GET', 'POST'])

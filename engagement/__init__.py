@@ -1,15 +1,42 @@
 import hashlib
+import logging
 from datetime import datetime
 
 from flask import (
     Blueprint, abort, current_app, flash, jsonify, redirect, render_template,
     request, url_for,
 )
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from init_db import db
 from articles.models import Article
 from engagement.models import Comment, Reaction
 from auth import admin_required
+from auth.models import User
+from mail import send_email, is_configured as mail_is_configured
+
+log = logging.getLogger(__name__)
+
+APPROVE_TOKEN_SALT = 'comment-approve-v1'
+APPROVE_TOKEN_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
+
+def _serializer():
+    return URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+
+
+def _make_approve_token(comment_id):
+    return _serializer().dumps({'comment_id': comment_id}, salt=APPROVE_TOKEN_SALT)
+
+
+def _read_approve_token(token):
+    try:
+        data = _serializer().loads(token, salt=APPROVE_TOKEN_SALT, max_age=APPROVE_TOKEN_MAX_AGE)
+    except SignatureExpired:
+        return None, 'expired'
+    except BadSignature:
+        return None, 'invalid'
+    return data.get('comment_id'), None
 
 engagement_bp = Blueprint('engagement', __name__, template_folder='templates')
 admin_comments_bp = Blueprint(
@@ -72,11 +99,76 @@ def post_comment(slug):
     db.session.add(c)
     db.session.commit()
 
+    # If the visitor ticked the "register me to the newsletter" box AND
+    # left an email, sign them up at the same time.
+    if email and request.form.get('subscribe_newsletter') == 'on':
+        _subscribe_from_comment(email=email, prenom=prenom, nom=nom)
+
+    # Fire-and-forget e-mail to all admins. Failures are logged, not surfaced.
+    try:
+        _notify_admins_of_comment(article, c)
+    except Exception as exc:  # pragma: no cover — defensive
+        log.warning("comment-alert send failed: %s", exc)
+
     if auto_approve:
         flash("Merci pour votre commentaire !", 'success')
     else:
         flash("Merci ! Votre commentaire est en attente de modération.", 'info')
     return redirect(url_for('articles.public_show', slug=slug) + '#comments')
+
+
+def _subscribe_from_comment(email, prenom, nom):
+    """Add a newsletter subscriber if not already present. Idempotent."""
+    import secrets
+    from newsletter.models import Subscriber
+
+    email = email.strip().lower()
+    existing = Subscriber.query.filter_by(email=email).first()
+    if existing:
+        existing.prenom = prenom or existing.prenom
+        existing.nom = nom or existing.nom
+        if existing.unsubscribed_at is not None:
+            existing.unsubscribed_at = None
+            existing.subscribed_at = datetime.utcnow()
+        db.session.commit()
+        return
+    db.session.add(Subscriber(
+        email=email, prenom=prenom or None, nom=nom or None,
+        token=secrets.token_urlsafe(24),
+    ))
+    db.session.commit()
+
+
+def _notify_admins_of_comment(article, comment):
+    """Email every admin user that has an address. Includes a one-click
+    tokenized approval link that doesn't require logging in."""
+    if not mail_is_configured():
+        log.info("comment-alert skipped — mail not configured")
+        return
+
+    recipients = User.query.filter(User.is_admin == True, User.email.isnot(None)).all()
+    if not recipients:
+        log.info("comment-alert skipped — no admin has an e-mail")
+        return
+
+    token = _make_approve_token(comment.id)
+    approve_url = url_for('engagement.approve_via_link', token=token, _external=True)
+    moderation_url = url_for('admin_comments.list_comments', _external=True)
+    site_url = url_for('articles.public_list', _external=True)
+
+    subject = f"Nouveau commentaire : {article.title[:80]}"
+    for admin in recipients:
+        html = render_template(
+            'email/comment_alert.html',
+            article=article,
+            comment=comment,
+            approve_url=approve_url,
+            moderation_url=moderation_url,
+            site_url=site_url,
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+        )
+        send_email(to_email=admin.email, to_name=admin.username, subject=subject, html=html)
 
 
 # ─── PUBLIC: REACTIONS ──────────────────────────────────────
@@ -146,6 +238,32 @@ def reactions_context(article):
         'counts': _reaction_counts(article.id),
         'user_reacted': _user_reactions(article.id, visitor),
     }
+
+
+# ─── ONE-CLICK APPROVAL FROM E-MAIL ─────────────────────────
+
+@engagement_bp.route('/comments/approve/<token>')
+def approve_via_link(token):
+    """Approve a pending comment using a signed token from the admin alert
+    email. No login required — the token is HMAC-signed with SECRET_KEY
+    and expires after 30 days."""
+    comment_id, err = _read_approve_token(token)
+    if err == 'expired':
+        return render_template('approve_via_link.html', state='expired'), 410
+    if err == 'invalid' or comment_id is None:
+        return render_template('approve_via_link.html', state='invalid'), 400
+
+    c = db.session.get(Comment, comment_id)
+    if c is None:
+        return render_template('approve_via_link.html', state='not_found'), 404
+
+    if c.approved:
+        return render_template('approve_via_link.html', state='already', comment=c)
+
+    c.approved = True
+    c.approved_at = datetime.utcnow()
+    db.session.commit()
+    return render_template('approve_via_link.html', state='approved', comment=c)
 
 
 # ─── ADMIN: COMMENT MODERATION ──────────────────────────────

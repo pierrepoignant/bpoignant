@@ -9,8 +9,14 @@ from flask import (
 )
 
 from init_db import db
-from newsletter.models import Subscriber
+from newsletter.models import Subscriber, Campaign
 from auth import admin_required
+from flask import current_app, render_template, url_for
+from flask_login import current_user
+from mail import send_email
+import logging
+
+log = logging.getLogger(__name__)
 
 newsletter_bp = Blueprint('newsletter', __name__, url_prefix='/newsletter', template_folder='templates')
 admin_subscribers_bp = Blueprint(
@@ -134,3 +140,52 @@ def delete_subscriber(subscriber_id):
     db.session.commit()
     flash("Abonné supprimé.", 'success')
     return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
+# ─── SEND NEWSLETTER FOR AN ARTICLE ─────────────────────────
+
+def send_article_to_subscribers(article, sent_by=None):
+    """Mail the given article to every active subscriber. Returns a
+    Campaign with success/error counts (also committed to the DB)."""
+    from articles.models import Article  # local import to avoid cycle
+
+    subscribers = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).all()
+    campaign = Campaign(
+        article_id=article.id,
+        sent_by_id=getattr(sent_by, 'id', None),
+        recipient_count=len(subscribers),
+    )
+    db.session.add(campaign)
+    db.session.commit()
+
+    site_url = url_for('articles.public_list', _external=True)
+    article_url = url_for('articles.public_show', slug=article.slug, _external=True)
+
+    successes, errors = 0, 0
+    for sub in subscribers:
+        unsub_url = url_for('newsletter.unsubscribe', token=sub.token, _external=True)
+        html = render_template(
+            'email/newsletter_article.html',
+            article=article,
+            article_url=article_url,
+            site_url=site_url,
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+            unsubscribe_url=unsub_url,
+        )
+        name = ' '.join(p for p in (sub.prenom, sub.nom) if p) or None
+        ok = send_email(
+            to_email=sub.email,
+            to_name=name,
+            subject=article.title,
+            html=html,
+        )
+        if ok:
+            successes += 1
+        else:
+            errors += 1
+
+    campaign.success_count = successes
+    campaign.error_count = errors
+    db.session.commit()
+    return campaign

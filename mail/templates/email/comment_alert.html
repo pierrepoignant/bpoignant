@@ -1,0 +1,47 @@
+{% extends 'email/_base.html' %}
+{% block subject %}Nouveau commentaire à modérer{% endblock %}
+
+{% block content %}
+    <h1 style="font-size:20px;line-height:1.3;margin:0 0 8px;color:#1A1A2E;">
+        Nouveau commentaire à modérer
+    </h1>
+    <p style="color:#6C757D;margin:0 0 20px;font-size:14px;">
+        Sur l'article <strong style="color:#1A1A2E;">{{ article.title }}</strong>
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background:#F4F5F7;border-left:3px solid #E6003E;border-radius:0 8px 8px 0;margin-bottom:20px;">
+        <tr>
+            <td style="padding:14px 16px;">
+                <div style="font-size:13px;color:#6C757D;margin-bottom:6px;">
+                    <strong style="color:#1A1A2E;">{{ comment.display_name }}</strong>
+                    {% if comment.email %}&lt;{{ comment.email }}&gt;{% endif %}
+                    · {{ comment.created_at.strftime('%d/%m/%Y à %H:%M') }}
+                </div>
+                <div style="white-space:pre-wrap;font-size:14px;color:#1A1A2E;line-height:1.6;">
+{{ comment.content }}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <div style="text-align:center;margin:24px 0 8px;">
+        <a href="{{ approve_url }}"
+           style="display:inline-block;background:#C6D002;color:#1A1A2E;padding:12px 28px;border-radius:50px;text-decoration:none;font-weight:700;font-size:14px;margin:0 4px 8px;">
+            ✓ Approuver
+        </a>
+        <a href="{{ moderation_url }}"
+           style="display:inline-block;background:transparent;color:#1A1A2E;padding:12px 28px;border:2px solid #e0e0e0;border-radius:50px;text-decoration:none;font-weight:600;font-size:14px;margin:0 4px 8px;">
+            Ouvrir la modération
+        </a>
+    </div>
+
+    <p style="font-size:12px;color:#6C757D;text-align:center;margin-top:16px;">
+        Le bouton « Approuver » fonctionne sans connexion (lien signé valable 30 jours).
+    </p>
+{% endblock %}
+
+{% block footer %}
+    Vous recevez cet e-mail parce que vous êtes administrateur de
+    <a href="{{ site_url }}" style="color:#E6003E;text-decoration:none;">bernardpoignant.fr</a>.
+{% endblock %}
