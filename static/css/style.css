@@ -608,6 +608,100 @@ a:hover { color: var(--rouge-fonce); }
 .footer-links a { color: rgba(255,255,255,0.6); font-size: 0.85rem; }
 .footer-links a:hover { color: var(--blanc); }
 
+/* ─── Newsletter block ─────────────────────────────── */
+.newsletter-block {
+    background: linear-gradient(135deg, var(--rouge), var(--rouge-fonce));
+    color: var(--blanc);
+    padding: 4rem 1.5rem;
+    text-align: center;
+}
+
+.newsletter-inner {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+.newsletter-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: var(--blanc);
+}
+
+.newsletter-block h2 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    color: var(--blanc);
+}
+
+.newsletter-block > .newsletter-inner > p {
+    font-size: 1.05rem;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 1.5rem;
+}
+
+.newsletter-form {
+    display: grid;
+    gap: 0.6rem;
+    text-align: left;
+    margin: 0 auto;
+}
+
+.newsletter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+}
+
+.newsletter-form input {
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-family: inherit;
+    background: rgba(255,255,255,0.95);
+    color: var(--noir);
+    outline: 2px solid transparent;
+    transition: outline-color 0.2s;
+}
+
+.newsletter-form input:focus { outline-color: var(--vert); }
+
+.newsletter-form input::placeholder { color: rgba(0,0,0,0.45); }
+
+.newsletter-form button[type=submit] {
+    justify-self: center;
+    background: var(--noir);
+    color: var(--blanc);
+    margin-top: 0.4rem;
+}
+
+.newsletter-form button[type=submit]:hover {
+    background: var(--blanc);
+    color: var(--noir);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+}
+
+.newsletter-fineprint {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.7);
+}
+
+@media (max-width: 540px) {
+    .newsletter-row { grid-template-columns: 1fr; }
+    .newsletter-block { padding: 3rem 1rem; }
+    .newsletter-block h2 { font-size: 1.4rem; }
+}
+
 /* ─── Back link ────────────────────────────────────── */
 .back-link {
     display: inline-flex;

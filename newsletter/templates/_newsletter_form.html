@@ -1,0 +1,22 @@
+<section id="newsletter" class="newsletter-block">
+    <div class="newsletter-inner">
+        <div class="newsletter-icon"><i class="far fa-envelope"></i></div>
+        <h2>Newsletter</h2>
+        <p>Soyez informés lors de la publication de nouveaux articles.</p>
+        <form method="POST" action="{{ url_for('newsletter.subscribe') }}" class="newsletter-form">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <div class="newsletter-row">
+                <input type="text" name="prenom" placeholder="Prénom" autocomplete="given-name">
+                <input type="text" name="nom" placeholder="Nom" autocomplete="family-name">
+            </div>
+            <div class="newsletter-row">
+                <input type="email" name="email" required placeholder="votre@email.fr" autocomplete="email">
+                <input type="text" name="ville" placeholder="Ville" autocomplete="address-level2">
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-paper-plane"></i> S'inscrire
+            </button>
+        </form>
+        <p class="newsletter-fineprint">Seul l'e-mail est obligatoire. Désinscription en un clic depuis chaque message.</p>
+    </div>
+</section>

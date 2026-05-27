@@ -88,6 +88,11 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_articles_bp)
     app.register_blueprint(admin_authors_bp)
 
+    from newsletter.models import Subscriber  # noqa: F401
+    from newsletter import newsletter_bp, admin_subscribers_bp
+    app.register_blueprint(newsletter_bp)
+    app.register_blueprint(admin_subscribers_bp)
+
     with app.app_context():
         db.create_all()
         _seed_admin_user()
