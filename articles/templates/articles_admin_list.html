@@ -13,7 +13,9 @@
         <div style="display: flex; gap: 0.5rem;">
             <form method="POST" action="{{ url_for('admin_articles.cleanup_all') }}" style="margin: 0;"
                   onsubmit="return confirm('Nettoyer le HTML de tous les articles ? (supprime les &lt;br&gt;, ajoute les espaces manquants, etc.)')">
-                <button type="submit" class="btn btn-sm btn-outline" title="Normaliser le HTML de tous les articles">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Normaliser le HTML de tous les articles">
                     <i class="fas fa-broom"></i> Tout nettoyer
                 </button>
             </form>
