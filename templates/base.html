@@ -34,9 +34,10 @@
     <meta name="twitter:description" content="{{ self.og_description() }}">
     <meta name="twitter:image"       content="{{ self.og_image() }}">
 
-    {# ─── Icons / RSS ────────────────────────────────────────── #}
-    <link rel="icon" type="image/avif" href="{{ url_for('static', filename='images/bernardpoignant.avif') }}">
-    <link rel="apple-touch-icon"        href="{{ url_for('static', filename='images/bernardpoignant.avif') }}">
+    {# ─── Icons ──────────────────────────────────────────────── #}
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    {# Apple home-screen icon stays as the portrait so it's recognisable when saved to a phone. #}
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/bernardpoignant.avif') }}">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#E6003E"/>
+  <g transform="translate(7 6)">
+    <!-- Feather plume: pointed at the top, widening toward the quill -->
+    <path d="M42 2
+             C 28 6, 14 16, 9 30
+             C 6 38, 6 46, 8 50
+             L 16 50
+             Q 18 34, 26 24
+             Q 34 14, 42 2 Z"
+          fill="#ffffff"/>
+    <!-- Quill nib -->
+    <path d="M 8 50 L 2 56"
+          stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+    <!-- Faint central spine -->
+    <path d="M 40 4 L 14 48"
+          stroke="#E6003E" stroke-width="1.2" opacity="0.45"
+          stroke-linecap="round"/>
+  </g>
+</svg>
