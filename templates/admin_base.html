@@ -1,26 +1,23 @@
 {% extends 'base.html' %}
 
-{# Shared layout for every /admin/* page. Provides a unified dark hero and a
-   persistent tab strip below it. Pages extend this and fill in:
-   - {% block admin_title %} / {% block admin_subtitle %} for the hero text
-   - {% block admin_hero %} to fully replace the hero (e.g. form pages)
-   - {% block admin_section_style %} to tweak the content-section width
-   - {% block admin_content %} for the page body
-   The active tab is detected from request.path so we don't have to track it
-   in every template. #}
+{# Shared layout for every /admin/* page. One compact title strip + a tab
+   strip + content area. All admin pages share the same content width so
+   switching tabs never reflows the layout.
+
+   Pages fill in:
+   - {% block admin_title %} / {% block admin_subtitle %} for the strip text
+   - {% block admin_content %} for the body
+   The active tab is detected from request.path. #}
 
 {% set _p = request.path %}
 
 {% block content %}
-{% block admin_hero %}
 <section class="admin-hero">
-    {% block admin_back %}
-        <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
-    {% endblock %}
-    <h1>{% block admin_title %}<i class="fas fa-cog" style="color: var(--vert);"></i> Administration{% endblock %}</h1>
-    {% block admin_subtitle %}{% endblock %}
+    <div class="admin-hero-inner">
+        <h1>{% block admin_title %}<i class="fas fa-cog" style="color: var(--vert);"></i> Administration{% endblock %}</h1>
+        {% block admin_subtitle %}{% endblock %}
+    </div>
 </section>
-{% endblock %}
 
 <section class="section admin-shell">
     <nav class="admin-tabs" aria-label="Administration">
@@ -50,10 +47,7 @@
         </a>
     </nav>
 
-    {# Pages constrain their own content width via .admin-content's inline
-       style block — but the tab strip above always lives in the fixed-width
-       .admin-shell so it never shifts between pages. #}
-    <div class="admin-content" style="{% block admin_section_style %}{% endblock %}">
+    <div class="admin-content">
         {% block admin_content %}{% endblock %}
     </div>
 </section>

@@ -3,7 +3,6 @@
 
 {% block admin_title %}<i class="far fa-envelope" style="color: var(--vert);"></i> Newsletter{% endblock %}
 {% block admin_subtitle %}<p>{{ active|length }} abonné{{ 's' if active|length != 1 else '' }} actif{{ 's' if active|length != 1 else '' }}{% if unsubscribed %} · {{ unsubscribed|length }} désinscrit{{ 's' if unsubscribed|length != 1 else '' }}{% endif %}</p>{% endblock %}
-{% block admin_section_style %}max-width: 1000px;{% endblock %}
 
 {% block admin_content %}
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">

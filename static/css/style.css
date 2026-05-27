@@ -288,32 +288,48 @@ a:hover { color: var(--rouge-fonce); }
     font-size: 0.9rem;
 }
 
-/* Admin shared header. The hero sits at the top of every /admin/* page; the
-   tab strip lives just below it inside the content section. */
+/* Admin shared header. Compact strip — title only; tabs handle nav. */
 .admin-hero {
     background: linear-gradient(135deg, var(--noir), #16213E);
-    padding: 3rem 2rem;
-    text-align: center;
+    padding: 1rem 2rem;
     color: white;
 }
+.admin-hero-inner {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
 .admin-hero h1 {
-    font-size: 2rem;
-    font-weight: 800;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    white-space: nowrap;
 }
 .admin-hero p {
-    color: rgba(255,255,255,0.7);
+    color: rgba(255,255,255,0.65);
+    font-size: 0.85rem;
+    margin: 0;
 }
-.admin-hero .back-link { color: rgba(255,255,255,0.75); }
 
-/* Fixed-width admin shell so the tab strip stays in the same place across
-   every /admin/* page. Pages can still narrow their *content* below the tabs
-   via .admin-content's max-width — the tabs themselves don't move. */
+/* One canonical content width across every /admin/* page so switching
+   tabs never shifts the layout horizontally. */
 .admin-shell {
-    max-width: 1100px;
+    max-width: 1000px;
+    padding-top: 2rem;
+    padding-bottom: 3rem;
 }
 .admin-content {
     width: 100%;
     margin: 0 auto;
+}
+
+@media (max-width: 540px) {
+    .admin-hero { padding: 0.8rem 1rem; }
+    .admin-hero h1 { font-size: 1.05rem; }
+    .admin-shell { padding-top: 1.2rem; }
 }
 
 /* Admin tab strip — keeps active/inactive tabs the same size so the row

@@ -1,9 +1,8 @@
 {% extends 'admin_base.html' %}
 {% block title %}Modération{% endblock %}
 
-{% block admin_title %}<i class="far fa-comments" style="color: var(--vert);"></i> Modération des commentaires{% endblock %}
+{% block admin_title %}<i class="far fa-comments" style="color: var(--vert);"></i> Modération{% endblock %}
 {% block admin_subtitle %}<p>{{ pending|length }} en attente · {{ approved|length }} approuvé{{ 's' if approved|length != 1 else '' }} (100 derniers)</p>{% endblock %}
-{% block admin_section_style %}max-width: 900px;{% endblock %}
 
 {% block admin_content %}
     <h2 style="font-size: 1.2rem; margin: 0 0 1rem;">
