@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Mentions légales{% endblock %}
+{% block meta_description %}Mentions légales du site bernardpoignant.fr — éditeur, hébergeur, propriété intellectuelle.{% endblock %}
+{% block meta_robots %}index, follow{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
+    <h1 style="font-size: 2rem; font-weight: 800;">Mentions <span style="color: var(--rouge);">légales</span></h1>
+</section>
+
+<article class="article-body">
+    <h2>Éditeur du site</h2>
+    <p>
+        Le site <strong>bernardpoignant.fr</strong> est édité à titre personnel par&nbsp;:
+    </p>
+    <ul>
+        <li><strong>Directeur de la publication&nbsp;:</strong> {{ director_name }}</li>
+        <li><strong>Contact&nbsp;:</strong> <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></li>
+    </ul>
+
+    <h2>Hébergement</h2>
+    <p>
+        Le site est hébergé par&nbsp;:
+    </p>
+    <ul>
+        <li><strong>{{ host_provider }}</strong></li>
+        <li>{{ host_address }}</li>
+        <li>Téléphone&nbsp;: {{ host_phone }}</li>
+    </ul>
+
+    <h2>Propriété intellectuelle</h2>
+    <p>
+        L'ensemble des contenus publiés sur ce site (textes, images, mise en page) est protégé
+        par le droit d'auteur. Toute reproduction, représentation, modification ou exploitation,
+        par quelque procédé que ce soit, est interdite sans l'autorisation préalable et écrite de
+        l'éditeur, sauf dans le cadre des courtes citations prévues par l'article L.122-5 du
+        Code de la propriété intellectuelle, à condition d'indiquer clairement la source.
+    </p>
+
+    <h2>Responsabilité</h2>
+    <p>
+        L'éditeur s'efforce d'assurer l'exactitude et la mise à jour des informations diffusées
+        sur ce site. Il ne peut toutefois être tenu responsable d'erreurs, d'omissions ou de
+        l'indisponibilité des informations. Les liens vers des sites externes sont fournis à
+        titre informatif et l'éditeur n'a aucun contrôle sur leur contenu.
+    </p>
+
+    <h2>Données personnelles</h2>
+    <p>
+        Le traitement des données personnelles (formulaire de newsletter, mesure d'audience) est
+        détaillé dans la <a href="{{ url_for('legal.confidentialite') }}">politique de
+        confidentialité</a>.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Pour toute question relative au site&nbsp;:
+        <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+    </p>
+</article>
+{% endblock %}

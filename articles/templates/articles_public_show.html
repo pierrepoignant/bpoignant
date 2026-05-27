@@ -55,7 +55,13 @@
 
 <article class="article-body">
     {{ article.content_html|safe }}
+
+    <div class="article-reactions">
+        {% include '_reactions_bar.html' %}
+    </div>
 </article>
+
+{% include '_comments_section.html' %}
 
 {% if related %}
 <section class="section">

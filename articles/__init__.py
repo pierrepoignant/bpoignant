@@ -77,7 +77,20 @@ def public_show(slug):
         .limit(4)
         .all()
     )
-    return render_template('articles_public_show.html', article=article, related=related)
+    from engagement.models import Comment
+    from engagement import reactions_context
+    comments = (
+        Comment.query.filter_by(article_id=article.id, approved=True)
+        .order_by(Comment.created_at.asc())
+        .all()
+    )
+    return render_template(
+        'articles_public_show.html',
+        article=article,
+        related=related,
+        comments=comments,
+        reactions=reactions_context(article),
+    )
 
 
 # ─── ADMIN ──────────────────────────────────────────────────

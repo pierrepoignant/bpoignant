@@ -1,0 +1,40 @@
+<div class="reactions-bar" data-article-id="{{ article.id }}">
+    {% for e in reactions.emojis %}
+    <button type="button" class="reaction-btn {% if e in reactions.user_reacted %}active{% endif %}"
+            data-emoji="{{ e }}">
+        <span class="emoji">{{ e }}</span>
+        <span class="count">{{ reactions.counts[e] or '' }}</span>
+    </button>
+    {% endfor %}
+</div>
+<script>
+(function () {
+    const bar = document.querySelector('.reactions-bar[data-article-id="{{ article.id }}"]');
+    if (!bar) return;
+    const articleId = bar.dataset.articleId;
+    bar.addEventListener('click', async function (ev) {
+        const btn = ev.target.closest('.reaction-btn');
+        if (!btn) return;
+        const emoji = btn.dataset.emoji;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(`/api/articles/${articleId}/react`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({emoji}),
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            // Refresh every button in the bar.
+            bar.querySelectorAll('.reaction-btn').forEach(b => {
+                const e = b.dataset.emoji;
+                const c = data.counts[e] || 0;
+                b.querySelector('.count').textContent = c || '';
+                b.classList.toggle('active', data.user_reacted.includes(e));
+            });
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+</script>

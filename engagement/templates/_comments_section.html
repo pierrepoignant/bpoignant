@@ -1,0 +1,46 @@
+<section id="comments" class="comments-section">
+    <div class="comments-inner">
+        <h2 class="comments-title">
+            <i class="far fa-comments"></i>
+            {{ comments|length }} commentaire{{ 's' if comments|length != 1 else '' }}
+        </h2>
+
+        <form method="POST" action="{{ url_for('engagement.post_comment', slug=article.slug) }}"
+              class="comment-form">
+            <div class="comment-row">
+                <input type="text" name="prenom" required placeholder="Prénom (obligatoire)" maxlength="120">
+                <input type="text" name="nom" placeholder="Nom (facultatif)" maxlength="120">
+            </div>
+            <input type="email" name="email" placeholder="E-mail (facultatif, non publié)" maxlength="255">
+            <textarea name="content" rows="4" required minlength="3" maxlength="5000"
+                      placeholder="Votre commentaire…"></textarea>
+            <div class="comment-form-actions">
+                <small>
+                    Les commentaires sont relus avant publication. Votre e-mail n'est pas publié.
+                </small>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Publier
+                </button>
+            </div>
+        </form>
+
+        {% if comments %}
+            <ul class="comments-list">
+                {% for c in comments %}
+                <li class="comment-item">
+                    <div class="comment-avatar">{{ c.prenom[0]|upper }}</div>
+                    <div class="comment-body">
+                        <div class="comment-meta">
+                            <strong>{{ c.display_name }}</strong>
+                            <span>{{ c.created_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+                        </div>
+                        <div class="comment-text">{{ c.content|e|replace('\n', '<br>'|safe) }}</div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="comments-empty">Aucun commentaire pour le moment. Soyez le premier&nbsp;!</p>
+        {% endif %}
+    </div>
+</section>

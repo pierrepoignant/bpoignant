@@ -1,0 +1,78 @@
+{% extends 'admin_base.html' %}
+{% block title %}Modération{% endblock %}
+
+{% block admin_title %}<i class="far fa-comments" style="color: var(--vert);"></i> Modération des commentaires{% endblock %}
+{% block admin_subtitle %}<p>{{ pending|length }} en attente · {{ approved|length }} approuvé{{ 's' if approved|length != 1 else '' }} (100 derniers)</p>{% endblock %}
+{% block admin_section_style %}max-width: 900px;{% endblock %}
+
+{% block admin_content %}
+    <h2 style="font-size: 1.2rem; margin: 0 0 1rem;">
+        <i class="fas fa-clock" style="color: var(--rouge);"></i> En attente ({{ pending|length }})
+    </h2>
+
+    {% if pending %}
+        {% for c in pending %}
+        <div style="background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid var(--rouge);">
+            <div style="display: flex; gap: 1rem; align-items: flex-start;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--rouge); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">
+                    {{ c.prenom[0]|upper }}
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.9rem; color: var(--gris); margin-bottom: 0.3rem;">
+                        <strong style="color: var(--noir);">{{ c.display_name }}</strong>
+                        {% if c.email %}<span style="margin-left: 0.5rem;">&lt;{{ c.email }}&gt;</span>{% endif %}
+                        · {{ c.created_at.strftime('%d/%m/%Y %H:%M') }}
+                        · sur <a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.article.title }}</a>
+                    </div>
+                    <div style="white-space: pre-wrap; line-height: 1.55;">{{ c.content }}</div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                    <form method="POST" action="{{ url_for('admin_comments.approve_comment', comment_id=c.id) }}" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm btn-primary" style="padding: 6px 14px;">
+                            <i class="fas fa-check"></i> Approuver
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_comments.delete_comment', comment_id=c.id) }}" style="margin: 0;"
+                          onsubmit="return confirm('Supprimer ce commentaire ?')">
+                        <button type="submit" class="btn btn-sm" style="padding: 6px 14px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; padding: 2rem; color: var(--gris); background: white; border-radius: 12px;">
+            <i class="far fa-check-circle" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
+            <p>Aucun commentaire en attente.</p>
+        </div>
+    {% endif %}
+
+    {% if approved %}
+    <h2 style="font-size: 1.2rem; margin: 2.5rem 0 1rem;">
+        <i class="fas fa-check-circle" style="color: var(--vert-fonce);"></i> Approuvés ({{ approved|length }})
+    </h2>
+    {% for c in approved %}
+    <div style="background: white; border-radius: 12px; padding: 0.9rem 1.2rem; margin-bottom: 0.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.03); display: flex; gap: 0.8rem; align-items: flex-start;">
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--gris-clair); color: var(--noir); display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; font-size: 0.85rem;">
+            {{ c.prenom[0]|upper }}
+        </div>
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 0.8rem; color: var(--gris);">
+                <strong style="color: var(--noir);">{{ c.display_name }}</strong>
+                · {{ c.created_at.strftime('%d/%m/%Y') }}
+                · <a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.article.title|truncate(40) }}</a>
+            </div>
+            <div style="font-size: 0.9rem; color: var(--noir); margin-top: 2px;">{{ c.content|truncate(160) }}</div>
+        </div>
+        <form method="POST" action="{{ url_for('admin_comments.delete_comment', comment_id=c.id) }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer définitivement ?')">
+            <button type="submit" class="btn btn-sm" style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                <i class="fas fa-trash"></i>
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+    {% endif %}
+{% endblock %}

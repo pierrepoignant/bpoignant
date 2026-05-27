@@ -96,6 +96,14 @@ def create_app(db_name='ovh'):
     app.register_blueprint(newsletter_bp)
     app.register_blueprint(admin_subscribers_bp)
 
+    from engagement.models import Comment, Reaction  # noqa: F401
+    from engagement import engagement_bp, admin_comments_bp
+    app.register_blueprint(engagement_bp)
+    app.register_blueprint(admin_comments_bp)
+
+    from legal import legal_bp
+    app.register_blueprint(legal_bp)
+
     from analytics.models import PageView  # noqa: F401
     from analytics import analytics_bp, register_tracking
     app.register_blueprint(analytics_bp)
