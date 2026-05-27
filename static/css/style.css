@@ -824,12 +824,18 @@ a:hover { color: var(--rouge-fonce); }
     color: var(--noir);
 }
 
+.comment-form-heading {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--noir);
+    margin: 2.5rem 0 0.8rem;
+}
+
 .comment-form {
     background: var(--blanc);
     border-radius: 12px;
     padding: 1.5rem;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    margin-bottom: 2rem;
     display: grid;
     gap: 0.6rem;
 }
