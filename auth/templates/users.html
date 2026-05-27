@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Utilisateurs{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
+    <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
+    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-users" style="color: var(--vert);"></i> Utilisateurs</h1>
+</section>
+
+<section class="section" style="max-width: 900px;">
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem;">
+        <a href="{{ url_for('auth.create_user') }}" class="btn btn-sm btn-primary">
+            <i class="fas fa-user-plus"></i> Nouvel utilisateur
+        </a>
+    </div>
+
+    {% for user in users %}
+    <div style="background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 1rem;">
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--rouge), var(--rouge-fonce)); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700;">
+            {{ user.username[0]|upper }}
+        </div>
+        <div style="flex: 1;">
+            <strong>{{ user.username }}</strong>
+            {% if user.is_admin %}<span style="background: rgba(230,0,62,0.1); color: var(--rouge); padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem;">ADMIN</span>{% endif %}
+            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 2px;">
+                Créé le {{ user.created_at.strftime('%d/%m/%Y') }}
+                {% if user.last_login %}· dernière connexion {{ user.last_login.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+            </div>
+        </div>
+        <form method="POST" action="{{ url_for('auth.reset_password', user_id=user.id) }}"
+              style="display: flex; gap: 0.4rem; margin: 0;"
+              onsubmit="return confirm('Réinitialiser le mot de passe ?')">
+            <input type="password" name="password" placeholder="Nouveau mot de passe" required
+                   style="padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.85rem;">
+            <button type="submit" class="btn btn-sm" style="padding: 6px 12px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                <i class="fas fa-key"></i>
+            </button>
+        </form>
+        {% if user.id != current_user.id %}
+        <form method="POST" action="{{ url_for('auth.delete_user', user_id=user.id) }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer cet utilisateur ?')">
+            <button type="submit" class="btn btn-sm" style="padding: 6px 12px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                <i class="fas fa-trash"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

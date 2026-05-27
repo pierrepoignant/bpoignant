@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bpoignant-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bpoignant
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bpoignant
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: bpoignant
+    spec:
+      imagePullSecrets:
+        - name: ovh-registry-secret
+      containers:
+        - name: bpoignant
+          image: 8ie06lx5.c1.gra9.container-registry.ovh.net/bpoignant/bpoignant:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DATABASE_URL
+              value: sqlite:////data/bpoignant.db
+            - name: CACHE_TYPE
+              value: SimpleCache
+          envFrom:
+            - secretRef:
+                name: bpoignant-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bpoignant-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bpoignant-service
+  namespace: default
+spec:
+  selector:
+    app: bpoignant
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bpoignant-ingress
+  namespace: default
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - bernardpoignant.fr
+        - www.bernardpoignant.fr
+      secretName: bpoignant-tls
+  rules:
+    - host: bernardpoignant.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bpoignant-service
+                port:
+                  number: 80
+    - host: www.bernardpoignant.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bpoignant-service
+                port:
+                  number: 80

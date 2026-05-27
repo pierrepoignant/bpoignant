@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}{{ article.title }}{% endblock %}
+{% block meta_description %}{{ article.summary or article.title }}{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 4rem 2rem; color: white;">
+    <div style="max-width: 800px; margin: 0 auto;">
+        <a href="{{ url_for('articles.public_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour aux articles</a>
+        <h1 style="font-size: 2.4rem; font-weight: 800; margin: 0.5rem 0 1rem;">{{ article.title }}</h1>
+        <div style="color: rgba(255,255,255,0.7); font-size: 0.95rem;">
+            <i class="far fa-calendar"></i> {{ article.display_date.strftime('%d/%m/%Y') }}
+            {% if article.author %}
+                &nbsp;·&nbsp; <i class="far fa-user"></i> {{ article.author.username }}
+            {% endif %}
+        </div>
+        {% if article.summary %}
+        <p style="color: rgba(255,255,255,0.85); font-size: 1.1rem; margin-top: 1rem; max-width: 700px;">
+            {{ article.summary }}
+        </p>
+        {% endif %}
+    </div>
+</section>
+
+<article class="article-body">
+    {{ article.content_html|safe }}
+</article>
+
+{% if related %}
+<section class="section">
+    <div class="section-title">
+        <h2>D'autres <span>articles</span></h2>
+        <div class="bar"></div>
+    </div>
+    <div class="themes-grid">
+        {% for a in related %}
+        <a href="{{ url_for('articles.public_show', slug=a.slug) }}" class="theme-tile">
+            <div class="tile-icon"><i class="fas fa-feather-alt"></i></div>
+            <h3>{{ a.title }}</h3>
+            <p>{{ a.summary or '' }}</p>
+            <div class="tile-cta">Lire <i class="fas fa-arrow-right"></i></div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Articles{% endblock %}
+
+{% block content %}
+<section class="hero" style="min-height: 60vh;">
+    <div class="hero-bg" style="background-image: url('{{ url_for('static', filename='images/bernardpoignant.avif') }}'); background-size: cover; background-position: center; opacity: 0.18;"></div>
+    <div class="hero-content">
+        <img src="{{ url_for('static', filename='images/bernardpoignant.avif') }}" alt="Bernard Poignant" class="hero-portrait">
+        <div class="hero-subtitle">{{ site_tagline }}</div>
+        <h1>Bernard <span>Poignant</span></h1>
+        <p class="hero-tagline">
+            Articles, analyses et prises de position.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="section-title">
+        <h2>Tous les <span>articles</span></h2>
+        <div class="bar"></div>
+        <p>{{ articles|length }} article{{ 's' if articles|length != 1 else '' }} publié{{ 's' if articles|length != 1 else '' }}</p>
+    </div>
+
+    {% if articles %}
+    <div class="themes-grid">
+        {% for a in articles %}
+        <a href="{{ url_for('articles.public_show', slug=a.slug) }}" class="theme-tile">
+            <div class="tile-numero">{{ '%02d' % loop.index }}</div>
+            <div class="tile-icon"><i class="fas fa-feather-alt"></i></div>
+            <h3>{{ a.title }}</h3>
+            <p>{{ a.summary or '' }}</p>
+            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
+                <i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}
+            </div>
+            <div class="tile-cta">Lire l'article <i class="fas fa-arrow-right"></i></div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris);">
+        <i class="far fa-newspaper" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <p>Aucun article publié pour le moment.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

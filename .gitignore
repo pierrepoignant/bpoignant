@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv/
+venv/
+instance/
+*.sqlite
+*.sqlite3
+*.db
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
+.DS_Store
+# Production secrets — never commit
+bpoignant.json
+*-credentials.json
+service-account*.json

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ site_name }}{% endblock %} | {{ site_tagline }}</title>
+    <meta name="description" content="{% block meta_description %}{{ site_name }} — {{ site_tagline }}{% endblock %}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('articles.public_list') }}" class="navbar-brand">
+            <img src="{{ url_for('static', filename='images/bernardpoignant.avif') }}" alt="Bernard Poignant">
+            <span>Bernard <span class="accent">Poignant</span></span>
+        </a>
+        <button class="menu-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+            <i class="fas fa-bars"></i>
+        </button>
+        <ul class="nav-links">
+            <li><a href="{{ url_for('articles.public_list') }}" class="{% if request.endpoint and request.endpoint.startswith('articles.') %}active{% endif %}"><i class="fas fa-newspaper"></i>&nbsp; Articles</a></li>
+            {% if current_user.is_authenticated %}
+                <li><a href="{{ url_for('admin_articles.list_articles') }}" class="{% if request.endpoint and request.endpoint.startswith('admin_articles.') %}active{% endif %}"><i class="fas fa-cog"></i>&nbsp; Admin</a></li>
+                <li><a href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i>&nbsp; Déconnexion</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div style="max-width: 800px; margin: 1rem auto; padding: 0 1rem;">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+                <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+    <footer class="footer">
+        <div class="footer-brand">Bernard <span>Poignant</span></div>
+        <p>{{ site_tagline }}</p>
+        <p>&copy; {{ now.year }} — Tous droits réservés</p>
+        <div class="footer-links">
+            <a href="{{ url_for('articles.public_list') }}">Articles</a>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
