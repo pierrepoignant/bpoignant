@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date, time
 
 import bleach
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
@@ -59,7 +59,7 @@ def _unique_slug(title, exclude_id=None):
 def public_list():
     articles = (
         Article.query.filter_by(published=True)
-        .order_by(Article.published_at.desc().nullslast(), Article.created_at.desc())
+        .order_by(Article.created_at.desc())
         .all()
     )
     return render_template('articles_public_list.html', articles=articles)
@@ -72,7 +72,7 @@ def public_show(slug):
         abort(404)
     related = (
         Article.query.filter(Article.published == True, Article.id != article.id)
-        .order_by(Article.published_at.desc().nullslast(), Article.created_at.desc())
+        .order_by(Article.created_at.desc())
         .limit(4)
         .all()
     )
@@ -115,11 +115,27 @@ def delete_article(article_id):
     return redirect(url_for('admin_articles.list_articles'))
 
 
+def _parse_created_date(raw):
+    """Parse the YYYY-MM-DD value from the admin date picker into a datetime.
+
+    Time is fixed to 12:00 UTC so the date renders unambiguously in any
+    timezone. Returns None on empty / invalid input.
+    """
+    if not raw:
+        return None
+    try:
+        d = date.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    return datetime.combine(d, time(12, 0))
+
+
 def _save_article(article):
     title = (request.form.get('title') or '').strip()
     summary = (request.form.get('summary') or '').strip()
     content_html = _clean_html(request.form.get('content_html'))
     published = request.form.get('published') == 'on'
+    created_at = _parse_created_date(request.form.get('created_date'))
 
     if not title:
         flash("Le titre est obligatoire.", 'danger')
@@ -132,7 +148,7 @@ def _save_article(article):
             summary=summary,
             content_html=content_html,
             published=published,
-            published_at=datetime.utcnow() if published else None,
+            created_at=created_at or datetime.utcnow(),
             author_id=getattr(current_user, 'id', None),
         )
         db.session.add(article)
@@ -143,11 +159,9 @@ def _save_article(article):
         article.title = title
         article.summary = summary
         article.content_html = content_html
-        if published and not article.published:
-            article.published_at = datetime.utcnow()
-        if not published:
-            article.published_at = None
         article.published = published
+        if created_at is not None:
+            article.created_at = created_at
 
     db.session.commit()
     flash("Article enregistré.", 'success')

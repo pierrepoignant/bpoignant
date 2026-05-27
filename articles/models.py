@@ -21,4 +21,5 @@ class Article(db.Model):
 
     @property
     def display_date(self):
-        return self.published_at or self.created_at
+        # `created_at` is admin-editable and is the date shown everywhere.
+        return self.created_at
