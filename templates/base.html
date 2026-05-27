@@ -65,9 +65,14 @@
     </nav>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-        {# Filter out comment-* categories — those are rendered inline above
-           the comment form in _comments_section.html, not at the top. #}
-        {% set _global_msgs = messages | rejectattr('0', 'startswith', 'comment-') | list %}
+        {# comment-* categories are rendered inline above the comment form,
+           skip them here. #}
+        {% set _global_msgs = [] %}
+        {% for category, message in messages %}
+            {% if not category.startswith('comment-') %}
+                {% set _ = _global_msgs.append((category, message)) %}
+            {% endif %}
+        {% endfor %}
         {% if _global_msgs %}
         <div style="max-width: 800px; margin: 1rem auto; padding: 0 1rem;">
             {% for category, message in _global_msgs %}
