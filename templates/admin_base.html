@@ -29,6 +29,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/authors') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-feather-alt"></i> Auteurs
         </a>
+        <a href="{{ url_for('admin_pages.list_pages') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/pages') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-file-alt"></i> Pages
+        </a>
         <a href="{{ url_for('admin_comments.list_comments') }}"
            class="btn btn-sm {% if _p.startswith('/admin/comments') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-comments"></i> Commentaires

@@ -108,8 +108,10 @@ def create_app(db_name='ovh'):
     app.register_blueprint(engagement_bp)
     app.register_blueprint(admin_comments_bp)
 
-    from legal import legal_bp
-    app.register_blueprint(legal_bp)
+    from pages.models import Page  # noqa: F401
+    from pages import pages_bp, admin_pages_bp
+    app.register_blueprint(pages_bp)
+    app.register_blueprint(admin_pages_bp)
 
     from analytics.models import PageView  # noqa: F401
     from analytics import analytics_bp, register_tracking
@@ -121,6 +123,7 @@ def create_app(db_name='ovh'):
         _migrate_schema()
         _seed_admin_user()
         _seed_default_author()
+        _seed_default_pages()
 
     @app.context_processor
     def inject_globals():
@@ -151,6 +154,7 @@ def create_app(db_name='ovh'):
     def sitemap_xml():
         from flask import Response
         from articles.models import Article
+        from pages.models import Page
         articles = (
             Article.query.filter_by(published=True)
             .order_by(Article.created_at.desc())
@@ -168,6 +172,13 @@ def create_app(db_name='ovh'):
                 'lastmod': a.updated_at.date().isoformat(),
                 'changefreq': 'monthly',
                 'priority': '0.8',
+            })
+        for p in Page.query.filter_by(published=True).all():
+            urls.append({
+                'loc': url_for('pages.show', slug=p.slug, _external=True),
+                'lastmod': p.updated_at.date().isoformat(),
+                'changefreq': 'yearly',
+                'priority': '0.4',
             })
 
         xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>',
@@ -248,4 +259,25 @@ def _seed_default_author():
     if Author.query.count() > 0:
         return
     db.session.add(Author(name='Bernard Poignant'))
+    db.session.commit()
+
+
+def _seed_default_pages():
+    """Seed the three baseline editable pages on first boot: biographie,
+    mentions-legales, confidentialite. Each is inserted only if its slug is
+    missing — never overwritten — so the admin's edits are preserved.
+    """
+    from pages.models import Page
+    from pages.seed_content import DEFAULT_PAGES
+
+    for spec in DEFAULT_PAGES:
+        if Page.query.filter_by(slug=spec['slug']).first():
+            continue
+        db.session.add(Page(
+            slug=spec['slug'],
+            title=spec['title'],
+            meta_description=spec.get('meta_description'),
+            content_html=spec['content_html'],
+            published=True,
+        ))
     db.session.commit()

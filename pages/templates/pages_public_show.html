@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block meta_description %}{{ page.meta_description or (page.title ~ ' — ' ~ site_name) }}{% endblock %}
+{% block meta_robots %}index, follow{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
+    <h1 style="font-size: 2rem; font-weight: 800;">{{ page.title }}</h1>
+</section>
+
+<article class="article-body">
+    {{ page.content_html|safe }}
+    <p style="margin-top: 3rem; color: var(--gris); font-size: 0.85rem;">
+        Dernière mise à jour&nbsp;: {{ page.updated_at.strftime('%d/%m/%Y') }}.
+    </p>
+</article>
+{% endblock %}
