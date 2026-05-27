@@ -40,15 +40,18 @@ def subscribe():
         existing.prenom = prenom or existing.prenom
         existing.nom = nom or existing.nom
         existing.ville = ville or existing.ville
-        if existing.unsubscribed_at is not None:
+        reactivated = existing.unsubscribed_at is not None
+        if reactivated:
             existing.unsubscribed_at = None
             existing.subscribed_at = datetime.utcnow()
-            db.session.commit()
-            flash("Bienvenue de retour ! Vous êtes à nouveau inscrit.", 'success')
-        else:
-            db.session.commit()
-            flash("Vous êtes déjà inscrit. Merci !", 'info')
-        return redirect(redirect_to + '#newsletter')
+        db.session.commit()
+        return render_template(
+            'subscribe_done.html',
+            email=existing.email,
+            prenom=existing.prenom,
+            reactivated=reactivated,
+            already=not reactivated,
+        )
 
     sub = Subscriber(
         email=email,
@@ -59,8 +62,13 @@ def subscribe():
     )
     db.session.add(sub)
     db.session.commit()
-    flash("Merci ! Vous serez informé à la publication de nouveaux articles.", 'success')
-    return redirect(redirect_to + '#newsletter')
+    return render_template(
+        'subscribe_done.html',
+        email=sub.email,
+        prenom=sub.prenom,
+        reactivated=False,
+        already=False,
+    )
 
 
 @newsletter_bp.route('/unsubscribe/<token>', methods=['GET', 'POST'])
