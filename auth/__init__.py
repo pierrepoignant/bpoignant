@@ -23,6 +23,14 @@ def admin_required(view):
     return wrapped_view
 
 
+@auth_bp.route('/', strict_slashes=False)
+def admin_root():
+    """`/admin` and `/admin/` — go to the article list if logged in, else login."""
+    if current_user.is_authenticated:
+        return redirect(url_for('admin_articles.list_articles'))
+    return redirect(url_for('auth.login'))
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
