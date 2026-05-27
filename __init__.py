@@ -54,6 +54,9 @@ def create_app(db_name='ovh'):
         PREFERRED_URL_SCHEME='https',
         SITE_NAME=os.environ.get('SITE_NAME', 'Bernard Poignant'),
         SITE_TAGLINE=os.environ.get('SITE_TAGLINE', 'Articles & réflexions'),
+        # Google Search Console verification token — set via env to enable
+        # the <meta name="google-site-verification"> tag in base.html.
+        GOOGLE_SITE_VERIFICATION=os.environ.get('GOOGLE_SITE_VERIFICATION', ''),
     )
 
     app.config['CACHE_TYPE'] = os.environ.get('CACHE_TYPE', 'SimpleCache')
@@ -108,12 +111,60 @@ def create_app(db_name='ovh'):
         return {
             'site_name': app.config['SITE_NAME'],
             'site_tagline': app.config['SITE_TAGLINE'],
+            'google_site_verification': app.config.get('GOOGLE_SITE_VERIFICATION') or '',
             'now': datetime.utcnow(),
         }
 
     @app.route('/')
     def index():
         return redirect(url_for('articles.public_list'))
+
+    @app.route('/robots.txt')
+    def robots_txt():
+        from flask import Response
+        body = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /newsletter/\n"
+            f"Sitemap: {url_for('sitemap_xml', _external=True)}\n"
+        )
+        return Response(body, mimetype='text/plain')
+
+    @app.route('/sitemap.xml')
+    def sitemap_xml():
+        from flask import Response
+        from articles.models import Article
+        articles = (
+            Article.query.filter_by(published=True)
+            .order_by(Article.created_at.desc())
+            .all()
+        )
+        urls = [{
+            'loc': url_for('articles.public_list', _external=True),
+            'lastmod': max((a.updated_at for a in articles), default=datetime.utcnow()).date().isoformat(),
+            'changefreq': 'weekly',
+            'priority': '1.0',
+        }]
+        for a in articles:
+            urls.append({
+                'loc': url_for('articles.public_show', slug=a.slug, _external=True),
+                'lastmod': a.updated_at.date().isoformat(),
+                'changefreq': 'monthly',
+                'priority': '0.8',
+            })
+
+        xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+                     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for u in urls:
+            xml_lines.append('  <url>')
+            xml_lines.append(f'    <loc>{u["loc"]}</loc>')
+            xml_lines.append(f'    <lastmod>{u["lastmod"]}</lastmod>')
+            xml_lines.append(f'    <changefreq>{u["changefreq"]}</changefreq>')
+            xml_lines.append(f'    <priority>{u["priority"]}</priority>')
+            xml_lines.append('  </url>')
+        xml_lines.append('</urlset>')
+        return Response('\n'.join(xml_lines), mimetype='application/xml')
 
     @app.route('/healthz')
     def health_check():

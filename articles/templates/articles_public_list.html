@@ -1,5 +1,35 @@
 {% extends 'base.html' %}
-{% block title %}Articles{% endblock %}
+{% block title %}Bernard Poignant — Articles & réflexions{% endblock %}
+{% block meta_description %}Articles, analyses et prises de position de Bernard Poignant — ancien maire de Quimper, ancien conseiller du président de la République François Hollande.{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Bernard Poignant",
+  "url": "{{ url_for('articles.public_list', _external=True) }}",
+  "inLanguage": "fr-FR",
+  "publisher": {
+    "@type": "Person",
+    "name": "Bernard Poignant",
+    "url": "{{ url_for('articles.public_list', _external=True) }}",
+    "image": "{{ url_for('static', filename='images/bernardpoignant.avif', _external=True) }}"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Bernard Poignant",
+  "url": "{{ url_for('articles.public_list', _external=True) }}",
+  "image": "{{ url_for('static', filename='images/bernardpoignant.avif', _external=True) }}",
+  "jobTitle": "Homme politique",
+  "nationality": "Française"
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <section class="hero hero-compact">

@@ -3,13 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# ─── SEO: page meta ──────────────────────────────────────── #}
     <title>{% block title %}{{ site_name }}{% endblock %} | {{ site_tagline }}</title>
-    <meta name="description" content="{% block meta_description %}{{ site_name }} — {{ site_tagline }}{% endblock %}">
+    <meta name="description" content="{% block meta_description %}{{ site_name }} — {{ site_tagline }}. Articles, analyses et prises de position.{% endblock %}">
+    <meta name="author" content="Bernard Poignant">
+    <meta name="robots" content="{% block meta_robots %}index, follow, max-image-preview:large{% endblock %}">
+    <meta name="theme-color" content="#1A1A2E">
+    {% if google_site_verification %}
+    <meta name="google-site-verification" content="{{ google_site_verification }}">
+    {% endif %}
+    <link rel="canonical" href="{% block canonical %}{{ request.base_url }}{% endblock %}">
+    <link rel="alternate" type="application/rss+xml" title="{{ site_name }} — Articles" href="{{ url_for('articles.public_list', _external=True) }}">
+
+
+    {# ─── SEO: Open Graph (Facebook, LinkedIn, WhatsApp…) ─────── #}
+    <meta property="og:type"        content="{% block og_type %}website{% endblock %}">
+    <meta property="og:site_name"   content="{{ site_name }}">
+    <meta property="og:title"       content="{% block og_title %}{{ self.title() }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ self.meta_description() }}{% endblock %}">
+    <meta property="og:url"         content="{% block og_url %}{{ request.url }}{% endblock %}">
+    <meta property="og:image"       content="{% block og_image %}{{ url_for('static', filename='images/bernardpoignant.avif', _external=True) }}{% endblock %}">
+    <meta property="og:image:alt"   content="Bernard Poignant">
+    <meta property="og:locale"      content="fr_FR">
+    {% block og_extra %}{% endblock %}
+
+    {# ─── SEO: Twitter Card ──────────────────────────────────── #}
+    <meta name="twitter:card"        content="summary_large_image">
+    <meta name="twitter:title"       content="{{ self.og_title() }}">
+    <meta name="twitter:description" content="{{ self.og_description() }}">
+    <meta name="twitter:image"       content="{{ self.og_image() }}">
+
+    {# ─── Icons / RSS ────────────────────────────────────────── #}
+    <link rel="icon" type="image/avif" href="{{ url_for('static', filename='images/bernardpoignant.avif') }}">
+    <link rel="apple-touch-icon"        href="{{ url_for('static', filename='images/bernardpoignant.avif') }}">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     {% block head %}{% endblock %}
+    {% block jsonld %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
