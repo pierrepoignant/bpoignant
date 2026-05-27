@@ -759,6 +759,28 @@ a:hover { color: var(--rouge-fonce); }
     .newsletter-block { padding: 1.5rem 1rem; }
 }
 
+/* ─── Article signature ────────────────────────────── */
+.article-signature {
+    margin: 2.5rem 0 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e6e6e6;
+    text-align: right;
+}
+.signature-name {
+    font-family: 'Caveat', 'Brush Script MT', cursive;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--rouge);
+    line-height: 1;
+    letter-spacing: 0.5px;
+}
+.signature-date {
+    font-size: 0.85rem;
+    color: var(--gris);
+    margin-top: 0.4rem;
+    font-style: italic;
+}
+
 /* ─── Reactions ────────────────────────────────────── */
 .article-reactions {
     max-width: 760px;

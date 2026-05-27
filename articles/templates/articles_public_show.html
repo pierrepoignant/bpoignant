@@ -56,6 +56,17 @@
 <article class="article-body">
     {{ article.content_html|safe }}
 
+    {% if article.author %}
+    {% set fr_months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'] %}
+    <div class="article-signature">
+        <div class="signature-name">{{ article.author.name }}</div>
+        <div class="signature-date">
+            {{ article.display_date.day }} {{ fr_months[article.display_date.month - 1] }} {{ article.display_date.year }}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="article-reactions">
         {% include '_reactions_bar.html' %}
     </div>
