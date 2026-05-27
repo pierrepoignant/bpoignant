@@ -25,6 +25,18 @@
         {% endif %}
 
         <h3 class="comment-form-heading">Laisser un commentaire</h3>
+        <a id="comment-feedback"></a>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                {% if category.startswith('comment-') %}
+                    {% set _cls = {'comment-success': 'success', 'comment-danger': 'danger', 'comment-info': 'info'}[category] %}
+                    <div class="alert alert-{{ _cls }} comment-flash">
+                        <i class="fas fa-{% if _cls == 'success' %}check-circle{% elif _cls == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                        {{ message }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% endwith %}
         <form method="POST" action="{{ url_for('engagement.post_comment', slug=article.slug) }}"
               class="comment-form">
             <div class="comment-row">

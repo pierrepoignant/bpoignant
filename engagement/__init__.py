@@ -76,14 +76,14 @@ def post_comment(slug):
     content = (request.form.get('content') or '').strip()
 
     if not prenom:
-        flash("Le prénom est obligatoire pour commenter.", 'danger')
-        return redirect(url_for('articles.public_show', slug=slug) + '#comments')
+        flash("Le prénom est obligatoire pour commenter.", 'comment-danger')
+        return redirect(url_for('articles.public_show', slug=slug) + '#comment-feedback')
     if not content or len(content) < 3:
-        flash("Le commentaire est vide ou trop court.", 'danger')
-        return redirect(url_for('articles.public_show', slug=slug) + '#comments')
+        flash("Le commentaire est vide ou trop court.", 'comment-danger')
+        return redirect(url_for('articles.public_show', slug=slug) + '#comment-feedback')
     if len(content) > 5000:
-        flash("Commentaire trop long (5000 caractères maximum).", 'danger')
-        return redirect(url_for('articles.public_show', slug=slug) + '#comments')
+        flash("Commentaire trop long (5000 caractères maximum).", 'comment-danger')
+        return redirect(url_for('articles.public_show', slug=slug) + '#comment-feedback')
 
     auto_approve = current_app.config.get('COMMENTS_AUTO_APPROVE', False)
 
@@ -111,10 +111,10 @@ def post_comment(slug):
         log.warning("comment-alert send failed: %s", exc)
 
     if auto_approve:
-        flash("Merci pour votre commentaire !", 'success')
+        flash("Merci pour votre commentaire !", 'comment-success')
     else:
-        flash("Merci ! Votre commentaire est en attente de modération.", 'info')
-    return redirect(url_for('articles.public_show', slug=slug) + '#comments')
+        flash("Merci ! Votre commentaire est en attente de modération.", 'comment-info')
+    return redirect(url_for('articles.public_show', slug=slug) + '#comment-feedback')
 
 
 def _subscribe_from_comment(email, prenom, nom):

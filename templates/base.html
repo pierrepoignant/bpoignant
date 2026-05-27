@@ -65,9 +65,12 @@
     </nav>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
+        {# Filter out comment-* categories — those are rendered inline above
+           the comment form in _comments_section.html, not at the top. #}
+        {% set _global_msgs = messages | rejectattr('0', 'startswith', 'comment-') | list %}
+        {% if _global_msgs %}
         <div style="max-width: 800px; margin: 1rem auto; padding: 0 1rem;">
-            {% for category, message in messages %}
+            {% for category, message in _global_msgs %}
             <div class="alert alert-{{ category }}">
                 <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
                 {{ message }}

@@ -852,6 +852,11 @@ a:hover { color: var(--rouge-fonce); }
     margin: 2.5rem 0 0.8rem;
 }
 
+.comment-flash {
+    margin-bottom: 1rem;
+    scroll-margin-top: 90px;  /* offset so the sticky navbar doesn't cover it */
+}
+
 .comment-form {
     background: var(--blanc);
     border-radius: 12px;
