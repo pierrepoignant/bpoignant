@@ -1,5 +1,17 @@
-{% extends 'base.html' %}
+{% extends 'admin_base.html' %}
 {% block title %}{% if article %}Éditer : {{ article.title }}{% else %}Nouvel article{% endif %}{% endblock %}
+
+{% block admin_title %}
+    {% if article %}
+        <i class="fas fa-edit" style="color: var(--vert);"></i> Éditer l'article
+    {% else %}
+        <i class="fas fa-plus" style="color: var(--vert);"></i> Nouvel article
+    {% endif %}
+{% endblock %}
+{% block admin_subtitle %}{% if article %}
+    <p><code style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;">/articles/{{ article.slug }}</code></p>
+{% endif %}{% endblock %}
+{% block admin_section_style %}max-width: 1000px;{% endblock %}
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
@@ -39,26 +51,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
-<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 2.5rem 2rem; color: white;">
-    <div style="max-width: 1000px; margin: 0 auto;">
-        <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour à la liste</a>
-        <h1 style="font-size: 1.8rem; font-weight: 800; margin-top: 0.4rem;">
-            {% if article %}
-                <i class="fas fa-edit" style="color: var(--vert);"></i> Éditer l'article
-            {% else %}
-                <i class="fas fa-plus" style="color: var(--vert);"></i> Nouvel article
-            {% endif %}
-        </h1>
-        {% if article %}
-        <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 0.4rem;">
-            <code style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;">/articles/{{ article.slug }}</code>
-        </div>
-        {% endif %}
-    </div>
-</section>
-
-<section class="section" style="max-width: 1000px;">
+{% block admin_content %}
     <form method="POST" id="article-form">
         <div class="form-container" style="max-width: 100%;">
             <div class="form-row">
@@ -148,7 +141,6 @@
             </div>
         </div>
     </form>
-</section>
 {% endblock %}
 
 {% block scripts %}

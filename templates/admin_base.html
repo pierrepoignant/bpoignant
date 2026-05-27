@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{# Shared layout for every /admin/* page. Provides a unified dark hero and a
+   persistent tab strip below it. Pages extend this and fill in:
+   - {% block admin_title %} / {% block admin_subtitle %} for the hero text
+   - {% block admin_hero %} to fully replace the hero (e.g. form pages)
+   - {% block admin_section_style %} to tweak the content-section width
+   - {% block admin_content %} for the page body
+   The active tab is detected from request.path so we don't have to track it
+   in every template. #}
+
+{% set _p = request.path %}
+
+{% block content %}
+{% block admin_hero %}
+<section class="admin-hero">
+    {% block admin_back %}
+        <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
+    {% endblock %}
+    <h1>{% block admin_title %}<i class="fas fa-cog" style="color: var(--vert);"></i> Administration{% endblock %}</h1>
+    {% block admin_subtitle %}{% endblock %}
+</section>
+{% endblock %}
+
+<section class="section admin-shell">
+    <nav class="admin-tabs" aria-label="Administration">
+        <a href="{{ url_for('admin_articles.list_articles') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-newspaper"></i> Articles
+        </a>
+        <a href="{{ url_for('admin_authors.list_authors') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/authors') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-feather-alt"></i> Auteurs
+        </a>
+        <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="far fa-envelope"></i> Newsletter
+        </a>
+        <a href="{{ url_for('analytics.dashboard') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-chart-line"></i> Statistiques
+        </a>
+        <a href="{{ url_for('auth.list_users') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/users') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-users"></i> Utilisateurs
+        </a>
+    </nav>
+
+    {# Pages constrain their own content width via .admin-content's inline
+       style block — but the tab strip above always lives in the fixed-width
+       .admin-shell so it never shifts between pages. #}
+    <div class="admin-content" style="{% block admin_section_style %}{% endblock %}">
+        {% block admin_content %}{% endblock %}
+    </div>
+</section>
+{% endblock %}

@@ -288,6 +288,57 @@ a:hover { color: var(--rouge-fonce); }
     font-size: 0.9rem;
 }
 
+/* Admin shared header. The hero sits at the top of every /admin/* page; the
+   tab strip lives just below it inside the content section. */
+.admin-hero {
+    background: linear-gradient(135deg, var(--noir), #16213E);
+    padding: 3rem 2rem;
+    text-align: center;
+    color: white;
+}
+.admin-hero h1 {
+    font-size: 2rem;
+    font-weight: 800;
+}
+.admin-hero p {
+    color: rgba(255,255,255,0.7);
+}
+.admin-hero .back-link { color: rgba(255,255,255,0.75); }
+
+/* Fixed-width admin shell so the tab strip stays in the same place across
+   every /admin/* page. Pages can still narrow their *content* below the tabs
+   via .admin-content's max-width — the tabs themselves don't move. */
+.admin-shell {
+    max-width: 1100px;
+}
+.admin-content {
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Admin tab strip — keeps active/inactive tabs the same size so the row
+   doesn't shift when you switch pages. .btn-outline carries a 2px border,
+   so we give every tab in the strip an equivalent transparent border. */
+.admin-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+.admin-tabs .btn {
+    border: 2px solid transparent;
+}
+.admin-tabs .btn-outline {
+    border-color: #e0e0e0;
+    color: var(--noir);
+    background: transparent;
+}
+.admin-tabs .btn-outline:hover {
+    background: var(--gris-clair);
+    color: var(--noir);
+    transform: none;
+}
+
 /* ─── Sections ─────────────────────────────────────── */
 .section {
     padding: 5rem 2rem;

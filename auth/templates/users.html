@@ -1,13 +1,10 @@
-{% extends 'base.html' %}
+{% extends 'admin_base.html' %}
 {% block title %}Utilisateurs{% endblock %}
 
-{% block content %}
-<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
-    <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
-    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-users" style="color: var(--vert);"></i> Utilisateurs</h1>
-</section>
+{% block admin_title %}<i class="fas fa-users" style="color: var(--vert);"></i> Utilisateurs{% endblock %}
+{% block admin_section_style %}max-width: 900px;{% endblock %}
 
-<section class="section" style="max-width: 900px;">
+{% block admin_content %}
     <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem;">
         <a href="{{ url_for('auth.create_user') }}" class="btn btn-sm btn-primary">
             <i class="fas fa-user-plus"></i> Nouvel utilisateur
@@ -46,5 +43,4 @@
         {% endif %}
     </div>
     {% endfor %}
-</section>
 {% endblock %}

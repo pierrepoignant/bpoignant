@@ -1,21 +1,13 @@
-{% extends 'base.html' %}
+{% extends 'admin_base.html' %}
 {% block title %}Administration{% endblock %}
 
-{% block content %}
-<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
-    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-cog" style="color: var(--vert);"></i> Administration</h1>
-    <p style="color: rgba(255,255,255,0.7);">Gérez les articles publiés sur le site.</p>
-</section>
+{% block admin_back %}{% endblock %}
+{% block admin_title %}<i class="fas fa-cog" style="color: var(--vert);"></i> Administration{% endblock %}
+{% block admin_subtitle %}<p>Gérez les articles publiés sur le site.</p>{% endblock %}
+{% block admin_section_style %}max-width: 1000px;{% endblock %}
 
-<section class="section" style="max-width: 1000px;">
-    <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap;">
-        <a href="{{ url_for('admin_articles.list_articles') }}" class="btn btn-sm btn-primary"><i class="fas fa-newspaper"></i> Articles</a>
-        <a href="{{ url_for('admin_authors.list_authors') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-feather-alt"></i> Auteurs</a>
-        <a href="{{ url_for('admin_subscribers.list_subscribers') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="far fa-envelope"></i> Newsletter</a>
-        <a href="{{ url_for('analytics.dashboard') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-chart-line"></i> Statistiques</a>
-        <a href="{{ url_for('auth.list_users') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-users"></i> Utilisateurs</a>
-    </div>
 
+{% block admin_content %}
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
         <h2 style="font-size: 1.5rem; margin: 0;">
             <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Articles ({{ articles|length }})
@@ -69,5 +61,4 @@
             <p>Aucun article. <a href="{{ url_for('admin_articles.create_article') }}">Créer le premier</a>.</p>
         </div>
     {% endif %}
-</section>
 {% endblock %}
