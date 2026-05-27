@@ -34,9 +34,12 @@
             <input type="email" name="email" id="comment-email" placeholder="E-mail (facultatif, non publié)" maxlength="255">
             <textarea name="content" rows="4" required minlength="3" maxlength="5000"
                       placeholder="Votre commentaire…"></textarea>
-            <label class="comment-subscribe" id="comment-subscribe-row" style="display:none;">
+            <label class="comment-subscribe" id="comment-subscribe-row">
                 <input type="checkbox" name="subscribe_newsletter" id="comment-subscribe">
-                <span>M'inscrire à la newsletter pour être informé des nouveaux articles.</span>
+                <span>
+                    <strong>M'inscrire à la newsletter</strong> pour être informé des nouveaux articles.
+                    <em class="comment-subscribe-hint">(nécessite votre e-mail ci-dessus)</em>
+                </span>
             </label>
             <div class="comment-form-actions">
                 <small>
@@ -51,11 +54,17 @@
 </section>
 <script>
 (function () {
-    // Show the "subscribe to newsletter" checkbox only when an e-mail is filled in.
+    // Dim the subscribe checkbox when the e-mail field is empty so it's
+    // clear that no e-mail = no subscription, but the option stays visible.
     const email = document.getElementById('comment-email');
     const row = document.getElementById('comment-subscribe-row');
-    if (!email || !row) return;
-    const update = () => { row.style.display = email.value.trim() ? '' : 'none'; };
+    const cb = document.getElementById('comment-subscribe');
+    if (!email || !row || !cb) return;
+    const update = () => {
+        const has = email.value.trim().length > 0;
+        row.style.opacity = has ? '1' : '0.55';
+        cb.disabled = !has;
+    };
     email.addEventListener('input', update);
     update();
 })();
