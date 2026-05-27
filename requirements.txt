@@ -5,6 +5,7 @@ Flask-Caching==2.3.0
 Flask-WTF==1.2.2
 python-slugify==8.0.4
 bleach==6.2.0
+beautifulsoup4==4.12.3
 PyMySQL==1.1.1
 cryptography==44.0.0
 python-dotenv==1.0.1

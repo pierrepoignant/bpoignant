@@ -486,6 +486,16 @@ a:hover { color: var(--rouge-fonce); }
 .article-body h1,
 .article-body h2,
 .article-body h3,
+.article-body h4,
+.article-body h5,
+.article-body h6,
+.article-page-title,
+.theme-tile h3 {
+    text-transform: uppercase;
+}
+.article-body h1,
+.article-body h2,
+.article-body h3,
 .article-body h4 {
     font-weight: 800;
     margin: 2rem 0 0.8rem;
@@ -504,7 +514,7 @@ a:hover { color: var(--rouge-fonce); }
     border-radius: 2px;
 }
 
-.article-body p { margin: 0 0 1.1rem; }
+.article-body p { margin: 0 0 1.1rem; text-indent: 2em; }
 .article-body a { color: var(--rouge); text-decoration: underline; }
 .article-body a:hover { color: var(--rouge-fonce); }
 

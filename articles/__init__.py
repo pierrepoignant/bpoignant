@@ -7,6 +7,7 @@ from slugify import slugify
 
 from init_db import db
 from articles.models import Article, Author
+from articles.cleanup import clean_article_html
 from auth import admin_required
 
 articles_bp = Blueprint('articles', __name__, url_prefix='/articles', template_folder='templates')
@@ -208,7 +209,7 @@ def _parse_created_date(raw):
 def _save_article(article):
     title = (request.form.get('title') or '').strip()
     summary = (request.form.get('summary') or '').strip()
-    content_html = _clean_html(request.form.get('content_html'))
+    content_html = clean_article_html(_clean_html(request.form.get('content_html')))
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))
     author = _resolve_author()
@@ -243,6 +244,23 @@ def _save_article(article):
     db.session.commit()
     flash("Article enregistré.", 'success')
     return redirect(url_for('admin_articles.edit_article', article_id=article.id))
+
+
+@admin_articles_bp.route('/cleanup-all', methods=['POST'])
+@admin_required
+def cleanup_all():
+    """Re-run the HTML normaliser on every article. Skips rows whose
+    cleaned output is byte-identical to what's stored so we don't bump
+    `updated_at` for no reason."""
+    changed = 0
+    for article in Article.query.all():
+        cleaned = clean_article_html(article.content_html or '')
+        if cleaned != (article.content_html or ''):
+            article.content_html = cleaned
+            changed += 1
+    db.session.commit()
+    flash(f"Nettoyage terminé — {changed} article(s) mis à jour.", 'success')
+    return redirect(url_for('admin_articles.list_articles'))
 
 
 # ─── ADMIN: AUTHORS ─────────────────────────────────────────
