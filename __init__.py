@@ -1,30 +1,49 @@
 import os
+import ssl
 from datetime import datetime
 
-from flask import Flask, render_template, redirect, url_for, jsonify, abort
+from flask import Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from init_db import db
 from init_cache import cache
+from config import initialize_config
 
 
-def _build_database_uri():
-    """Resolve the SQLAlchemy URI.
-
-    Priority:
-      1. `DATABASE_URL` env var (e.g. sqlite:////data/bpoignant.db, mysql+pymysql://...)
-      2. Local SQLite file under instance/.
+def _build_database_uri(app, db_name):
+    """Build a MySQL connection URI from the `database-<db_name>` config
+    section. Falls back to a local SQLite file under instance/ only if no
+    DB credentials are configured at all — useful for first-run tests.
     """
-    url = os.environ.get('DATABASE_URL')
-    if url:
-        return url
-    instance_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
-    os.makedirs(instance_dir, exist_ok=True)
-    return f"sqlite:///{os.path.join(instance_dir, 'bpoignant.db')}"
+    section = f'database-{db_name}'
+    db_config = app.config.get(section) or {}
+    host = db_config.get('host')
+    if not host:
+        instance_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
+        os.makedirs(instance_dir, exist_ok=True)
+        return f"sqlite:///{os.path.join(instance_dir, 'bpoignant.db')}", {}
+
+    uri = (
+        f"mysql+pymysql://{db_config.get('user', '')}:{db_config.get('password', '')}"
+        f"@{db_config.get('host', '')}:{db_config.get('port', '3306')}/{db_config.get('name', '')}"
+    )
+    engine_options = {
+        'pool_size': 5,
+        'max_overflow': 10,
+        'pool_recycle': 3600,
+        'pool_pre_ping': True,
+        'pool_timeout': 30,
+    }
+    if db_name != 'local':
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        engine_options['connect_args'] = {'ssl': ssl_ctx}
+    return uri, engine_options
 
 
-def create_app():
+def create_app(db_name='ovh'):
     from dotenv import load_dotenv
     load_dotenv()
 
@@ -40,8 +59,13 @@ def create_app():
     app.config['CACHE_TYPE'] = os.environ.get('CACHE_TYPE', 'SimpleCache')
     cache.init_app(app)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = _build_database_uri()
+    initialize_config(app)
+
+    uri, engine_options = _build_database_uri(app, db_name)
+    app.config['SQLALCHEMY_DATABASE_URI'] = uri
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    if engine_options:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 
     try:
         os.makedirs(app.instance_path)
@@ -58,14 +82,16 @@ def create_app():
     from auth import auth_bp
     app.register_blueprint(auth_bp)
 
-    from articles.models import Article  # noqa: F401
-    from articles import articles_bp, admin_articles_bp
+    from articles.models import Article, Author  # noqa: F401
+    from articles import articles_bp, admin_articles_bp, admin_authors_bp
     app.register_blueprint(articles_bp)
     app.register_blueprint(admin_articles_bp)
+    app.register_blueprint(admin_authors_bp)
 
     with app.app_context():
         db.create_all()
         _seed_admin_user()
+        _seed_default_author()
 
     @app.context_processor
     def inject_globals():
@@ -120,4 +146,15 @@ def _seed_admin_user():
     admin = User(username=username, is_admin=True)
     admin.set_password(password)
     db.session.add(admin)
+    db.session.commit()
+
+
+def _seed_default_author():
+    """Create a default 'Bernard Poignant' author so the article form has a
+    sensible option out of the box."""
+    from articles.models import Author
+
+    if Author.query.count() > 0:
+        return
+    db.session.add(Author(name='Bernard Poignant'))
     db.session.commit()

@@ -6,11 +6,12 @@ from flask_login import current_user
 from slugify import slugify
 
 from init_db import db
-from articles.models import Article
+from articles.models import Article, Author
 from auth import admin_required
 
 articles_bp = Blueprint('articles', __name__, url_prefix='/articles', template_folder='templates')
 admin_articles_bp = Blueprint('admin_articles', __name__, url_prefix='/admin/articles', template_folder='templates')
+admin_authors_bp = Blueprint('admin_authors', __name__, url_prefix='/admin/authors', template_folder='templates')
 
 
 # HTML tags / attributes allowed in the WYSIWYG output. Anything outside this
@@ -93,7 +94,7 @@ def list_articles():
 def create_article():
     if request.method == 'POST':
         return _save_article(None)
-    return render_template('articles_admin_form.html', article=None)
+    return render_template('articles_admin_form.html', article=None, authors=_all_authors())
 
 
 @admin_articles_bp.route('/<int:article_id>/edit', methods=['GET', 'POST'])
@@ -102,7 +103,34 @@ def edit_article(article_id):
     article = db.session.get(Article, article_id) or abort(404)
     if request.method == 'POST':
         return _save_article(article)
-    return render_template('articles_admin_form.html', article=article)
+    return render_template('articles_admin_form.html', article=article, authors=_all_authors())
+
+
+def _all_authors():
+    return Author.query.order_by(Author.name).all()
+
+
+def _resolve_author():
+    """Pick the author from the form: explicit new name wins, else the
+    dropdown value, else None. Creates the Author row on the fly when a
+    new name is provided."""
+    new_name = (request.form.get('new_author_name') or '').strip()
+    if new_name:
+        existing = Author.query.filter_by(name=new_name).first()
+        if existing:
+            return existing
+        author = Author(name=new_name)
+        db.session.add(author)
+        db.session.flush()
+        return author
+
+    raw_id = request.form.get('author_id')
+    if not raw_id:
+        return None
+    try:
+        return db.session.get(Author, int(raw_id))
+    except (ValueError, TypeError):
+        return None
 
 
 @admin_articles_bp.route('/<int:article_id>/delete', methods=['POST'])
@@ -136,6 +164,7 @@ def _save_article(article):
     content_html = _clean_html(request.form.get('content_html'))
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))
+    author = _resolve_author()
 
     if not title:
         flash("Le titre est obligatoire.", 'danger')
@@ -149,7 +178,7 @@ def _save_article(article):
             content_html=content_html,
             published=published,
             created_at=created_at or datetime.utcnow(),
-            author_id=getattr(current_user, 'id', None),
+            author_id=author.id if author else None,
         )
         db.session.add(article)
     else:
@@ -160,9 +189,65 @@ def _save_article(article):
         article.summary = summary
         article.content_html = content_html
         article.published = published
+        article.author_id = author.id if author else None
         if created_at is not None:
             article.created_at = created_at
 
     db.session.commit()
     flash("Article enregistré.", 'success')
     return redirect(url_for('admin_articles.edit_article', article_id=article.id))
+
+
+# ─── ADMIN: AUTHORS ─────────────────────────────────────────
+
+@admin_authors_bp.route('/')
+@admin_required
+def list_authors():
+    authors = Author.query.order_by(Author.name).all()
+    return render_template('authors_admin_list.html', authors=authors)
+
+
+@admin_authors_bp.route('/new', methods=['POST'])
+@admin_required
+def create_author():
+    name = (request.form.get('name') or '').strip()
+    if not name:
+        flash("Le nom est requis.", 'danger')
+        return redirect(url_for('admin_authors.list_authors'))
+    if Author.query.filter_by(name=name).first():
+        flash(f'L\'auteur "{name}" existe déjà.', 'danger')
+        return redirect(url_for('admin_authors.list_authors'))
+    db.session.add(Author(name=name))
+    db.session.commit()
+    flash(f'Auteur "{name}" créé.', 'success')
+    return redirect(url_for('admin_authors.list_authors'))
+
+
+@admin_authors_bp.route('/<int:author_id>/rename', methods=['POST'])
+@admin_required
+def rename_author(author_id):
+    author = db.session.get(Author, author_id) or abort(404)
+    new_name = (request.form.get('name') or '').strip()
+    if not new_name:
+        flash("Le nom est requis.", 'danger')
+        return redirect(url_for('admin_authors.list_authors'))
+    clash = Author.query.filter_by(name=new_name).first()
+    if clash and clash.id != author.id:
+        flash(f'L\'auteur "{new_name}" existe déjà.', 'danger')
+        return redirect(url_for('admin_authors.list_authors'))
+    author.name = new_name
+    db.session.commit()
+    flash("Auteur renommé.", 'success')
+    return redirect(url_for('admin_authors.list_authors'))
+
+
+@admin_authors_bp.route('/<int:author_id>/delete', methods=['POST'])
+@admin_required
+def delete_author(author_id):
+    author = db.session.get(Author, author_id) or abort(404)
+    # Unlink articles before deleting so we don't leave orphan FKs.
+    Article.query.filter_by(author_id=author.id).update({'author_id': None})
+    db.session.delete(author)
+    db.session.commit()
+    flash("Auteur supprimé. Les articles ne sont plus rattachés.", 'success')
+    return redirect(url_for('admin_authors.list_authors'))

@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Auteurs{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
+    <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
+    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-feather-alt" style="color: var(--vert);"></i> Auteurs</h1>
+    <p style="color: rgba(255,255,255,0.7);">Indépendant des comptes admin — un auteur n'a pas besoin d'avoir un compte.</p>
+</section>
+
+<section class="section" style="max-width: 900px;">
+    <div class="form-container" style="max-width: 100%; margin-top: 0;">
+        <h2 style="font-size: 1.2rem;"><i class="fas fa-plus" style="color: var(--rouge);"></i> Nouvel auteur</h2>
+        <form method="POST" action="{{ url_for('admin_authors.create_author') }}"
+              style="display: flex; gap: 0.6rem; align-items: flex-end;">
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="name">Nom</label>
+                <input type="text" id="name" name="name" required placeholder="Prénom Nom">
+            </div>
+            <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+                <i class="fas fa-save"></i> Créer
+            </button>
+        </form>
+    </div>
+
+    <h2 style="font-size: 1.3rem; margin: 2rem 0 1rem;">
+        <i class="fas fa-list" style="color: var(--rouge);"></i> {{ authors|length }} auteur{{ 's' if authors|length != 1 else '' }}
+    </h2>
+
+    {% for a in authors %}
+    <div style="background: white; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 0.8rem;">
+        <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--rouge), var(--rouge-fonce)); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">
+            {{ a.name[0]|upper }}
+        </div>
+        <form method="POST" action="{{ url_for('admin_authors.rename_author', author_id=a.id) }}"
+              style="display: flex; gap: 0.4rem; flex: 1; margin: 0;">
+            <input type="text" name="name" required value="{{ a.name }}"
+                   style="flex: 1; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem;">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-save"></i>
+            </button>
+        </form>
+        <div style="color: var(--gris); font-size: 0.8rem; min-width: 100px; text-align: right;">
+            {{ a.articles|length }} article{{ 's' if a.articles|length != 1 else '' }}
+        </div>
+        <form method="POST" action="{{ url_for('admin_authors.delete_author', author_id=a.id) }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer cet auteur ? Les articles associés ne seront plus rattachés à personne.')">
+            <button type="submit" class="btn btn-sm" style="padding: 6px 12px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                <i class="fas fa-trash"></i>
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

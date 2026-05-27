@@ -82,6 +82,28 @@
                 <textarea id="summary" name="summary" rows="2"
                           placeholder="Une phrase de présentation affichée dans la liste des articles.">{{ article.summary if article else '' }}</textarea>
             </div>
+            <div class="form-row">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="author_id">Auteur</label>
+                    <select id="author_id" name="author_id" style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 0.95rem; font-family: inherit; background: white;">
+                        <option value="">— Aucun auteur —</option>
+                        {% for a in authors %}
+                        <option value="{{ a.id }}" {% if article and article.author_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                        <a href="{{ url_for('admin_authors.list_authors') }}" target="_blank">Gérer les auteurs</a>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="new_author_name">Ou nouveau nom (raccourci)</label>
+                    <input type="text" id="new_author_name" name="new_author_name"
+                           placeholder="Crée l'auteur à l'enregistrement">
+                    <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                        Prioritaire sur le menu déroulant.
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="editor-shell">

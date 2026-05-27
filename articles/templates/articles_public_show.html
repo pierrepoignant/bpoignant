@@ -10,7 +10,7 @@
         <div style="color: rgba(255,255,255,0.7); font-size: 0.95rem;">
             <i class="far fa-calendar"></i> {{ article.display_date.strftime('%d/%m/%Y') }}
             {% if article.author %}
-                &nbsp;·&nbsp; <i class="far fa-user"></i> {{ article.author.username }}
+                &nbsp;·&nbsp; <i class="far fa-user"></i> {{ article.author.name }}
             {% endif %}
         </div>
         {% if article.summary %}
