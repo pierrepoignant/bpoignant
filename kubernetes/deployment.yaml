@@ -31,7 +31,7 @@ spec:
         - name: ovh-registry-secret
       containers:
         - name: bpoignant
-          image: 8ie06lx5.c1.gra9.container-registry.ovh.net/bpoignant/bpoignant:latest
+          image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5000

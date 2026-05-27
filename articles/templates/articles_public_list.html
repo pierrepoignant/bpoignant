@@ -2,25 +2,18 @@
 {% block title %}Articles{% endblock %}
 
 {% block content %}
-<section class="hero" style="min-height: 60vh;">
-    <div class="hero-bg" style="background-image: url('{{ url_for('static', filename='images/bernardpoignant.avif') }}'); background-size: cover; background-position: center; opacity: 0.18;"></div>
-    <div class="hero-content">
+<section class="hero hero-compact">
+    <div class="hero-bg" style="background-image: url('{{ url_for('static', filename='images/bernardpoignant.avif') }}'); background-size: cover; background-position: center; opacity: 0.15;"></div>
+    <div class="hero-row">
         <img src="{{ url_for('static', filename='images/bernardpoignant.avif') }}" alt="Bernard Poignant" class="hero-portrait">
-        <div class="hero-subtitle">{{ site_tagline }}</div>
-        <h1>Bernard <span>Poignant</span></h1>
-        <p class="hero-tagline">
-            Articles, analyses et prises de position.
-        </p>
+        <div class="hero-text">
+            <h1>Bernard <span>Poignant</span></h1>
+            <p class="hero-tagline">Articles, analyses et prises de position.</p>
+        </div>
     </div>
 </section>
 
-<section class="section">
-    <div class="section-title">
-        <h2>Tous les <span>articles</span></h2>
-        <div class="bar"></div>
-        <p>{{ articles|length }} article{{ 's' if articles|length != 1 else '' }} publié{{ 's' if articles|length != 1 else '' }}</p>
-    </div>
-
+<section class="section section-tight">
     {% if articles %}
     <div class="themes-grid">
         {% for a in articles %}

@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: 8ie06lx5.c1.gra9.container-registry.ovh.net
-  IMAGE: 8ie06lx5.c1.gra9.container-registry.ovh.net/bpoignant/bpoignant
+  IMAGE: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant
 
 jobs:
   build-and-deploy:
