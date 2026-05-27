@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}Statistiques{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
+    <a href="{{ url_for('admin_articles.list_articles') }}" class="back-link"><i class="fas fa-arrow-left"></i> Retour admin</a>
+    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-chart-line" style="color: var(--vert);"></i> Statistiques</h1>
+    <p style="color: rgba(255,255,255,0.7);">Visites des {{ days }} derniers jours</p>
+</section>
+
+<section class="section" style="max-width: 1100px;">
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap;">
+        <a href="{{ url_for('admin_articles.list_articles') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-newspaper"></i> Articles</a>
+        <a href="{{ url_for('admin_authors.list_authors') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-feather-alt"></i> Auteurs</a>
+        <a href="{{ url_for('admin_subscribers.list_subscribers') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="far fa-envelope"></i> Newsletter</a>
+        <a href="{{ url_for('analytics.dashboard') }}" class="btn btn-sm btn-primary"><i class="fas fa-chart-line"></i> Statistiques</a>
+        <a href="{{ url_for('auth.list_users') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-users"></i> Utilisateurs</a>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+        {% for d in [7, 30, 90, 365] %}
+        <a href="?days={{ d }}" class="btn btn-sm {% if days == d %}btn-primary{% else %}btn-outline{% endif %}"
+           {% if days != d %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ d }} j</a>
+        {% endfor %}
+    </div>
+
+    <!-- KPI cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages vues</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(total_views).replace(',', ' ') }}</div>
+        </div>
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Visiteurs uniques</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce); margin-top: 0.3rem;">{{ '{:,}'.format(unique_visitors).replace(',', ' ') }}</div>
+        </div>
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages / visiteur</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--rouge); margin-top: 0.3rem;">
+                {{ '%.1f'|format(total_views / unique_visitors) if unique_visitors else '—' }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily chart -->
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> Trafic quotidien</h2>
+        <div style="display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px; overflow-x: auto;">
+            {% for p in series %}
+            <div title="{{ p.date.strftime('%d/%m/%Y') }} — {{ p.views }} vues, {{ p.uniques }} visiteurs"
+                 style="flex: 1; min-width: 4px; background: linear-gradient(180deg, var(--rouge), var(--rouge-fonce));
+                        height: {{ (p.views / max_views * 100)|round(1) }}%;
+                        border-radius: 2px 2px 0 0; opacity: {{ 0.4 if p.views == 0 else 1 }};"></div>
+            {% endfor %}
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--gris); margin-top: 6px;">
+            <span>{{ series[0].date.strftime('%d/%m') }}</span>
+            <span>{{ series[-1].date.strftime('%d/%m') }}</span>
+        </div>
+    </div>
+
+    <!-- Top pages + referrers side by side -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-fire" style="color: var(--rouge);"></i> Pages les plus vues</h2>
+            {% if top_pages %}
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                {% for p in top_pages %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0; word-break: break-all;"><code style="background: var(--gris-clair); padding: 1px 6px; border-radius: 4px; font-size: 0.8rem;">{{ p.path }}</code></td>
+                    <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ p.n }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p style="color: var(--gris); margin: 0;">Aucune donnée.</p>
+            {% endif %}
+        </div>
+
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-external-link-alt" style="color: var(--vert-fonce);"></i> Sources de trafic</h2>
+            {% if top_referrers %}
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                {% for r in top_referrers %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0; word-break: break-all;"><a href="{{ r.referrer }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ r.referrer }}</a></td>
+                    <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p style="color: var(--gris); margin: 0;">Aucun lien entrant pour le moment.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if countries %}
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-globe-europe" style="color: var(--rouge);"></i> Pays</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            {% for c in countries %}
+            <span style="background: var(--gris-clair); padding: 4px 10px; border-radius: 12px; font-size: 0.85rem;">
+                <strong>{{ c.country }}</strong> · {{ c.n }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-stream" style="color: var(--gris);"></i> Dernières visites</h2>
+        {% if recent %}
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead style="color: var(--gris);">
+                <tr><th style="text-align: left; padding-bottom: 0.5rem;">Quand</th><th style="text-align: left; padding-bottom: 0.5rem;">Page</th><th style="text-align: left; padding-bottom: 0.5rem;">Source</th></tr>
+            </thead>
+            <tbody>
+                {% for v in recent %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.4rem 0; color: var(--gris); white-space: nowrap;">{{ v.created_at.strftime('%d/%m %H:%M') }}</td>
+                    <td style="padding: 0.4rem 0; word-break: break-all;"><code style="background: var(--gris-clair); padding: 1px 6px; border-radius: 4px;">{{ v.path }}</code></td>
+                    <td style="padding: 0.4rem 0; color: var(--gris); word-break: break-all;">{{ v.referrer or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--gris); margin: 0;">Aucune visite enregistrée.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
