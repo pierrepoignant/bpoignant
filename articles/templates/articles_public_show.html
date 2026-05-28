@@ -20,7 +20,7 @@
   },
   "headline": {{ article.title|tojson }},
   "description": {{ (article.summary or article.title)|tojson }},
-  "image": [{{ url_for('static', filename='images/bernardpoignant.avif', _external=True)|tojson }}],
+  "image": [{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True)|tojson }}],
   "datePublished": "{{ article.created_at.isoformat() }}Z",
   "dateModified": "{{ article.updated_at.isoformat() }}Z",
   {% if article.author %}"author": { "@type": "Person", "name": {{ article.author.name|tojson }} },{% endif %}
