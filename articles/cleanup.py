@@ -27,6 +27,8 @@ def clean_article_html(html: str) -> str:
         original = str(node)
         text = re.sub(r' {2,}', ' ', original)
         text = re.sub(r',(?=[^\s\d])', ', ', text)
+        # French typography: a semicolon is always wrapped in spaces.
+        text = re.sub(r'\s*;\s*', ' ; ', text)
         if text != original:
             node.replace_with(text)
 
