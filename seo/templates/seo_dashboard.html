@@ -1,0 +1,280 @@
+{% extends 'admin_base.html' %}
+{% block title %}SEO — Positionnement Google{% endblock %}
+
+{% block admin_title %}<i class="fas fa-magnifying-glass-chart" style="color: var(--vert);"></i> SEO Google{% endblock %}
+{% block admin_subtitle %}
+  {% if stats and stats.run %}
+    <p>Dernière extraction&nbsp;: {{ stats.run.started_at.strftime('%d/%m/%Y à %H:%M') }} — « {{ stats.run.keyword }} »</p>
+  {% else %}
+    <p>Aucune extraction pour le moment.</p>
+  {% endif %}
+{% endblock %}
+
+{% block head %}
+{% if running %}<meta http-equiv="refresh" content="8">{% endif %}
+<style>
+  .seo-tabs { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 2px solid var(--gris-clair); }
+  .seo-tab { background: none; border: none; cursor: pointer; padding: .7rem 1.1rem; font-size: .95rem; font-weight: 600;
+             color: var(--gris); border-bottom: 3px solid transparent; margin-bottom: -2px; font-family: inherit; }
+  .seo-tab:hover { color: var(--noir); }
+  .seo-tab.active { color: var(--rouge); border-bottom-color: var(--rouge); }
+  .seo-panel { display: none; }
+  .seo-panel.active { display: block; }
+  .seo-card { background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .kpi { background: #fff; padding: 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  .kpi-label { color: var(--gris); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+  .kpi-value { font-size: 2.1rem; font-weight: 800; margin-top: .3rem; }
+  .seo-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .seo-table th { text-align: left; color: var(--gris); font-size: .78rem; text-transform: uppercase;
+                  letter-spacing: .04em; padding: .4rem .6rem; }
+  .seo-table td { padding: .55rem .6rem; border-top: 1px solid var(--gris-clair); vertical-align: top; }
+  .seo-table tr.own { background: rgba(198,208,2,.14); }
+  .rank-badge { display: inline-block; min-width: 1.9rem; text-align: center; font-weight: 700; font-size: .8rem;
+                background: var(--noir); color: #fff; border-radius: 6px; padding: 2px 6px; }
+  .bar-row { display: flex; align-items: center; gap: .6rem; margin: .35rem 0; }
+  .bar-label { width: 220px; font-size: .85rem; word-break: break-all; flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--gris-clair); border-radius: 6px; height: 16px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--rouge), var(--rouge-fonce)); }
+  .bar-count { width: 42px; text-align: right; font-weight: 600; font-size: .85rem; }
+  .seo-snippet { color: var(--gris); font-size: .82rem; margin-top: .2rem; }
+  .domain-row { border-bottom: 1px solid var(--gris-clair); }
+  .domain-row > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; padding: .4rem 0; }
+  .domain-row > summary::-webkit-details-marker { display: none; }
+  .domain-row > summary:hover .bar-label { color: var(--rouge); }
+  .domain-caret { color: var(--gris); font-size: .75rem; width: 12px; transition: transform .15s; flex-shrink: 0; }
+  .domain-row[open] > summary .domain-caret { transform: rotate(90deg); }
+  .domain-urls { list-style: none; margin: 0 0 .6rem 1.7rem; padding: 0; }
+  .domain-urls li { padding: .4rem 0; border-top: 1px dashed var(--gris-clair); }
+  .domain-urls li a { font-weight: 600; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:.78rem; font-weight:600; }
+  .pill.run { background:#fff3cd; color:#8a6d00; }
+  .pill.done { background:rgba(198,208,2,.25); color: var(--vert-fonce); }
+  .pill.error { background:rgba(230,0,62,.12); color: var(--rouge-fonce); }
+</style>
+{% endblock %}
+
+{% block admin_content %}
+
+  {# ── Launch bar ─────────────────────────────────────────── #}
+  <div class="seo-card" style="margin-bottom: 1.5rem;">
+    {% if not api_key_set %}
+      <p style="color: var(--rouge-fonce); margin: 0 0 .8rem;"><i class="fas fa-triangle-exclamation"></i>
+         <strong>SEARCHAPI__API_KEY</strong> n'est pas configurée — l'extraction est désactivée.</p>
+    {% endif %}
+    {% if running %}
+      <p style="margin:0 0 .8rem;"><span class="pill run"><i class="fas fa-spinner fa-spin"></i> Extraction en cours…</span>
+         {% if stats and stats.run and stats.run.status == 'running' %}
+           {{ stats.run.fetched }} résultats récupérés (page {{ stats.run.pages_fetched }}).
+         {% endif %}
+         La page se rafraîchit toute seule.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('seo.launch') }}"
+          style="display:flex; gap:.6rem; flex-wrap:wrap; align-items:flex-end;">
+      <div>
+        <label style="display:block; font-size:.8rem; color:var(--gris); margin-bottom:.2rem;">Mot-clé</label>
+        <input type="text" name="keyword" value="{{ default_keyword }}"
+               style="padding:.5rem .7rem; border:1px solid #ddd; border-radius:8px; min-width:240px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:.8rem; color:var(--gris); margin-bottom:.2rem;">Nb. de résultats</label>
+        <input type="number" name="max_results" value="{{ default_max }}" min="10" max="600" step="10"
+               style="padding:.5rem .7rem; border:1px solid #ddd; border-radius:8px; width:120px;">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" {% if running or not api_key_set %}disabled{% endif %}>
+        <i class="fas fa-bolt"></i> Lancer l'extraction
+      </button>
+    </form>
+  </div>
+
+  {% if not stats or stats.empty %}
+    <div class="seo-card"><p style="color:var(--gris); margin:0;">
+      Aucune donnée à afficher. Lancez une première extraction ci-dessus.</p></div>
+  {% else %}
+
+  {# ── Tabs ───────────────────────────────────────────────── #}
+  <div class="seo-tabs" role="tablist">
+    <button class="seo-tab active" data-tab="overview"><i class="fas fa-gauge-high"></i> Vue d'ensemble</button>
+    <button class="seo-tab" data-tab="results"><i class="fas fa-list-ol"></i> Résultats ({{ stats.total }})</button>
+    <button class="seo-tab" data-tab="domains"><i class="fas fa-sitemap"></i> Domaines ({{ stats.unique_domains }})</button>
+    <button class="seo-tab" data-tab="history"><i class="fas fa-clock-rotate-left"></i> Historique</button>
+  </div>
+
+  {# ── Panel: overview ────────────────────────────────────── #}
+  <div class="seo-panel active" id="panel-overview">
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">Résultats analysés</div>
+        <div class="kpi-value" style="color: var(--noir);">{{ stats.total }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Domaines uniques</div>
+        <div class="kpi-value" style="color: var(--vert-fonce);">{{ stats.unique_domains }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Position de {{ own_domain }}</div>
+        <div class="kpi-value" style="color: var(--rouge);">
+          {{ ('#' ~ stats.own_best_rank) if stats.own_best_rank else 'Absent' }}
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Pages Google parcourues</div>
+        <div class="kpi-value" style="color: var(--noir);">{{ stats.run.pages_fetched }}</div>
+      </div>
+    </div>
+
+    {% if evolution and evolution|length > 1 %}
+    <div class="seo-card" style="margin-bottom:1rem;">
+      <h2 style="font-size:1.05rem; margin:0 0 .3rem;"><i class="fas fa-arrow-trend-up" style="color:var(--vert-fonce);"></i>
+        Évolution du classement de {{ own_domain }}</h2>
+      <p style="color:var(--gris); font-size:.82rem; margin:0 0 1rem;">Plus la barre est haute, meilleure est la position. Survolez pour le détail.</p>
+      <div style="display:flex; align-items:flex-end; gap:8px; height:160px; border-bottom:1px solid var(--gris-clair); padding-bottom:4px;">
+        {% for e in evolution %}
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;"
+             title="{{ e.date.strftime('%d/%m/%Y %H:%M') }} — {{ ('rang #' ~ e.rank) if e.rank else 'absent' }} ({{ e.total }} résultats)">
+          <span style="font-size:.75rem; font-weight:700; color:var(--noir); margin-bottom:2px;">{{ ('#' ~ e.rank) if e.rank else '—' }}</span>
+          <div style="width:100%; max-width:46px; border-radius:4px 4px 0 0;
+                      background: {{ 'linear-gradient(180deg,var(--vert),var(--vert-fonce))' if e.rank else 'var(--gris-clair)' }};
+                      height: {{ ((evo_worst - e.rank + 1) / evo_worst * 100)|round(1) if e.rank else 3 }}%;"></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        {% for e in evolution %}
+        <div style="flex:1; text-align:center; font-size:.7rem; color:var(--gris);">{{ e.date.strftime('%d/%m') }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap:1rem;">
+      <div class="seo-card">
+        <h2 style="font-size:1.05rem; margin:0 0 1rem;"><i class="fas fa-ranking-star" style="color:var(--vert-fonce);"></i>
+          Présence de {{ own_domain }}</h2>
+        {% if stats.own %}
+          <table class="seo-table">
+            {% for r in stats.own %}
+            <tr><td><span class="rank-badge">#{{ r.rank }}</span></td>
+                <td><a href="{{ r.link }}" target="_blank" rel="noopener" style="color:var(--noir);">{{ r.title or r.link }}</a></td></tr>
+            {% endfor %}
+          </table>
+        {% else %}
+          <p style="color:var(--gris); margin:0;">Le site n'apparaît pas dans les {{ stats.total }} premiers résultats.</p>
+        {% endif %}
+      </div>
+
+      <div class="seo-card">
+        <h2 style="font-size:1.05rem; margin:0 0 1rem;"><i class="fas fa-layer-group" style="color:var(--rouge);"></i>
+          Résultats par page Google</h2>
+        {% for page, n in stats.page_counts %}
+        <div class="bar-row">
+          <div class="bar-label" style="width:80px;">Page {{ page }}</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (n / stats.max_page_count * 100)|round(1) }}%;"></div></div>
+          <div class="bar-count">{{ n }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Panel: results ─────────────────────────────────────── #}
+  <div class="seo-panel" id="panel-results">
+    <div class="seo-card">
+      <input type="text" id="result-filter" placeholder="Filtrer par titre, URL ou domaine…"
+             style="width:100%; padding:.6rem .8rem; border:1px solid #ddd; border-radius:8px; margin-bottom:1rem;">
+      <table class="seo-table" id="results-table">
+        <thead><tr><th>Rang</th><th>Résultat</th><th>Domaine</th></tr></thead>
+        <tbody>
+          {% for r in stats.rows %}
+          <tr class="{{ 'own' if r.rank in stats.own_ranks else '' }}"
+              data-search="{{ ((r.title or '') ~ ' ' ~ r.link ~ ' ' ~ (r.domain or ''))|lower }}">
+            <td><span class="rank-badge">#{{ r.rank }}</span></td>
+            <td>
+              <a href="{{ r.link }}" target="_blank" rel="noopener" style="font-weight:600;">{{ r.title or '(sans titre)' }}</a>
+              <div class="seo-snippet">{{ r.displayed_link or r.link }}</div>
+              {% if r.snippet %}<div class="seo-snippet">{{ r.snippet|truncate(180) }}</div>{% endif %}
+            </td>
+            <td style="white-space:nowrap;">{{ r.domain or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Panel: domains ─────────────────────────────────────── #}
+  <div class="seo-panel" id="panel-domains">
+    <div class="seo-card">
+      <h2 style="font-size:1.05rem; margin:0 0 .3rem;"><i class="fas fa-sitemap" style="color:var(--rouge);"></i>
+        Domaines les plus représentés</h2>
+      <p style="color:var(--gris); font-size:.82rem; margin:0 0 1rem;">Cliquez sur un domaine pour voir ses URLs.</p>
+      {% for domain, n in stats.top_domains %}
+      <details class="domain-row">
+        <summary>
+          <i class="fas fa-chevron-right domain-caret"></i>
+          <div class="bar-label">{{ domain }}</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (n / stats.max_domain_count * 100)|round(1) }}%;"></div></div>
+          <div class="bar-count">{{ n }}</div>
+        </summary>
+        <ul class="domain-urls">
+          {% for r in stats.domain_urls.get(domain, []) %}
+          <li>
+            <span class="rank-badge">#{{ r.rank }}</span>
+            <a href="{{ r.link }}" target="_blank" rel="noopener">{{ r.title or r.link }}</a>
+            <div class="seo-snippet">{{ r.displayed_link or r.link }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Panel: history ─────────────────────────────────────── #}
+  <div class="seo-panel" id="panel-history">
+    <div class="seo-card">
+      <table class="seo-table">
+        <thead><tr><th>Date</th><th>Mot-clé</th><th>Statut</th><th>Résultats</th><th>Pages</th><th>Durée</th></tr></thead>
+        <tbody>
+          {% for run in runs %}
+          <tr>
+            <td style="white-space:nowrap;">{{ run.started_at.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>{{ run.keyword }}</td>
+            <td><span class="pill {{ run.status }}">{{ {'running':'En cours','done':'Terminé','error':'Erreur'}.get(run.status, run.status) }}</span>
+                {% if run.status == 'error' and run.error %}<div class="seo-snippet">{{ run.error|truncate(120) }}</div>{% endif %}</td>
+            <td>{{ run_counts.get(run.id, run.fetched) }}</td>
+            <td>{{ run.pages_fetched }}</td>
+            <td>{{ ('%.0f s'|format(run.duration_seconds)) if run.duration_seconds is not none else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% endif %}
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll('.seo-tab');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        tabs.forEach(function (t) { t.classList.remove('active'); });
+        document.querySelectorAll('.seo-panel').forEach(function (p) { p.classList.remove('active'); });
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    var filter = document.getElementById('result-filter');
+    if (filter) {
+      filter.addEventListener('input', function () {
+        var q = filter.value.toLowerCase().trim();
+        document.querySelectorAll('#results-table tbody tr').forEach(function (row) {
+          row.style.display = row.dataset.search.indexOf(q) !== -1 ? '' : 'none';
+        });
+      });
+    }
+  })();
+</script>
+{% endblock %}

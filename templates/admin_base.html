@@ -45,6 +45,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-chart-line"></i> Statistiques
         </a>
+        <a href="{{ url_for('seo.dashboard') }}"
+           class="btn btn-sm {% if _p.startswith('/seo') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-magnifying-glass-chart"></i> SEO
+        </a>
         <a href="{{ url_for('auth.list_users') }}"
            class="btn btn-sm {% if _p.startswith('/admin/users') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-users"></i> Utilisateurs

@@ -46,4 +46,5 @@ def get_env_var(section: str, key: str) -> Optional[str]:
 ENV_VAR_KEYS = {
     'database-ovh':   ['host', 'user', 'password', 'name', 'port'],
     'database-local': ['host', 'user', 'password', 'name', 'port'],
+    'searchapi':      ['api_key'],
 }

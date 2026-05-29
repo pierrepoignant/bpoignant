@@ -1,0 +1,41 @@
+# Weekly Google scrape for "bernard poignant".
+# Runs the same image as the web app, executes the standalone fetcher, and
+# stores a fresh timestamped run in the google_urls / search_runs tables.
+#
+# Schedule: every Monday at 06:00 Europe/Paris.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-seo-scrape
+  namespace: default
+spec:
+  schedule: "0 6 * * 1"          # Monday 06:00
+  timeZone: "Europe/Paris"        # k8s >= 1.27 honours this; image TZ is Paris too
+  concurrencyPolicy: Forbid       # never let two scrapes overlap
+  startingDeadlineSeconds: 3600   # if the cluster was busy, still run within the hour
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2             # retry a couple of times on transient API/DB errors
+      activeDeadlineSeconds: 1800 # kill a stuck run after 30 min
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: seo-scrape
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "fetch_google_urls.py", "bernard poignant", "500"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets   # provides DATABASE_OVH__* and SEARCHAPI__API_KEY
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi

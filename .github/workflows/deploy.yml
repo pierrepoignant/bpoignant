@@ -63,6 +63,7 @@ jobs:
       - name: Deploy application
         run: |
           kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/cronjob.yaml
 
       - name: Wait for rollout
         run: |

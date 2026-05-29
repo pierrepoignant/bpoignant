@@ -118,6 +118,10 @@ def create_app(db_name='ovh'):
     app.register_blueprint(analytics_bp)
     register_tracking(app)
 
+    from seo.models import SearchRun, GoogleUrl  # noqa: F401
+    from seo import seo_bp
+    app.register_blueprint(seo_bp)
+
     with app.app_context():
         db.create_all()
         _migrate_schema()
