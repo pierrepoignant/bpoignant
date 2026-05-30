@@ -6,7 +6,7 @@
 
 
 {% block admin_content %}
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+    <div class="admin-row" style="justify-content: space-between; margin-bottom: 1.5rem;">
         <h2 style="font-size: 1.5rem; margin: 0;">
             <i class="fas fa-file-alt" style="color: var(--rouge);"></i> Pages ({{ pages|length }})
         </h2>
@@ -18,11 +18,11 @@
     {% if pages %}
         {% for p in pages %}
         <div style="background: white; border-radius: 12px; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
-            <div style="padding: 1.2rem 1.5rem; display: flex; align-items: center; gap: 1rem;">
+            <div class="admin-row" style="padding: 1.2rem 1.5rem;">
                 <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--rouge), var(--rouge-fonce)); color: white; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                     <i class="fas fa-file-alt"></i>
                 </div>
-                <div style="flex: 1; min-width: 0;">
+                <div class="admin-row-main" style="flex: 1; min-width: 0;">
                     <strong>{{ p.title }}</strong>
                     {% if p.published %}
                         <span style="background: rgba(198,208,2,0.2); color: var(--vert-fonce); padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem;">PUBLIÉ</span>
@@ -34,6 +34,7 @@
                         · maj {{ p.updated_at.strftime('%d/%m/%Y') }}
                     </div>
                 </div>
+                <div class="admin-row-actions">
                 {% if p.published %}
                 <a href="{{ url_for('pages.show', slug=p.slug) }}" target="_blank"
                    class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;" title="Voir sur le site">
@@ -50,6 +51,7 @@
                         <i class="fas fa-trash"></i>
                     </button>
                 </form>
+                </div>
             </div>
         </div>
         {% endfor %}

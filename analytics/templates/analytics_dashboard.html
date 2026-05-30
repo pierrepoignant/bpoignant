@@ -98,6 +98,7 @@
     <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
         <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-stream" style="color: var(--gris);"></i> Dernières visites</h2>
         {% if recent %}
+        <div class="admin-table-wrap">
         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
             <thead style="color: var(--gris);">
                 <tr><th style="text-align: left; padding-bottom: 0.5rem;">Quand</th><th style="text-align: left; padding-bottom: 0.5rem;">Page</th><th style="text-align: left; padding-bottom: 0.5rem;">Source</th></tr>
@@ -112,6 +113,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <p style="color: var(--gris); margin: 0;">Aucune visite enregistrée.</p>
         {% endif %}
