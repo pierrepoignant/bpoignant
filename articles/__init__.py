@@ -100,15 +100,43 @@ def public_show(slug):
 @admin_required
 def list_articles():
     from newsletter.models import Campaign
+    from engagement.models import Comment, Reaction
+    from analytics.models import PageView
     articles = Article.query.order_by(Article.created_at.desc()).all()
     last_campaign_by_article = {}
     for c in Campaign.query.order_by(Campaign.sent_at.desc()).all():
         if c.article_id not in last_campaign_by_article:
             last_campaign_by_article[c.article_id] = c
+
+    # Engagement stats per article, computed with grouped queries to avoid
+    # one query per card.
+    views_by_path = dict(
+        db.session.query(PageView.path, db.func.count(PageView.id))
+        .group_by(PageView.path)
+        .all()
+    )
+    views_by_article = {
+        a.id: views_by_path.get(f'/articles/{a.slug}', 0) for a in articles
+    }
+    comments_by_article = dict(
+        db.session.query(Comment.article_id, db.func.count(Comment.id))
+        .filter(Comment.approved == True)
+        .group_by(Comment.article_id)
+        .all()
+    )
+    reactions_by_article = dict(
+        db.session.query(Reaction.article_id, db.func.count(Reaction.id))
+        .group_by(Reaction.article_id)
+        .all()
+    )
+
     return render_template(
         'articles_admin_list.html',
         articles=articles,
         last_campaign_by_article=last_campaign_by_article,
+        views_by_article=views_by_article,
+        comments_by_article=comments_by_article,
+        reactions_by_article=reactions_by_article,
     )
 
 

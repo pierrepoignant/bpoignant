@@ -47,6 +47,18 @@
                         · <span title="Dernier envoi"><i class="far fa-envelope"></i> {{ last.sent_at.strftime('%d/%m/%Y') }} ({{ last.success_count }}/{{ last.recipient_count }})</span>
                         {% endif %}
                     </div>
+                    {% set views = views_by_article.get(a.id, 0) %}
+                    {% set comments = comments_by_article.get(a.id, 0) %}
+                    {% set reactions = reactions_by_article.get(a.id, 0) %}
+                    <div style="color: var(--gris); font-size: 0.8rem; margin-top: 6px; display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <span title="Vues"><i class="far fa-eye"></i> {{ views }}</span>
+                        {% if comments %}
+                        <span title="Commentaires"><i class="far fa-comment"></i> {{ comments }}</span>
+                        {% endif %}
+                        {% if reactions %}
+                        <span title="Réactions"><i class="far fa-heart"></i> {{ reactions }}</span>
+                        {% endif %}
+                    </div>
                 </div>
                 {% if a.published %}
                 <a href="{{ url_for('articles.public_show', slug=a.slug) }}" target="_blank"
