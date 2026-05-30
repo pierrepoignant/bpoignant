@@ -355,6 +355,56 @@ a:hover { color: var(--rouge-fonce); }
     transform: none;
 }
 
+/* Admin list rows: icon · content · action buttons laid out horizontally.
+   On wide screens this is a single line; the mobile rules below let it
+   wrap so buttons drop under the content instead of being crushed. */
+.admin-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Groups the action buttons/forms at the end of an .admin-row. Keeps them
+   on one line on desktop; the mobile rules below drop the group onto its
+   own full-width line. */
+.admin-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Wraps wide data tables so they scroll sideways on narrow screens
+   instead of forcing the whole page wider than the viewport. */
+.admin-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 640px) {
+    /* Tab strip scrolls sideways rather than stacking into a tall block. */
+    .admin-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 1.2rem;
+        padding-bottom: 0.4rem;
+    }
+    .admin-tabs .btn { flex: 0 0 auto; white-space: nowrap; }
+
+    /* Rows wrap: icon + content stay on the first line, and the action
+       group (forced full-width) drops onto its own line below them. */
+    .admin-row { flex-wrap: wrap; }
+    .admin-row-main { flex: 1; min-width: 0; }
+    .admin-row-actions {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    /* Keep columns legible inside the horizontal-scroll wrapper. */
+    .admin-table-wrap table { min-width: 480px; }
+}
+
 /* ─── Sections ─────────────────────────────────────── */
 .section {
     padding: 5rem 2rem;

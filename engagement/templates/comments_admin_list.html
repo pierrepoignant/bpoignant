@@ -12,11 +12,11 @@
     {% if pending %}
         {% for c in pending %}
         <div style="background: white; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid var(--rouge);">
-            <div style="display: flex; gap: 1rem; align-items: flex-start;">
+            <div class="admin-row" style="gap: 1rem; align-items: flex-start;">
                 <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--rouge); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">
                     {{ c.prenom[0]|upper }}
                 </div>
-                <div style="flex: 1; min-width: 0;">
+                <div class="admin-row-main" style="flex: 1; min-width: 0;">
                     <div style="font-size: 0.9rem; color: var(--gris); margin-bottom: 0.3rem;">
                         <strong style="color: var(--noir);">{{ c.display_name }}</strong>
                         {% if c.email %}<span style="margin-left: 0.5rem;">&lt;{{ c.email }}&gt;</span>{% endif %}
@@ -25,7 +25,7 @@
                     </div>
                     <div style="white-space: pre-wrap; line-height: 1.55;">{{ c.content }}</div>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                <div class="admin-row-actions" style="display: flex; flex-direction: column; gap: 0.4rem;">
                     <form method="POST" action="{{ url_for('admin_comments.approve_comment', comment_id=c.id) }}" style="margin: 0;">
                         <button type="submit" class="btn btn-sm btn-primary" style="padding: 6px 14px;">
                             <i class="fas fa-check"></i> Approuver
@@ -53,11 +53,11 @@
         <i class="fas fa-check-circle" style="color: var(--vert-fonce);"></i> Approuvés ({{ approved|length }})
     </h2>
     {% for c in approved %}
-    <div style="background: white; border-radius: 12px; padding: 0.9rem 1.2rem; margin-bottom: 0.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.03); display: flex; gap: 0.8rem; align-items: flex-start;">
+    <div class="admin-row" style="background: white; border-radius: 12px; padding: 0.9rem 1.2rem; margin-bottom: 0.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.03); gap: 0.8rem; align-items: flex-start;">
         <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--gris-clair); color: var(--noir); display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; font-size: 0.85rem;">
             {{ c.prenom[0]|upper }}
         </div>
-        <div style="flex: 1; min-width: 0;">
+        <div class="admin-row-main" style="flex: 1; min-width: 0;">
             <div style="font-size: 0.8rem; color: var(--gris);">
                 <strong style="color: var(--noir);">{{ c.display_name }}</strong>
                 · {{ c.created_at.strftime('%d/%m/%Y') }}

@@ -152,12 +152,14 @@
         <h2 style="font-size:1.05rem; margin:0 0 1rem;"><i class="fas fa-ranking-star" style="color:var(--vert-fonce);"></i>
           Présence de {{ own_domain }}</h2>
         {% if stats.own %}
+          <div class="admin-table-wrap">
           <table class="seo-table">
             {% for r in stats.own %}
             <tr><td><span class="rank-badge">#{{ r.rank }}</span></td>
                 <td><a href="{{ r.link }}" target="_blank" rel="noopener" style="color:var(--noir);">{{ r.title or r.link }}</a></td></tr>
             {% endfor %}
           </table>
+          </div>
         {% else %}
           <p style="color:var(--gris); margin:0;">Le site n'apparaît pas dans les {{ stats.total }} premiers résultats.</p>
         {% endif %}
@@ -182,6 +184,7 @@
     <div class="seo-card">
       <input type="text" id="result-filter" placeholder="Filtrer par titre, URL ou domaine…"
              style="width:100%; padding:.6rem .8rem; border:1px solid #ddd; border-radius:8px; margin-bottom:1rem;">
+      <div class="admin-table-wrap">
       <table class="seo-table" id="results-table">
         <thead><tr><th>Rang</th><th>Résultat</th><th>Domaine</th></tr></thead>
         <tbody>
@@ -199,6 +202,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -233,6 +237,7 @@
   {# ── Panel: history ─────────────────────────────────────── #}
   <div class="seo-panel" id="panel-history">
     <div class="seo-card">
+      <div class="admin-table-wrap">
       <table class="seo-table">
         <thead><tr><th>Date</th><th>Mot-clé</th><th>Statut</th><th>Résultats</th><th>Pages</th><th>Durée</th></tr></thead>
         <tbody>
@@ -249,6 +254,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 

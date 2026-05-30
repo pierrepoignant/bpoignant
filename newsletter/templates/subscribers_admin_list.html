@@ -16,6 +16,7 @@
 
     {% if active %}
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
         <table style="width: 100%; border-collapse: collapse;">
             <thead style="background: var(--gris-clair);">
                 <tr style="font-size: 0.85rem;">
@@ -47,6 +48,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
     {% else %}
     <div style="text-align: center; padding: 3rem; color: var(--gris); background: white; border-radius: 12px;">
@@ -60,6 +62,7 @@
         <i class="fas fa-user-slash" style="color: var(--gris);"></i> Désinscrits ({{ unsubscribed|length }})
     </h2>
     <div style="background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); overflow: hidden; opacity: 0.7;">
+        <div class="admin-table-wrap">
         <table style="width: 100%; border-collapse: collapse;">
             <tbody>
                 {% for s in unsubscribed %}
@@ -80,6 +83,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
     {% endif %}
 {% endblock %}
