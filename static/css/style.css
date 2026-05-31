@@ -403,6 +403,38 @@ a:hover { color: var(--rouge-fonce); }
 
     /* Keep columns legible inside the horizontal-scroll wrapper. */
     .admin-table-wrap table { min-width: 480px; }
+
+    /* Record-list tables (e.g. newsletter subscribers) collapse into
+       stacked, labelled cards — one card per row — instead of scrolling
+       sideways. Each cell shows its column name via data-label. */
+    .admin-table-wrap table.admin-stack-table { min-width: 0; }
+    .admin-stack-table thead { display: none; }
+    .admin-stack-table tr {
+        display: block;
+        padding: 0.7rem 1rem;
+        border-top: 1px solid var(--gris-clair);
+    }
+    .admin-stack-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        padding: 0.2rem 0 !important;
+        text-align: left !important;
+        white-space: normal !important;
+        word-break: break-word;
+        border: none;
+    }
+    .admin-stack-table td[data-label]::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--gris);
+        flex-shrink: 0;
+    }
+    .admin-stack-table td.actions {
+        justify-content: flex-end;
+        padding-top: 0.5rem !important;
+    }
 }
 
 /* ─── Sections ─────────────────────────────────────── */
