@@ -435,6 +435,16 @@ a:hover { color: var(--rouge-fonce); }
         justify-content: flex-end;
         padding-top: 0.5rem !important;
     }
+
+    /* Analytics KPI cards: pack the three metrics into a compact row
+       instead of three tall full-width cards. */
+    .analytics-kpis {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 0.5rem !important;
+    }
+    .analytics-kpis .kpi-card { padding: 0.7rem 0.5rem !important; }
+    .analytics-kpis .kpi-label { font-size: 0.6rem !important; }
+    .analytics-kpis .kpi-value { font-size: 1.3rem !important; margin-top: 0.15rem !important; }
 }
 
 /* ─── Sections ─────────────────────────────────────── */
