@@ -13,18 +13,18 @@
     </div>
 
     <!-- KPI cards -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages vues</div>
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(total_views).replace(',', ' ') }}</div>
+    <div class="analytics-kpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="kpi-card" style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages vues</div>
+            <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(total_views).replace(',', ' ') }}</div>
         </div>
-        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Visiteurs uniques</div>
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce); margin-top: 0.3rem;">{{ '{:,}'.format(unique_visitors).replace(',', ' ') }}</div>
+        <div class="kpi-card" style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Visiteurs uniques</div>
+            <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce); margin-top: 0.3rem;">{{ '{:,}'.format(unique_visitors).replace(',', ' ') }}</div>
         </div>
-        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages / visiteur</div>
-            <div style="font-size: 2.2rem; font-weight: 800; color: var(--rouge); margin-top: 0.3rem;">
+        <div class="kpi-card" style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages / visiteur</div>
+            <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--rouge); margin-top: 0.3rem;">
                 {{ '%.1f'|format(total_views / unique_visitors) if unique_visitors else '—' }}
             </div>
         </div>
