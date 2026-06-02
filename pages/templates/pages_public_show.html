@@ -3,6 +3,45 @@
 {% block meta_description %}{{ page.meta_description or (page.title ~ ' — ' ~ site_name) }}{% endblock %}
 {% block meta_robots %}index, follow{% endblock %}
 
+{% block jsonld %}
+{% if page.slug == 'biographie' %}
+{# Canonical entity definition for Bernard Poignant — the single source of
+   truth referenced by every other page's JSON-LD via this @id. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ProfilePage",
+  "@id": "{{ url_for('pages.show', slug='biographie', _external=True) }}",
+  "url": "{{ url_for('pages.show', slug='biographie', _external=True) }}",
+  "inLanguage": "fr-FR",
+  "dateModified": "{{ page.updated_at.isoformat() }}Z",
+  "mainEntity": {
+    "@type": "Person",
+    "@id": "{{ person_id }}",
+    "name": "Bernard Poignant",
+    "url": "{{ url_for('pages.show', slug='biographie', _external=True) }}",
+    "image": "{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}",
+    "jobTitle": "Homme politique",
+    "nationality": "Française",
+    "description": "Homme politique français, membre du Parti socialiste, ancien maire de Quimper (1989-2001 et 2008-2014), ancien député européen et ancien conseiller du président François Hollande.",
+    "birthDate": "1945-09-19",
+    "birthPlace": { "@type": "Place", "name": "Vannes, Morbihan, France" },
+    "memberOf": { "@type": "Organization", "name": "Parti socialiste" },
+    "knowsAbout": [
+      "Politique française",
+      "Parti socialiste",
+      "Bretagne",
+      "Quimper",
+      "Union européenne",
+      "Histoire politique"
+    ],
+    "sameAs": {{ person_sameas|tojson }}
+  }
+}
+</script>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3rem 2rem; text-align: center; color: white;">
     <h1 style="font-size: 2rem; font-weight: 800;">{{ page.title }}</h1>

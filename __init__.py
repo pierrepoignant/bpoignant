@@ -129,6 +129,17 @@ def create_app(db_name='ovh'):
         _seed_default_author()
         _seed_default_pages()
 
+    # Canonical real-world entity for Bernard Poignant. The biographie page is
+    # the single source of truth (`#person`); every JSON-LD block elsewhere
+    # references this @id rather than redefining the Person, so AI engines
+    # resolve one entity. sameAs links bind the site to the known entity.
+    PERSON_SAMEAS = [
+        'https://fr.wikipedia.org/wiki/Bernard_Poignant',
+        'https://en.wikipedia.org/wiki/Bernard_Poignant',
+        'https://www.wikidata.org/wiki/Q959482',
+        'https://www.jean-jaures.org/expert/bernard-poignant/',
+    ]
+
     @app.context_processor
     def inject_globals():
         return {
@@ -136,11 +147,40 @@ def create_app(db_name='ovh'):
             'site_tagline': app.config['SITE_TAGLINE'],
             'google_site_verification': app.config.get('GOOGLE_SITE_VERIFICATION') or '',
             'now': datetime.utcnow(),
+            'person_id': url_for('pages.show', slug='biographie', _external=True) + '#person',
+            'person_sameas': PERSON_SAMEAS,
         }
+
+    @app.after_request
+    def set_security_headers(response):
+        """Baseline security headers. setdefault so anything explicitly set
+        upstream (or by the nginx ingress) wins."""
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=31536000; includeSubDomains; preload',
+        )
+        # Public pages run only inline JS (menu toggle, reactions, comments);
+        # admin loads Quill from jsdelivr. 'unsafe-inline' covers the inline
+        # handlers/blocks; JSON-LD is non-executable and unaffected.
+        response.headers.setdefault('Content-Security-Policy', (
+            "default-src 'self'; "
+            "img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
+            "https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "frame-ancestors 'self'"
+        ))
+        return response
 
     @app.route('/')
     def index():
-        return redirect(url_for('articles.public_list'))
+        # 301 (permanent) so link equity + AI crawlers treat /articles/ as the
+        # canonical landing page.
+        return redirect(url_for('articles.public_list'), code=301)
 
     @app.route('/robots.txt')
     def robots_txt():
@@ -151,8 +191,46 @@ def create_app(db_name='ovh'):
             "Disallow: /admin/\n"
             "Disallow: /newsletter/\n"
             f"Sitemap: {url_for('sitemap_xml', _external=True)}\n"
+            f"# AI assistants: {url_for('llms_txt', _external=True)}\n"
         )
         return Response(body, mimetype='text/plain')
+
+    @app.route('/llms.txt')
+    def llms_txt():
+        """llms.txt — structured index for AI assistants (llmstxt.org)."""
+        from flask import Response
+        from articles.models import Article
+        articles = (
+            Article.query.filter_by(published=True)
+            .order_by(Article.created_at.desc())
+            .all()
+        )
+        lines = [
+            "# Bernard Poignant",
+            "",
+            "> Homme politique français — ancien maire de Quimper, ancien député "
+            "européen et ancien conseiller du président François Hollande. Articles, "
+            "analyses et prises de position sur la vie politique française.",
+            "",
+            "## Biographie",
+            f"- [Biographie]({url_for('pages.show', slug='biographie', _external=True)}): "
+            "parcours politique de Bernard Poignant.",
+            "",
+            "## Articles",
+        ]
+        for a in articles:
+            url = url_for('articles.public_show', slug=a.slug, _external=True)
+            summary = ' '.join((a.summary or '').split())
+            lines.append(f"- [{a.title}]({url}): {summary}" if summary
+                         else f"- [{a.title}]({url})")
+        lines += [
+            "",
+            "## Optional",
+            f"- [Mentions légales]({url_for('pages.show', slug='mentions-legales', _external=True)})",
+            f"- [Confidentialité]({url_for('pages.show', slug='confidentialite', _external=True)})",
+        ]
+        return Response('\n'.join(lines) + '\n',
+                        mimetype='text/plain; charset=utf-8')
 
     @app.route('/sitemap.xml')
     def sitemap_xml():

@@ -13,23 +13,51 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "Article",
-  "mainEntityOfPage": {
-    "@type": "WebPage",
-    "@id": "{{ request.url }}"
-  },
-  "headline": {{ article.title|tojson }},
-  "description": {{ (article.summary or article.title)|tojson }},
-  "image": [{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True)|tojson }}],
-  "datePublished": "{{ article.created_at.isoformat() }}Z",
-  "dateModified": "{{ article.updated_at.isoformat() }}Z",
-  {% if article.author %}"author": { "@type": "Person", "name": {{ article.author.name|tojson }} },{% endif %}
-  "publisher": {
-    "@type": "Person",
-    "name": "Bernard Poignant",
-    "url": "{{ url_for('articles.public_list', _external=True) }}"
-  },
-  "inLanguage": "fr-FR"
+  "@graph": [
+    {
+      "@type": "Article",
+      "mainEntityOfPage": { "@type": "WebPage", "@id": "{{ request.url }}" },
+      "headline": {{ article.title|tojson }},
+      "description": {{ (article.summary or article.title)|tojson }},
+      "image": [{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True)|tojson }}],
+      "datePublished": "{{ article.created_at.isoformat() }}Z",
+      "dateModified": "{{ article.updated_at.isoformat() }}Z",
+      "inLanguage": "fr-FR",
+      "articleSection": "Politique française",
+      "wordCount": {{ article.word_count }},
+      "author": { "@id": "{{ person_id }}" },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Bernard Poignant",
+        "url": "{{ url_for('articles.public_list', _external=True) }}",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}",
+          "width": 1200,
+          "height": 674
+        }
+      },
+      "speakable": {
+        "@type": "SpeakableSpecification",
+        "cssSelector": [".article-page-title", ".article-body"]
+      }
+    },
+    {
+      "@type": "Person",
+      "@id": "{{ person_id }}",
+      "name": "Bernard Poignant",
+      "url": "{{ url_for('pages.show', slug='biographie', _external=True) }}",
+      "jobTitle": "Homme politique",
+      "sameAs": {{ person_sameas|tojson }}
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Articles", "item": "{{ url_for('articles.public_list', _external=True) }}" },
+        { "@type": "ListItem", "position": 2, "name": {{ article.title|tojson }}, "item": "{{ request.url }}" }
+      ]
+    }
+  ]
 }
 </script>
 {% endblock %}

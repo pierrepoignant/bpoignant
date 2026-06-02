@@ -1,32 +1,52 @@
 {% extends 'base.html' %}
-{% block title %}Bernard Poignant — Articles & réflexions{% endblock %}
+{% block title %}Bernard Poignant{% endblock %}
 {% block meta_description %}Articles, analyses et prises de position de Bernard Poignant — ancien maire de Quimper, ancien conseiller du président de la République François Hollande.{% endblock %}
 
 {% block jsonld %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Bernard Poignant",
-  "url": "{{ url_for('articles.public_list', _external=True) }}",
-  "inLanguage": "fr-FR",
-  "publisher": {
-    "@type": "Person",
-    "name": "Bernard Poignant",
-    "url": "{{ url_for('articles.public_list', _external=True) }}",
-    "image": "{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}"
-  }
-}
-</script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Person",
-  "name": "Bernard Poignant",
-  "url": "{{ url_for('articles.public_list', _external=True) }}",
-  "image": "{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}",
-  "jobTitle": "Homme politique",
-  "nationality": "Française"
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "{{ url_for('articles.public_list', _external=True) }}#website",
+      "name": "Bernard Poignant",
+      "url": "{{ url_for('articles.public_list', _external=True) }}",
+      "inLanguage": "fr-FR",
+      "publisher": { "@id": "{{ person_id }}" }
+    },
+    {
+      "@type": "Person",
+      "@id": "{{ person_id }}",
+      "name": "Bernard Poignant",
+      "url": "{{ url_for('pages.show', slug='biographie', _external=True) }}",
+      "image": "{{ url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}",
+      "jobTitle": "Homme politique",
+      "nationality": "Française",
+      "sameAs": {{ person_sameas|tojson }}
+    },
+    {
+      "@type": "Blog",
+      "@id": "{{ url_for('articles.public_list', _external=True) }}#blog",
+      "name": "Articles — Bernard Poignant",
+      "url": "{{ url_for('articles.public_list', _external=True) }}",
+      "inLanguage": "fr-FR",
+      "author": { "@id": "{{ person_id }}" },
+      "publisher": { "@id": "{{ person_id }}" },
+      "blogPost": [
+        {% for a in articles %}
+        {
+          "@type": "BlogPosting",
+          "headline": {{ a.title|tojson }},
+          "url": "{{ url_for('articles.public_show', slug=a.slug, _external=True) }}",
+          "datePublished": "{{ a.created_at.isoformat() }}Z",
+          "dateModified": "{{ a.updated_at.isoformat() }}Z"{% if a.summary %},
+          "description": {{ a.summary|tojson }}{% endif %}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }
+  ]
 }
 </script>
 {% endblock %}

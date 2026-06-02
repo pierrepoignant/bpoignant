@@ -33,3 +33,11 @@ class Article(db.Model):
     def display_date(self):
         # `created_at` is admin-editable and is the date shown everywhere.
         return self.created_at
+
+    @property
+    def word_count(self):
+        """Approximate word count of the article body, HTML stripped.
+        Used for the Article JSON-LD `wordCount` property."""
+        import re
+        text = re.sub(r'<[^>]+>', ' ', self.content_html or '')
+        return len(text.split())
