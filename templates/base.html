@@ -99,6 +99,12 @@
         <div class="footer-brand">Bernard <span>Poignant</span></div>
         <p>{{ site_tagline }}</p>
         <p>&copy; {{ now.year }} — Tous droits réservés</p>
+        <div class="footer-social">
+            <a href="https://twitter.com/bpoignant" target="_blank" rel="noopener me"
+               aria-label="Twitter / X — @bpoignant" title="@bpoignant sur X">
+                <i class="fa-brands fa-x-twitter"></i>
+            </a>
+        </div>
         <div class="footer-links">
             <a href="{{ url_for('articles.public_list') }}">Articles</a>
             <a href="{{ url_for('pages.show', slug='biographie') }}">Biographie</a>
