@@ -108,26 +108,44 @@ def _parse_days():
 @admin_required
 def dashboard():
     days = _parse_days()
-    since = datetime.utcnow() - timedelta(days=days)
+    today = datetime.utcnow().date()
+
+    # Build the window + the list of calendar days the chart will show.
+    # days == 1 is the "Hier" shortcut: the full previous calendar day,
+    # bounded above so today's partial data doesn't leak in. Everything
+    # else is a rolling "last N days" window ending today.
+    if days == 1:
+        start = today - timedelta(days=1)
+        since = datetime.combine(start, datetime.min.time())
+        until = datetime.combine(today, datetime.min.time())
+        day_list = [start]
+    else:
+        since = datetime.utcnow() - timedelta(days=days)
+        until = None
+        day_list = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+
+    window = [PageView.created_at >= since]
+    if until is not None:
+        window.append(PageView.created_at < until)
 
     total_views = db.session.query(func.count(PageView.id)).filter(
-        PageView.created_at >= since
+        *window
     ).scalar() or 0
 
     unique_visitors = db.session.query(
         func.count(func.distinct(PageView.visitor_hash))
-    ).filter(PageView.created_at >= since).scalar() or 0
+    ).filter(*window).scalar() or 0
 
     top_pages = db.session.query(
         PageView.path, func.count(PageView.id).label('n')
-    ).filter(PageView.created_at >= since).group_by(PageView.path).order_by(
+    ).filter(*window).group_by(PageView.path).order_by(
         func.count(PageView.id).desc()
     ).limit(15).all()
 
     top_referrers = db.session.query(
         PageView.referrer, func.count(PageView.id).label('n')
     ).filter(
-        PageView.created_at >= since, PageView.referrer.isnot(None)
+        *window, PageView.referrer.isnot(None)
     ).group_by(PageView.referrer).order_by(
         func.count(PageView.id).desc()
     ).limit(10).all()
@@ -137,16 +155,33 @@ def dashboard():
         func.date(PageView.created_at).label('d'),
         func.count(PageView.id).label('views'),
         func.count(func.distinct(PageView.visitor_hash)).label('uniques'),
-    ).filter(PageView.created_at >= since).group_by('d').order_by('d').all()
+    ).filter(*window).group_by('d').order_by('d').all()
 
     by_day = {str(r.d): (r.views, r.uniques) for r in rows}
     series = []
-    today = datetime.utcnow().date()
-    for i in range(days - 1, -1, -1):
-        d = today - timedelta(days=i)
+    for d in day_list:
         v, u = by_day.get(str(d), (0, 0))
         series.append({'date': d, 'views': v, 'uniques': u})
     max_views = max((p['views'] for p in series), default=0) or 1
+
+    # Per-day averages shown on the KPI cards.
+    n_days = len(day_list)
+    avg_views = round(total_views / n_days, 1) if n_days else 0
+    avg_uniques = round(unique_visitors / n_days, 1) if n_days else 0
+
+    # Compact, JSON-serialisable copy of the series for the client-side chart.
+    # Carries all three switchable metrics (trafic / visiteurs / pages par
+    # visiteur) plus pre-formatted date labels.
+    chart_data = [
+        {
+            'label': p['date'].strftime('%d/%m'),
+            'full': p['date'].strftime('%d/%m/%Y'),
+            'views': p['views'],
+            'uniques': p['uniques'],
+            'ratio': round(p['views'] / p['uniques'], 1) if p['uniques'] else 0,
+        }
+        for p in series
+    ]
 
     recent = PageView.query.order_by(PageView.created_at.desc()).limit(25).all()
 
@@ -154,7 +189,7 @@ def dashboard():
     country_rows = db.session.query(
         PageView.country, func.count(PageView.id).label('n')
     ).filter(
-        PageView.created_at >= since, PageView.country.isnot(None)
+        *window, PageView.country.isnot(None)
     ).group_by(PageView.country).order_by(func.count(PageView.id).desc()).limit(10).all()
 
     return render_template(
@@ -162,9 +197,12 @@ def dashboard():
         days=days,
         total_views=total_views,
         unique_visitors=unique_visitors,
+        avg_views=avg_views,
+        avg_uniques=avg_uniques,
         top_pages=top_pages,
         top_referrers=top_referrers,
         series=series,
+        chart_data=chart_data,
         max_views=max_views,
         recent=recent,
         countries=country_rows,
