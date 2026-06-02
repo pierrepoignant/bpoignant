@@ -373,6 +373,12 @@ a:hover { color: var(--rouge-fonce); }
     gap: 0.5rem;
 }
 
+/* Clickable analytics KPI cards that switch the chart metric. The active
+   card gets a coloured ring; hover gives a subtle lift. */
+.kpi-card { border: 2px solid transparent; transition: border-color 0.15s, transform 0.15s; }
+.kpi-card:hover { transform: translateY(-2px); }
+.kpi-card.active { border-color: var(--rouge); }
+
 /* Wraps wide data tables so they scroll sideways on narrow screens
    instead of forcing the whole page wider than the viewport. */
 .admin-table-wrap {
