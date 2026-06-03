@@ -55,6 +55,14 @@
             <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
                 <i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}
             </div>
+            {% set reacts = reactions_by_article.get(a.id) %}
+            {% if reacts %}
+            <div class="tile-reactions">
+                {% for r in reacts %}
+                <span class="tile-reaction"><span class="tile-reaction-emoji">{{ r.emoji }}</span> {{ r.count }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
             <div class="tile-cta">Lire l'article <i class="fas fa-arrow-right"></i></div>
         </a>
         {% endfor %}
