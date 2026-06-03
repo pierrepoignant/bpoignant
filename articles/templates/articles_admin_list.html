@@ -11,6 +11,14 @@
             <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Articles ({{ articles|length }})
         </h2>
         <div style="display: flex; gap: 0.5rem;">
+            <form method="POST" action="{{ url_for('admin_articles.propose_summaries') }}" style="margin: 0;"
+                  onsubmit="return confirm('Rédiger par IA un résumé, dans le style de Bernard, pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Rédiger un résumé par IA (style de Bernard) pour les articles qui n'en ont pas">
+                    <i class="fas fa-wand-magic-sparkles"></i> Résumés manquants (IA)
+                </button>
+            </form>
             <form method="POST" action="{{ url_for('admin_articles.cleanup_all') }}" style="margin: 0;"
                   onsubmit="return confirm('Nettoyer le HTML de tous les articles ? (supprime les &lt;br&gt;, ajoute les espaces manquants, etc.)')">
                 <button type="submit" class="btn btn-sm btn-outline"
