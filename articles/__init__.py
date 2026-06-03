@@ -59,12 +59,38 @@ def _unique_slug(title, exclude_id=None):
 
 @articles_bp.route('/')
 def public_list():
+    from engagement.models import Reaction
+    from engagement import EMOJIS
     articles = (
         Article.query.filter_by(published=True)
         .order_by(Article.created_at.desc())
         .all()
     )
-    return render_template('articles_public_list.html', articles=articles)
+    # Reaction counts per article (emoji → n), computed in one grouped query
+    # and kept in EMOJIS display order, dropping any emoji with no reactions.
+    reactions_by_article = {}
+    ids = [a.id for a in articles]
+    if ids:
+        rows = (
+            db.session.query(
+                Reaction.article_id, Reaction.emoji, db.func.count(Reaction.id)
+            )
+            .filter(Reaction.article_id.in_(ids))
+            .group_by(Reaction.article_id, Reaction.emoji)
+            .all()
+        )
+        by_article = {}
+        for article_id, emoji, n in rows:
+            by_article.setdefault(article_id, {})[emoji] = n
+        for article_id, by_emoji in by_article.items():
+            reactions_by_article[article_id] = [
+                {'emoji': e, 'count': by_emoji[e]} for e in EMOJIS if by_emoji.get(e)
+            ]
+    return render_template(
+        'articles_public_list.html',
+        articles=articles,
+        reactions_by_article=reactions_by_article,
+    )
 
 
 @articles_bp.route('/<slug>')
