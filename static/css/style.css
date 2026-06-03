@@ -773,6 +773,31 @@ a:hover { color: var(--rouge-fonce); }
 
 .footer p { font-size: 0.85rem; margin: 0.3rem 0; }
 
+.footer-social {
+    margin-top: 1.2rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+.footer-social a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.2);
+    font-size: 1.05rem;
+    transition: all 0.2s;
+}
+.footer-social a:hover {
+    color: var(--noir);
+    background: var(--blanc);
+    border-color: var(--blanc);
+    transform: translateY(-2px);
+}
+
 .footer-links {
     margin-top: 1rem;
     display: flex;
