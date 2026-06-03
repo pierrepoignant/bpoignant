@@ -295,21 +295,62 @@ def cleanup_all():
 @admin_required
 def propose_summaries():
     """Fill in a proposed one-line summary for every article that doesn't
-    have one yet, derived from its content. Existing summaries are left
-    untouched; the proposals can be edited afterwards on each article."""
+    have one yet. Summaries are written by Claude in Bernard's tone of voice;
+    if the AI is unavailable (no API key) or errors, we fall back to a plain
+    text extraction. Existing summaries are left untouched, and the proposals
+    can be edited afterwards on each article.
+
+    AI calls are sequential, so we cap how many we generate per click to stay
+    within the request timeout — click again to process the rest."""
+    from flask import current_app
+    from articles.ai_summary import generate_summary, is_configured
+
+    MAX_AI_PER_RUN = 12
+
+    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
+               if not (a.summary or '').strip()]
+
+    ai_enabled = is_configured()
+    # When the AI is on we process a bounded number per click (sequential calls
+    # are slow); the rest wait for the next run so they too get an AI summary.
+    # When the AI is off, extraction is cheap, so process everything at once.
+    budget = MAX_AI_PER_RUN if ai_enabled else len(pending)
+
     filled = 0
-    for article in Article.query.all():
-        if (article.summary or '').strip():
-            continue
-        proposed = summarize_html(article.content_html or '')
+    ai_used = 0
+
+    for article in pending[:budget]:
+        proposed = None
+        if ai_enabled:
+            try:
+                proposed = generate_summary(article.title, article.content_html or '')
+                if proposed:
+                    ai_used += 1
+            except Exception as exc:
+                current_app.logger.warning(
+                    f"AI summary failed for article {article.id}: {exc}"
+                )
+                proposed = None
+        if not proposed:
+            proposed = summarize_html(article.content_html or '')
         if proposed:
             article.summary = proposed
             filled += 1
+
     db.session.commit()
-    if filled:
-        flash(f"{filled} résumé(s) proposé(s) — pensez à les relire.", 'success')
-    else:
+
+    if not filled:
         flash("Tous les articles ont déjà un résumé.", 'info')
+    else:
+        remaining = len(pending) - filled
+        msg = f"{filled} résumé(s) proposé(s)"
+        if ai_used:
+            msg += f" — dont {ai_used} rédigé(s) par l'IA"
+        if not ai_enabled:
+            msg += " (IA non configurée : extraits du texte — définissez ANTHROPIC__API_KEY)"
+        elif remaining > 0:
+            msg += f". {remaining} restant(s), relancez pour continuer"
+        flash(msg + ".", 'success')
     return redirect(url_for('admin_articles.list_articles'))
 
 
