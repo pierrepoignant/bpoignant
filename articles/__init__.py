@@ -7,7 +7,7 @@ from slugify import slugify
 
 from init_db import db
 from articles.models import Article, Author
-from articles.cleanup import clean_article_html
+from articles.cleanup import clean_article_html, summarize_html
 from auth import admin_required
 
 articles_bp = Blueprint('articles', __name__, url_prefix='/articles', template_folder='templates')
@@ -288,6 +288,28 @@ def cleanup_all():
             changed += 1
     db.session.commit()
     flash(f"Nettoyage terminé — {changed} article(s) mis à jour.", 'success')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/propose-summaries', methods=['POST'])
+@admin_required
+def propose_summaries():
+    """Fill in a proposed one-line summary for every article that doesn't
+    have one yet, derived from its content. Existing summaries are left
+    untouched; the proposals can be edited afterwards on each article."""
+    filled = 0
+    for article in Article.query.all():
+        if (article.summary or '').strip():
+            continue
+        proposed = summarize_html(article.content_html or '')
+        if proposed:
+            article.summary = proposed
+            filled += 1
+    db.session.commit()
+    if filled:
+        flash(f"{filled} résumé(s) proposé(s) — pensez à les relire.", 'success')
+    else:
+        flash("Tous les articles ont déjà un résumé.", 'info')
     return redirect(url_for('admin_articles.list_articles'))
 
 
