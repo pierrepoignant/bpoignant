@@ -260,6 +260,21 @@ def _parse_created_date(raw):
     return datetime.combine(d, time(12, 0))
 
 
+def _autosummary(title, content_html):
+    """Build a summary for an article that was saved without one: ask the AI
+    (Bernard's voice) first, falling back to plain text extraction if the AI
+    is unavailable or errors. Returns '' when there's no usable content."""
+    try:
+        from articles.ai_summary import generate_summary
+        proposed = generate_summary(title, content_html)
+        if proposed:
+            return proposed
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.warning(f"AI summary on save failed: {exc}")
+    return summarize_html(content_html or '')
+
+
 def _save_article(article):
     title = (request.form.get('title') or '').strip()
     summary = (request.form.get('summary') or '').strip()
@@ -271,6 +286,13 @@ def _save_article(article):
     if not title:
         flash("Le titre est obligatoire.", 'danger')
         return redirect(request.url)
+
+    # No summary typed → generate one on save. A summary the admin wrote is
+    # always kept untouched.
+    auto_summary = False
+    if not summary and content_html:
+        summary = _autosummary(title, content_html)
+        auto_summary = bool(summary)
 
     if article is None:
         article = Article(
@@ -296,7 +318,10 @@ def _save_article(article):
             article.created_at = created_at
 
     db.session.commit()
-    flash("Article enregistré.", 'success')
+    if auto_summary:
+        flash("Article enregistré. Résumé généré automatiquement — pensez à le relire.", 'success')
+    else:
+        flash("Article enregistré.", 'success')
     return redirect(url_for('admin_articles.edit_article', article_id=article.id))
 
 
