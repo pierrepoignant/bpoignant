@@ -65,6 +65,7 @@
         <ul class="nav-links">
             <li><a href="{{ url_for('articles.public_list') }}" class="{% if request.endpoint and request.endpoint.startswith('articles.') %}active{% endif %}"><i class="fas fa-newspaper"></i>&nbsp; Articles</a></li>
             <li><a href="{{ url_for('pages.show', slug='biographie') }}" class="{% if request.endpoint == 'pages.show' and request.view_args and request.view_args.get('slug') == 'biographie' %}active{% endif %}"><i class="fas fa-user"></i>&nbsp; Biographie</a></li>
+            <li><a href="{{ url_for('articles.public_list') }}#newsletter"><i class="far fa-envelope"></i>&nbsp; Inscription</a></li>
             {% if current_user.is_authenticated %}
                 <li><a href="{{ url_for('admin_articles.list_articles') }}" class="{% if request.endpoint and request.endpoint.startswith('admin_articles.') %}active{% endif %}"><i class="fas fa-cog"></i>&nbsp; Admin</a></li>
                 <li><a href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i>&nbsp; Déconnexion</a></li>
