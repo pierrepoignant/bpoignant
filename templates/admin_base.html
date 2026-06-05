@@ -41,6 +41,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-envelope"></i> Newsletter
         </a>
+        <a href="{{ url_for('admin_sends.list_sends') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/sends') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-paper-plane"></i> Envois
+        </a>
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-chart-line"></i> Statistiques

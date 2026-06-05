@@ -9,7 +9,7 @@ from flask import (
 )
 
 from init_db import db
-from newsletter.models import Subscriber, Campaign
+from newsletter.models import Subscriber, Campaign, Delivery
 from auth import admin_required
 from flask import current_app, render_template, url_for
 from flask_login import current_user
@@ -21,6 +21,9 @@ log = logging.getLogger(__name__)
 newsletter_bp = Blueprint('newsletter', __name__, url_prefix='/newsletter', template_folder='templates')
 admin_subscribers_bp = Blueprint(
     'admin_subscribers', __name__, url_prefix='/admin/subscribers', template_folder='templates'
+)
+admin_sends_bp = Blueprint(
+    'admin_sends', __name__, url_prefix='/admin/sends', template_folder='templates'
 )
 
 
@@ -110,6 +113,68 @@ def list_subscribers():
     )
 
 
+@admin_sends_bp.route('/')
+@admin_required
+def list_sends():
+    """Admin view of the e-mails that went out: a per-article summary plus
+    the most recent individual deliveries."""
+    from articles.models import Article
+
+    articles = {a.id: a for a in Article.query.all()}
+
+    rows = (
+        db.session.query(
+            Delivery.article_id,
+            db.func.count(Delivery.id),
+            db.func.max(Delivery.sent_at),
+        )
+        .group_by(Delivery.article_id)
+        .all()
+    )
+    summary = [
+        {'article': articles.get(article_id), 'count': n, 'last': last}
+        for article_id, n, last in rows
+    ]
+    summary.sort(key=lambda s: s['last'] or datetime.min, reverse=True)
+
+    total = db.session.query(db.func.count(Delivery.id)).scalar() or 0
+    recent = Delivery.query.order_by(Delivery.sent_at.desc()).limit(300).all()
+
+    return render_template(
+        'sends_admin_list.html',
+        summary=summary,
+        recent=recent,
+        total=total,
+        articles=articles,
+    )
+
+
+@admin_sends_bp.route('/backfill', methods=['POST'])
+@admin_required
+def run_backfill():
+    """Run the one-off delivery backfill from the dashboard. 'mode=dry'
+    previews counts without writing; otherwise it applies (idempotently)."""
+    from backfill_deliveries import backfill
+
+    dry = request.form.get('mode') == 'dry'
+    result = backfill(dry_run=dry)
+
+    parts = []
+    for r in result['rules']:
+        if not r['article_found']:
+            parts.append(f"« {r['slug']} » introuvable")
+        else:
+            parts.append(f"{r['slug']} : {r['created']}")
+    detail = " · ".join(parts)
+    verb = "à créer" if dry else "créée(s)"
+    flash(
+        f"{'Simulation — ' if dry else ''}{result['total_created']} livraison(s) {verb}. "
+        f"[{detail}]",
+        'info' if dry else 'success',
+    )
+    return redirect(url_for('admin_sends.list_sends'))
+
+
 @admin_subscribers_bp.route('/export.csv')
 @admin_required
 def export_csv():
@@ -150,10 +215,21 @@ def send_article_to_subscribers(article, sent_by=None):
     from articles.models import Article  # local import to avoid cycle
 
     subscribers = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).all()
+
+    # Skip anyone who already received this exact article, so a second click
+    # on "send" never mails the same article to the same recipient.
+    already_sent = {
+        d.subscriber_id
+        for d in Delivery.query.filter_by(article_id=article.id).all()
+    }
+    recipients = [s for s in subscribers if s.id not in already_sent]
+    skipped = len(subscribers) - len(recipients)
+
     campaign = Campaign(
         article_id=article.id,
         sent_by_id=getattr(sent_by, 'id', None),
-        recipient_count=len(subscribers),
+        recipient_count=len(recipients),
+        skipped_count=skipped,
     )
     db.session.add(campaign)
     db.session.commit()
@@ -162,7 +238,7 @@ def send_article_to_subscribers(article, sent_by=None):
     article_url = url_for('articles.public_show', slug=article.slug, _external=True)
 
     successes, errors = 0, 0
-    for sub in subscribers:
+    for sub in recipients:
         unsub_url = url_for('newsletter.unsubscribe', token=sub.token, _external=True)
         html = render_template(
             'email/newsletter_article.html',
@@ -182,6 +258,18 @@ def send_article_to_subscribers(article, sent_by=None):
         )
         if ok:
             successes += 1
+            # Record the delivery immediately so an interrupted run still
+            # remembers who was already emailed. The unique constraint guards
+            # against duplicates (e.g. two near-simultaneous sends).
+            db.session.add(Delivery(
+                article_id=article.id,
+                subscriber_id=sub.id,
+                email=sub.email,
+            ))
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
         else:
             errors += 1
 

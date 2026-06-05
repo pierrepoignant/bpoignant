@@ -99,9 +99,10 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_authors_bp)
 
     from newsletter.models import Subscriber  # noqa: F401
-    from newsletter import newsletter_bp, admin_subscribers_bp
+    from newsletter import newsletter_bp, admin_subscribers_bp, admin_sends_bp
     app.register_blueprint(newsletter_bp)
     app.register_blueprint(admin_subscribers_bp)
+    app.register_blueprint(admin_sends_bp)
 
     from engagement.models import Comment, Reaction  # noqa: F401
     from engagement import engagement_bp, admin_comments_bp
@@ -236,6 +237,15 @@ def _migrate_schema():
         cols = {c['name'] for c in inspector.get_columns('users')}
         if 'email' not in cols:
             db.session.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL"))
+            db.session.commit()
+
+    if 'newsletter_campaigns' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('newsletter_campaigns')}
+        if 'skipped_count' not in cols:
+            db.session.execute(text(
+                "ALTER TABLE newsletter_campaigns "
+                "ADD COLUMN skipped_count INTEGER NOT NULL DEFAULT 0"
+            ))
             db.session.commit()
 
 
