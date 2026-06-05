@@ -5,6 +5,34 @@
 {% block admin_subtitle %}<p>{{ total }} e-mail{{ 's' if total != 1 else '' }} envoyé{{ 's' if total != 1 else '' }} aux abonnés.</p>{% endblock %}
 
 {% block admin_content %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.5rem; margin-bottom: 2.5rem; border-left: 4px solid var(--vert);">
+        <h2 style="font-size: 1.1rem; margin: 0 0 0.5rem;">
+            <i class="fas fa-clock-rotate-left" style="color: var(--vert-fonce);"></i> Backfill des envois passés
+        </h2>
+        <p style="color: var(--gris); font-size: 0.9rem; margin: 0 0 0.8rem;">
+            Enregistre les envois déjà effectués pour ces articles, afin qu'un nouvel envoi ne les renvoie pas aux abonnés concernés. Sans effet sur ce qui est déjà enregistré (relançable sans risque).
+        </p>
+        <ul style="color: var(--noir); font-size: 0.88rem; margin: 0 0 1rem; padding-left: 1.2rem;">
+            <li><code>presidence-le-calendrier-des-vainqueurs</code> → inscrits avant le 3 juin (inclus)</li>
+            <li><code>entretien-journal-le-point</code> → inscrits avant le 2 juin (inclus)</li>
+            <li><code>melenchon-dans-le-texte</code> → inscrits avant le 28 mai (inclus)</li>
+        </ul>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <form method="POST" action="{{ url_for('admin_sends.run_backfill') }}" style="margin: 0;">
+                <input type="hidden" name="mode" value="dry">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    <i class="fas fa-magnifying-glass"></i> Simuler
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_sends.run_backfill') }}" style="margin: 0;"
+                  onsubmit="return confirm('Enregistrer les livraisons passées selon ces règles ? (sans effet sur les enregistrements existants)')">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-clock-rotate-left"></i> Lancer le backfill
+                </button>
+            </form>
+        </div>
+    </div>
+
     <h2 style="font-size: 1.2rem; margin: 0 0 1rem;">
         <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Par article
     </h2>

@@ -33,11 +33,16 @@ RULES = [
 
 
 def backfill(dry_run=False):
+    """Run the backfill within an existing app context. Returns a dict:
+    {'rules': [...per-rule stats...], 'total_created': int, 'dry_run': bool}.
+    Idempotent — pairs that already exist are skipped."""
+    rules_out = []
     total_created = 0
     for slug, cutoff in RULES:
         article = Article.query.filter_by(slug=slug).first()
         if article is None:
-            print(f"  ! Article introuvable pour le slug « {slug} » — ignoré.")
+            rules_out.append({'slug': slug, 'cutoff': cutoff, 'article_found': False,
+                              'subscribers': 0, 'created': 0, 'existing': 0})
             continue
 
         # subscribed_at on or before the cutoff day → strictly before the next day.
@@ -67,12 +72,27 @@ def backfill(dry_run=False):
             db.session.commit()
 
         total_created += created
-        print(f"  • {slug}: {len(subscribers)} inscrit(s) avant le {cutoff.isoformat()} "
-              f"(inclus) — {created} livraison(s) {'à créer' if dry_run else 'créée(s)'}, "
-              f"{len(subscribers) - created} déjà présente(s).")
+        rules_out.append({
+            'slug': slug, 'cutoff': cutoff, 'article_found': True,
+            'subscribers': len(subscribers), 'created': created,
+            'existing': len(subscribers) - created,
+        })
 
-    print(f"{'[dry-run] ' if dry_run else ''}Total : {total_created} livraison(s) "
-          f"{'à créer' if dry_run else 'créée(s)'}.")
+    return {'rules': rules_out, 'total_created': total_created, 'dry_run': dry_run}
+
+
+def _print_result(result):
+    for r in result['rules']:
+        if not r['article_found']:
+            print(f"  ! Article introuvable pour le slug « {r['slug']} » — ignoré.")
+            continue
+        verb = 'à créer' if result['dry_run'] else 'créée(s)'
+        print(f"  • {r['slug']}: {r['subscribers']} inscrit(s) avant le "
+              f"{r['cutoff'].isoformat()} (inclus) — {r['created']} livraison(s) {verb}, "
+              f"{r['existing']} déjà présente(s).")
+    verb = 'à créer' if result['dry_run'] else 'créée(s)'
+    print(f"{'[dry-run] ' if result['dry_run'] else ''}Total : "
+          f"{result['total_created']} livraison(s) {verb}.")
 
 
 def main():
@@ -84,7 +104,7 @@ def main():
 
     app = create_app(args.db)
     with app.app_context():
-        backfill(dry_run=args.dry_run)
+        _print_result(backfill(dry_run=args.dry_run))
 
 
 if __name__ == '__main__':
