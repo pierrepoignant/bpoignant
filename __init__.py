@@ -99,9 +99,10 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_authors_bp)
 
     from newsletter.models import Subscriber  # noqa: F401
-    from newsletter import newsletter_bp, admin_subscribers_bp
+    from newsletter import newsletter_bp, admin_subscribers_bp, admin_sends_bp
     app.register_blueprint(newsletter_bp)
     app.register_blueprint(admin_subscribers_bp)
+    app.register_blueprint(admin_sends_bp)
 
     from engagement.models import Comment, Reaction  # noqa: F401
     from engagement import engagement_bp, admin_comments_bp

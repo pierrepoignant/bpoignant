@@ -22,6 +22,9 @@ newsletter_bp = Blueprint('newsletter', __name__, url_prefix='/newsletter', temp
 admin_subscribers_bp = Blueprint(
     'admin_subscribers', __name__, url_prefix='/admin/subscribers', template_folder='templates'
 )
+admin_sends_bp = Blueprint(
+    'admin_sends', __name__, url_prefix='/admin/sends', template_folder='templates'
+)
 
 
 # RFC-ish — good enough for sanity-checking input before storage.
@@ -107,6 +110,42 @@ def list_subscribers():
         'subscribers_admin_list.html',
         active=active,
         unsubscribed=unsubscribed,
+    )
+
+
+@admin_sends_bp.route('/')
+@admin_required
+def list_sends():
+    """Admin view of the e-mails that went out: a per-article summary plus
+    the most recent individual deliveries."""
+    from articles.models import Article
+
+    articles = {a.id: a for a in Article.query.all()}
+
+    rows = (
+        db.session.query(
+            Delivery.article_id,
+            db.func.count(Delivery.id),
+            db.func.max(Delivery.sent_at),
+        )
+        .group_by(Delivery.article_id)
+        .all()
+    )
+    summary = [
+        {'article': articles.get(article_id), 'count': n, 'last': last}
+        for article_id, n, last in rows
+    ]
+    summary.sort(key=lambda s: s['last'] or datetime.min, reverse=True)
+
+    total = db.session.query(db.func.count(Delivery.id)).scalar() or 0
+    recent = Delivery.query.order_by(Delivery.sent_at.desc()).limit(300).all()
+
+    return render_template(
+        'sends_admin_list.html',
+        summary=summary,
+        recent=recent,
+        total=total,
+        articles=articles,
     )
 
 
