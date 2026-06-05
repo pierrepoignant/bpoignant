@@ -238,6 +238,15 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL"))
             db.session.commit()
 
+    if 'newsletter_campaigns' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('newsletter_campaigns')}
+        if 'skipped_count' not in cols:
+            db.session.execute(text(
+                "ALTER TABLE newsletter_campaigns "
+                "ADD COLUMN skipped_count INTEGER NOT NULL DEFAULT 0"
+            ))
+            db.session.commit()
+
 
 def _seed_admin_user():
     """Create the bootstrap admin user if no users exist yet."""

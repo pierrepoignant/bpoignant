@@ -9,7 +9,7 @@ from flask import (
 )
 
 from init_db import db
-from newsletter.models import Subscriber, Campaign
+from newsletter.models import Subscriber, Campaign, Delivery
 from auth import admin_required
 from flask import current_app, render_template, url_for
 from flask_login import current_user
@@ -150,10 +150,21 @@ def send_article_to_subscribers(article, sent_by=None):
     from articles.models import Article  # local import to avoid cycle
 
     subscribers = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).all()
+
+    # Skip anyone who already received this exact article, so a second click
+    # on "send" never mails the same article to the same recipient.
+    already_sent = {
+        d.subscriber_id
+        for d in Delivery.query.filter_by(article_id=article.id).all()
+    }
+    recipients = [s for s in subscribers if s.id not in already_sent]
+    skipped = len(subscribers) - len(recipients)
+
     campaign = Campaign(
         article_id=article.id,
         sent_by_id=getattr(sent_by, 'id', None),
-        recipient_count=len(subscribers),
+        recipient_count=len(recipients),
+        skipped_count=skipped,
     )
     db.session.add(campaign)
     db.session.commit()
@@ -162,7 +173,7 @@ def send_article_to_subscribers(article, sent_by=None):
     article_url = url_for('articles.public_show', slug=article.slug, _external=True)
 
     successes, errors = 0, 0
-    for sub in subscribers:
+    for sub in recipients:
         unsub_url = url_for('newsletter.unsubscribe', token=sub.token, _external=True)
         html = render_template(
             'email/newsletter_article.html',
@@ -182,6 +193,18 @@ def send_article_to_subscribers(article, sent_by=None):
         )
         if ok:
             successes += 1
+            # Record the delivery immediately so an interrupted run still
+            # remembers who was already emailed. The unique constraint guards
+            # against duplicates (e.g. two near-simultaneous sends).
+            db.session.add(Delivery(
+                article_id=article.id,
+                subscriber_id=sub.id,
+                email=sub.email,
+            ))
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
         else:
             errors += 1
 

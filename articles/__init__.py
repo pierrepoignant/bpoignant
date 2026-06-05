@@ -182,12 +182,19 @@ def send_newsletter(article_id):
         return redirect(url_for('admin_articles.list_articles'))
 
     campaign = send_article_to_subscribers(article, sent_by=current_user)
-    flash(
-        f"Newsletter envoyée à {campaign.success_count}/{campaign.recipient_count} abonnés"
-        + (f" ({campaign.error_count} échecs)" if campaign.error_count else "")
-        + ".",
-        'success' if campaign.error_count == 0 else 'warning',
-    )
+    if campaign.recipient_count == 0:
+        flash(
+            "Tous les abonnés ont déjà reçu cet article — aucun nouvel envoi."
+            if campaign.skipped_count else "Aucun abonné à contacter.",
+            'info',
+        )
+    else:
+        msg = f"Newsletter envoyée à {campaign.success_count}/{campaign.recipient_count} abonnés"
+        if campaign.error_count:
+            msg += f" ({campaign.error_count} échecs)"
+        if campaign.skipped_count:
+            msg += f" — {campaign.skipped_count} déjà destinataire(s), ignoré(s)"
+        flash(msg + ".", 'success' if campaign.error_count == 0 else 'warning')
     return redirect(url_for('admin_articles.list_articles'))
 
 
