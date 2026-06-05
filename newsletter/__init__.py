@@ -149,32 +149,6 @@ def list_sends():
     )
 
 
-@admin_sends_bp.route('/backfill', methods=['POST'])
-@admin_required
-def run_backfill():
-    """Run the one-off delivery backfill from the dashboard. 'mode=dry'
-    previews counts without writing; otherwise it applies (idempotently)."""
-    from backfill_deliveries import backfill
-
-    dry = request.form.get('mode') == 'dry'
-    result = backfill(dry_run=dry)
-
-    parts = []
-    for r in result['rules']:
-        if not r['article_found']:
-            parts.append(f"« {r['slug']} » introuvable")
-        else:
-            parts.append(f"{r['slug']} : {r['created']}")
-    detail = " · ".join(parts)
-    verb = "à créer" if dry else "créée(s)"
-    flash(
-        f"{'Simulation — ' if dry else ''}{result['total_created']} livraison(s) {verb}. "
-        f"[{detail}]",
-        'info' if dry else 'success',
-    )
-    return redirect(url_for('admin_sends.list_sends'))
-
-
 @admin_subscribers_bp.route('/export.csv')
 @admin_required
 def export_csv():
