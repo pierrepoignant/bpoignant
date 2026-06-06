@@ -9,7 +9,9 @@ locally or BPOIGNANT_SECRETS_JSON in production):
   SENDGRID__API_KEY      Twilio SendGrid API key
   MAIL_FROM_EMAIL        Verified sender (Single Sender or domain-auth address)
   MAIL_FROM_NAME         Display name shown in the recipient's inbox
-  MAIL_REPLY_TO          (optional) Reply-To header, falls back to MAIL_FROM_EMAIL
+
+Reply-To is fixed to bernard.poignant@gmail.com (see REPLY_TO below) so
+replies always reach Bernard, regardless of environment configuration.
 """
 
 import logging
@@ -22,6 +24,10 @@ log = logging.getLogger(__name__)
 
 SENDGRID_URL = 'https://api.sendgrid.com/v3/mail/send'
 
+# Where replies to newsletter e-mails go. Hard-coded (not from the
+# environment) so a stray MAIL_REPLY_TO can't redirect replies elsewhere.
+REPLY_TO = 'bernard.poignant@gmail.com'
+
 
 def _config():
     """Read mail config from env. Resolved at call time so tests can patch."""
@@ -30,7 +36,7 @@ def _config():
         'api_key': api_key,
         'from_email': os.environ.get('MAIL_FROM_EMAIL', 'noreply@bernardpoignant.fr'),
         'from_name': os.environ.get('MAIL_FROM_NAME', 'Bernard Poignant'),
-        'reply_to': os.environ.get('MAIL_REPLY_TO') or 'bernard.poignant@gmail.com',
+        'reply_to': REPLY_TO,
     }
 
 
