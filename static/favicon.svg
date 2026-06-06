@@ -1,20 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Rose">
   <rect width="64" height="64" rx="12" fill="#E6003E"/>
-  <g transform="translate(7 6)">
-    <!-- Feather plume: pointed at the top, widening toward the quill -->
-    <path d="M42 2
-             C 28 6, 14 16, 9 30
-             C 6 38, 6 46, 8 50
-             L 16 50
-             Q 18 34, 26 24
-             Q 34 14, 42 2 Z"
-          fill="#ffffff"/>
-    <!-- Quill nib -->
-    <path d="M 8 50 L 2 56"
-          stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-    <!-- Faint central spine -->
-    <path d="M 40 4 L 14 48"
-          stroke="#E6003E" stroke-width="1.2" opacity="0.45"
-          stroke-linecap="round"/>
+  <g stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- stem -->
+    <path d="M30 37 C 31 45, 33 50, 35 56"/>
+    <!-- rose bloom: outer outline -->
+    <circle cx="30" cy="24" r="13"/>
+    <!-- inner spiral that reads as rose petals -->
+    <path d="M24 24 c0 -7 13 -7 13 1 c0 6 -10 7 -12 1 c-1 -4 5 -7 8 -4"/>
   </g>
+  <!-- leaf -->
+  <path d="M33 46 C 26 43, 18 45, 16 51 C 24 53, 31 51, 33 46 Z" fill="#ffffff"/>
 </svg>
