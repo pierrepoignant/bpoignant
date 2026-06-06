@@ -16,6 +16,12 @@
     </p>
     {% endif %}
 
+    {% if article.newsletter_intro %}
+    <div style="font-style:italic;font-size:15px;line-height:1.6;color:#1A1A2E;margin:0 0 20px;white-space:pre-line;">
+        {{ article.newsletter_intro }}
+    </div>
+    {% endif %}
+
     <div style="font-size:15px;line-height:1.7;color:#1A1A2E;">
         {{ article.content_html|safe }}
     </div>

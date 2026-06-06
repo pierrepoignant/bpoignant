@@ -181,6 +181,11 @@ def send_newsletter(article_id):
         flash("SendGrid n'est pas configuré (SENDGRID__API_KEY manquant).", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
+    # Optional "petit mot" — saved so it re-appears next time this article is
+    # sent. Stored as None when blank.
+    article.newsletter_intro = (request.form.get('intro') or '').strip() or None
+    db.session.commit()
+
     campaign = enqueue_article_send(article, sent_by=current_user)
     if campaign.recipient_count == 0:
         flash(
