@@ -5,6 +5,31 @@
 {% block admin_subtitle %}<p>{{ active|length }} abonné{{ 's' if active|length != 1 else '' }} actif{{ 's' if active|length != 1 else '' }}{% if unsubscribed %} · {{ unsubscribed|length }} désinscrit{{ 's' if unsubscribed|length != 1 else '' }}{% endif %}</p>{% endblock %}
 
 {% block admin_content %}
+    <details style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1rem 1.5rem; margin-bottom: 1.5rem;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1.05rem;">
+            <i class="fas fa-file-import" style="color: var(--vert-fonce);"></i> Importer des abonnés
+        </summary>
+        <form method="POST" action="{{ url_for('admin_subscribers.import_subscribers') }}" enctype="multipart/form-data" style="margin-top: 1rem;">
+            <div class="form-group">
+                <label for="import_file" style="font-weight: 600; font-size: 0.9rem;">Fichier CSV</label>
+                <input type="file" id="import_file" name="file" accept=".csv,text/csv"
+                       style="display: block; margin-top: 0.4rem;">
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                    Colonnes reconnues (avec en-tête) : <code>email, prenom, nom, ville, subscribed_at</code>. Sans en-tête : e-mail en première colonne. Un export peut être réimporté tel quel.
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label for="import_emails" style="font-weight: 600; font-size: 0.9rem;">Ou coller des e-mails (un par ligne)</label>
+                <textarea id="import_emails" name="emails" rows="4"
+                          placeholder="prenom.nom@exemple.fr&#10;autre@exemple.fr, Prénom, Nom, Ville"
+                          style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; margin-top: 0.4rem;"></textarea>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary" style="margin-top: 0.5rem;">
+                <i class="fas fa-file-import"></i> Importer
+            </button>
+        </form>
+    </details>
+
     <div class="admin-row" style="justify-content: space-between; margin-bottom: 1rem;">
         <h2 style="font-size: 1.2rem; margin: 0;">
             <i class="fas fa-check-circle" style="color: var(--vert-fonce);"></i> Abonnés actifs ({{ active|length }})

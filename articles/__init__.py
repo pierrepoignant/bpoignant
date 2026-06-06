@@ -170,7 +170,7 @@ def list_articles():
 @admin_required
 def send_newsletter(article_id):
     from flask_login import current_user
-    from newsletter import send_article_to_subscribers
+    from newsletter import enqueue_article_send
     from mail import is_configured
 
     article = db.session.get(Article, article_id) or abort(404)
@@ -181,7 +181,7 @@ def send_newsletter(article_id):
         flash("SendGrid n'est pas configuré (SENDGRID__API_KEY manquant).", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
-    campaign = send_article_to_subscribers(article, sent_by=current_user)
+    campaign = enqueue_article_send(article, sent_by=current_user)
     if campaign.recipient_count == 0:
         flash(
             "Tous les abonnés ont déjà reçu cet article — aucun nouvel envoi."
@@ -189,12 +189,11 @@ def send_newsletter(article_id):
             'info',
         )
     else:
-        msg = f"Newsletter envoyée à {campaign.success_count}/{campaign.recipient_count} abonnés"
-        if campaign.error_count:
-            msg += f" ({campaign.error_count} échecs)"
+        msg = f"Envoi de {campaign.recipient_count} e-mail(s) lancé en arrière-plan"
         if campaign.skipped_count:
             msg += f" — {campaign.skipped_count} déjà destinataire(s), ignoré(s)"
-        flash(msg + ".", 'success' if campaign.error_count == 0 else 'warning')
+        msg += ". Le détail apparaîtra dans l'onglet « Envois »."
+        flash(msg, 'info')
     return redirect(url_for('admin_articles.list_articles'))
 
 

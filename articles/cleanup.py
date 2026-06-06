@@ -9,11 +9,51 @@ import re
 from bs4 import BeautifulSoup
 
 
+# Two-letter top-level domains we must NOT mistake for a glued sentence
+# (so real links like "exemple.fr" or "site.io" are left alone).
+_TLD2 = {
+    'fr', 'be', 'ch', 'ca', 'io', 'co', 'uk', 'us', 'de', 'es', 'it', 'nl',
+    'pt', 'eu', 're', 'tv', 'me', 'ru', 'cn', 'jp', 'au', 'at', 'se', 'no',
+    'fi', 'dk', 'pl', 'gr', 'ie', 'lu', 'in', 'br', 'ma',
+}
+
+# A dot glued to a 2-letter word that isn't a TLD — e.g. "fin.Le", "texte.Il".
+# Google Docs turns such a token into a hyperlink when the space after the
+# period is missing; we want to undo that and restore the space.
+_DOT_GLUE = re.compile(r'\.([A-Za-zÀ-ÿ]{2})(?![A-Za-zÀ-ÿ])')
+
+
+def _fix_dot_glue(text: str) -> str:
+    return _DOT_GLUE.sub(
+        lambda m: m.group(0) if m.group(1).lower() in _TLD2 else '. ' + m.group(1),
+        text,
+    )
+
+
+def _strip_glued_autolinks(soup):
+    """Undo Google Docs' accidental auto-links: when text like "fin.Le" (a
+    period stuck to a 2-letter word) gets turned into a link, drop the link
+    and put the missing space back ("fin. Le")."""
+    for a in list(soup.find_all('a')):
+        text = a.get_text()
+        m = _DOT_GLUE.search(text)
+        if not m or m.group(1).lower() in _TLD2:
+            continue
+        # Only touch auto-generated links: the href is just the text treated
+        # as a domain. Leave deliberately-added links untouched.
+        href = (a.get('href') or '')
+        host = re.sub(r'^[a-z]+://', '', href, flags=re.I).split('/')[0].strip().lower()
+        if host and host == text.strip().lower():
+            a.replace_with(_fix_dot_glue(text))
+
+
 def clean_article_html(html: str) -> str:
     if not html:
         return html or ''
 
     soup = BeautifulSoup(html, 'html.parser')
+
+    _strip_glued_autolinks(soup)
 
     for p in list(soup.find_all('p')):
         _split_on_br(p, soup)

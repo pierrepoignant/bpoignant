@@ -2,6 +2,7 @@ import csv
 import io
 import re
 import secrets
+import threading
 from datetime import datetime
 
 from flask import (
@@ -149,6 +150,111 @@ def list_sends():
     )
 
 
+def _parse_import_date(raw):
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_import_rows(file_storage, text_blob):
+    """Collect {email, prenom, nom, ville, subscribed_at} rows from an
+    uploaded CSV and/or a pasted list of e-mails."""
+    rows = []
+
+    if file_storage and file_storage.filename:
+        raw = file_storage.read()
+        try:
+            content = raw.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            content = raw.decode('latin-1', errors='replace')
+        all_rows = [r for r in csv.reader(io.StringIO(content)) if any(c.strip() for c in r)]
+        if all_rows:
+            header = [c.strip().lower() for c in all_rows[0]]
+            if 'email' in header:
+                idx = {n: header.index(n) for n in
+                       ('email', 'prenom', 'nom', 'ville', 'subscribed_at') if n in header}
+                body = all_rows[1:]
+                get = lambda r, n: (r[idx[n]].strip() if n in idx and idx[n] < len(r) else '')
+                for r in body:
+                    rows.append({
+                        'email': get(r, 'email'),
+                        'prenom': get(r, 'prenom') or None,
+                        'nom': get(r, 'nom') or None,
+                        'ville': get(r, 'ville') or None,
+                        'subscribed_at': _parse_import_date(get(r, 'subscribed_at')),
+                    })
+            else:
+                for r in all_rows:  # no header → email, prenom, nom, ville
+                    rows.append({
+                        'email': r[0] if r else '',
+                        'prenom': (r[1].strip() or None) if len(r) > 1 else None,
+                        'nom': (r[2].strip() or None) if len(r) > 2 else None,
+                        'ville': (r[3].strip() or None) if len(r) > 3 else None,
+                        'subscribed_at': None,
+                    })
+
+    if text_blob:
+        for line in text_blob.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in re.split(r'[;,\t]', line)]
+            rows.append({
+                'email': parts[0] if parts else '',
+                'prenom': parts[1] if len(parts) > 1 and parts[1] else None,
+                'nom': parts[2] if len(parts) > 2 and parts[2] else None,
+                'ville': parts[3] if len(parts) > 3 and parts[3] else None,
+                'subscribed_at': None,
+            })
+
+    return rows
+
+
+@admin_subscribers_bp.route('/import', methods=['POST'])
+@admin_required
+def import_subscribers():
+    rows = _parse_import_rows(request.files.get('file'), request.form.get('emails'))
+    if not rows:
+        flash("Aucune donnée à importer (fichier CSV ou liste d'e-mails).", 'danger')
+        return redirect(url_for('admin_subscribers.list_subscribers'))
+
+    seen = {e for (e,) in db.session.query(Subscriber.email).all()}
+    added = skipped = invalid = 0
+    for row in rows:
+        email = (row.get('email') or '').strip().lower()
+        if not _EMAIL_RE.match(email):
+            invalid += 1
+            continue
+        if email in seen:
+            skipped += 1
+            continue
+        db.session.add(Subscriber(
+            email=email,
+            prenom=row.get('prenom'),
+            nom=row.get('nom'),
+            ville=row.get('ville'),
+            token=secrets.token_urlsafe(24),
+            subscribed_at=row.get('subscribed_at') or datetime.utcnow(),
+        ))
+        seen.add(email)
+        added += 1
+
+    db.session.commit()
+    parts = [f"{added} ajouté(s)"]
+    if skipped:
+        parts.append(f"{skipped} déjà inscrit(s)")
+    if invalid:
+        parts.append(f"{invalid} e-mail(s) invalide(s)")
+    flash("Import terminé — " + ", ".join(parts) + ".", 'success' if added else 'info')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
 @admin_subscribers_bp.route('/export.csv')
 @admin_required
 def export_csv():
@@ -183,22 +289,19 @@ def delete_subscriber(subscriber_id):
 
 # ─── SEND NEWSLETTER FOR AN ARTICLE ─────────────────────────
 
-def send_article_to_subscribers(article, sent_by=None):
-    """Mail the given article to every active subscriber. Returns a
-    Campaign with success/error counts (also committed to the DB)."""
-    from articles.models import Article  # local import to avoid cycle
-
+def _pending_recipients(article):
+    """Active subscribers who haven't already received this article, plus the
+    count of those skipped because they have."""
     subscribers = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).all()
-
-    # Skip anyone who already received this exact article, so a second click
-    # on "send" never mails the same article to the same recipient.
     already_sent = {
         d.subscriber_id
         for d in Delivery.query.filter_by(article_id=article.id).all()
     }
     recipients = [s for s in subscribers if s.id not in already_sent]
-    skipped = len(subscribers) - len(recipients)
+    return recipients, len(subscribers) - len(recipients)
 
+
+def _create_campaign(article, recipients, skipped, sent_by):
     campaign = Campaign(
         article_id=article.id,
         sent_by_id=getattr(sent_by, 'id', None),
@@ -207,13 +310,18 @@ def send_article_to_subscribers(article, sent_by=None):
     )
     db.session.add(campaign)
     db.session.commit()
+    return campaign
 
+
+def _build_payload(article, recipients):
+    """Render one e-mail per recipient now (inside the request context), so
+    the background worker only does network I/O — no url_for / render_template
+    outside a request."""
     site_url = url_for('articles.public_list', _external=True)
     article_url = url_for('articles.public_show', slug=article.slug, _external=True)
-
-    successes, errors = 0, 0
+    subject = article.title.upper()
+    payload = []
     for sub in recipients:
-        unsub_url = url_for('newsletter.unsubscribe', token=sub.token, _external=True)
         html = render_template(
             'email/newsletter_article.html',
             article=article,
@@ -221,24 +329,38 @@ def send_article_to_subscribers(article, sent_by=None):
             site_url=site_url,
             site_name=current_app.config['SITE_NAME'],
             site_tagline=current_app.config['SITE_TAGLINE'],
-            unsubscribe_url=unsub_url,
+            unsubscribe_url=url_for('newsletter.unsubscribe', token=sub.token, _external=True),
         )
-        name = ' '.join(p for p in (sub.prenom, sub.nom) if p) or None
+        payload.append({
+            'subscriber_id': sub.id,
+            'email': sub.email,
+            'name': ' '.join(p for p in (sub.prenom, sub.nom) if p) or None,
+            'subject': subject,
+            'html': html,
+        })
+    return payload
+
+
+def _send_payload(article_id, campaign_id, payload):
+    """Send the pre-rendered e-mails and record deliveries. Requires an active
+    app context; safe to run in a background thread."""
+    successes, errors = 0, 0
+    for item in payload:
         ok = send_email(
-            to_email=sub.email,
-            to_name=name,
-            subject=article.title.upper(),
-            html=html,
+            to_email=item['email'],
+            to_name=item['name'],
+            subject=item['subject'],
+            html=item['html'],
         )
         if ok:
             successes += 1
-            # Record the delivery immediately so an interrupted run still
-            # remembers who was already emailed. The unique constraint guards
-            # against duplicates (e.g. two near-simultaneous sends).
+            # Record each delivery immediately so an interrupted run still
+            # remembers who was emailed; the unique constraint guards against
+            # duplicates.
             db.session.add(Delivery(
-                article_id=article.id,
-                subscriber_id=sub.id,
-                email=sub.email,
+                article_id=article_id,
+                subscriber_id=item['subscriber_id'],
+                email=item['email'],
             ))
             try:
                 db.session.commit()
@@ -247,7 +369,46 @@ def send_article_to_subscribers(article, sent_by=None):
         else:
             errors += 1
 
-    campaign.success_count = successes
-    campaign.error_count = errors
-    db.session.commit()
+    campaign = db.session.get(Campaign, campaign_id)
+    if campaign is not None:
+        campaign.success_count = successes
+        campaign.error_count = errors
+        db.session.commit()
+    return successes, errors
+
+
+def enqueue_article_send(article, sent_by=None):
+    """Prepare the send and hand the e-mailing to a background thread so the
+    request returns immediately (sends can take a while with many subscribers).
+    Returns the Campaign; success/error counts are filled in by the worker."""
+    recipients, skipped = _pending_recipients(article)
+    campaign = _create_campaign(article, recipients, skipped, sent_by)
+    if not recipients:
+        return campaign
+
+    payload = _build_payload(article, recipients)
+    app = current_app._get_current_object()
+    article_id, campaign_id = article.id, campaign.id
+
+    def _worker():
+        with app.app_context():
+            try:
+                _send_payload(article_id, campaign_id, payload)
+            except Exception:
+                log.exception("background newsletter send failed (campaign %s)", campaign_id)
+            finally:
+                db.session.remove()
+
+    threading.Thread(target=_worker, name=f"newsletter-send-{campaign_id}", daemon=True).start()
+    return campaign
+
+
+def send_article_to_subscribers(article, sent_by=None):
+    """Synchronous send (used by tests / the CLI). Returns the Campaign with
+    success/error counts filled in."""
+    recipients, skipped = _pending_recipients(article)
+    campaign = _create_campaign(article, recipients, skipped, sent_by)
+    if recipients:
+        payload = _build_payload(article, recipients)
+        _send_payload(article.id, campaign.id, payload)
     return campaign

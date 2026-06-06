@@ -30,7 +30,7 @@ def _config():
         'api_key': api_key,
         'from_email': os.environ.get('MAIL_FROM_EMAIL', 'noreply@bernardpoignant.fr'),
         'from_name': os.environ.get('MAIL_FROM_NAME', 'Bernard Poignant'),
-        'reply_to': os.environ.get('MAIL_REPLY_TO') or os.environ.get('MAIL_FROM_EMAIL'),
+        'reply_to': os.environ.get('MAIL_REPLY_TO') or 'bernard.poignant@gmail.com',
     }
 
 
