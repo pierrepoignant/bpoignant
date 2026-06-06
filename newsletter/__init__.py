@@ -101,15 +101,20 @@ def unsubscribe(token):
 @admin_subscribers_bp.route('/')
 @admin_required
 def list_subscribers():
-    active = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).order_by(
-        Subscriber.subscribed_at.desc()
-    ).all()
+    page = request.args.get('page', 1, type=int) or 1
+    active_pg = (
+        Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None))
+        .order_by(Subscriber.subscribed_at.desc())
+        .paginate(page=max(page, 1), per_page=50, error_out=False)
+    )
     unsubscribed = Subscriber.query.filter(Subscriber.unsubscribed_at.isnot(None)).order_by(
         Subscriber.unsubscribed_at.desc()
     ).all()
     return render_template(
         'subscribers_admin_list.html',
-        active=active,
+        active=active_pg.items,
+        active_total=active_pg.total,
+        pagination=active_pg,
         unsubscribed=unsubscribed,
     )
 
@@ -139,11 +144,17 @@ def list_sends():
     summary.sort(key=lambda s: s['last'] or datetime.min, reverse=True)
 
     total = db.session.query(db.func.count(Delivery.id)).scalar() or 0
-    recent = Delivery.query.order_by(Delivery.sent_at.desc()).limit(300).all()
+    page = request.args.get('page', 1, type=int) or 1
+    recent_pg = (
+        Delivery.query.order_by(Delivery.sent_at.desc())
+        .paginate(page=max(page, 1), per_page=50, error_out=False)
+    )
+    recent = recent_pg.items
 
     return render_template(
         'sends_admin_list.html',
         summary=summary,
+        pagination=recent_pg,
         recent=recent,
         total=total,
         articles=articles,
