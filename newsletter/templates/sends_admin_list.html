@@ -47,7 +47,7 @@
 
     {% if recent %}
     <h2 style="font-size: 1.2rem; margin: 0 0 1rem;">
-        <i class="fas fa-stream" style="color: var(--gris);"></i> Derniers envois ({{ recent|length }})
+        <i class="fas fa-stream" style="color: var(--gris);"></i> Derniers envois ({{ pagination.total }})
     </h2>
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
         <div class="admin-table-wrap">
@@ -78,5 +78,6 @@
         </table>
         </div>
     </div>
+    {% include '_pagination.html' %}
     {% endif %}
 {% endblock %}

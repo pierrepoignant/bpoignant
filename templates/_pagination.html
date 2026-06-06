@@ -1,0 +1,18 @@
+{# Pagination controls. Expects a Flask-SQLAlchemy `pagination` object. #}
+{% if pagination and pagination.pages > 1 %}
+<div class="admin-row" style="justify-content: center; gap: 1rem; margin-top: 1.2rem; flex-wrap: wrap;">
+    {% if pagination.has_prev %}
+    <a class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;" href="?page={{ pagination.prev_num }}">
+        <i class="fas fa-arrow-left"></i> Précédent
+    </a>
+    {% endif %}
+    <span style="color: var(--gris); font-size: 0.9rem;">
+        Page {{ pagination.page }} / {{ pagination.pages }} · {{ pagination.total }} au total
+    </span>
+    {% if pagination.has_next %}
+    <a class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;" href="?page={{ pagination.next_num }}">
+        Suivant <i class="fas fa-arrow-right"></i>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
