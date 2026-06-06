@@ -227,7 +227,7 @@ def send_article_to_subscribers(article, sent_by=None):
         ok = send_email(
             to_email=sub.email,
             to_name=name,
-            subject=article.title,
+            subject=article.title.upper(),
             html=html,
         )
         if ok:

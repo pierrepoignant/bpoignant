@@ -553,6 +553,7 @@ a:hover { color: var(--rouge-fonce); }
     font-size: 1.2rem;
     font-weight: 700;
     margin-bottom: 0.5rem;
+    text-transform: uppercase;
 }
 
 .theme-tile p {
