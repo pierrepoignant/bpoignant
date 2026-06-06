@@ -224,7 +224,9 @@ def import_subscribers():
         flash("Aucune donnée à importer (fichier CSV ou liste d'e-mails).", 'danger')
         return redirect(url_for('admin_subscribers.list_subscribers'))
 
-    seen = {e for (e,) in db.session.query(Subscriber.email).all()}
+    # Lower-cased so the uniqueness check is case-insensitive (matches how
+    # e-mails are stored on subscribe, and how the DB compares them).
+    seen = {(e or '').strip().lower() for (e,) in db.session.query(Subscriber.email).all()}
     added = skipped = invalid = 0
     for row in rows:
         email = (row.get('email') or '').strip().lower()

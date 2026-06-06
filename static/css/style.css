@@ -453,6 +453,26 @@ a:hover { color: var(--rouge-fonce); }
     .analytics-kpis .kpi-value { font-size: 1.3rem !important; margin-top: 0.15rem !important; }
 }
 
+/* Centered modal overlay (e.g. the send-newsletter "petit mot" dialog). */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.modal-card {
+    background: white;
+    border-radius: 14px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
 /* ─── Sections ─────────────────────────────────────── */
 .section {
     padding: 5rem 2rem;

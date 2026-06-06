@@ -248,6 +248,12 @@ def _migrate_schema():
             ))
             db.session.commit()
 
+    if 'articles' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('articles')}
+        if 'newsletter_intro' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN newsletter_intro TEXT NULL"))
+            db.session.commit()
+
 
 def _seed_admin_user():
     """Create the bootstrap admin user if no users exist yet."""

@@ -18,6 +18,9 @@ class Article(db.Model):
     title = db.Column(db.String(300), nullable=False)
     slug = db.Column(db.String(300), unique=True, nullable=False, index=True)
     summary = db.Column(db.Text, nullable=True)
+    # Optional "petit mot" shown in italics above the article in the newsletter
+    # e-mail; persisted so it re-appears if the article is sent again.
+    newsletter_intro = db.Column(db.Text, nullable=True)
     content_html = db.Column(db.Text, nullable=False, default='')
     published = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
