@@ -250,9 +250,24 @@ def _resolve_author():
 @admin_required
 def delete_article(article_id):
     article = db.session.get(Article, article_id) or abort(404)
+
+    # Cascade: remove everything that references this article before deleting
+    # it (there are no ON DELETE rules, so the FK constraints would otherwise
+    # block the delete).
+    from engagement.models import Comment, Reaction
+    from newsletter.models import Campaign, Delivery
+    from analytics.models import PageView
+
+    Comment.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    Reaction.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    Delivery.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    Campaign.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    # Page views are logged by path, not by FK.
+    PageView.query.filter_by(path=f'/articles/{article.slug}').delete(synchronize_session=False)
+
     db.session.delete(article)
     db.session.commit()
-    flash("Article supprimé.", 'success')
+    flash("Article supprimé (commentaires, réactions, envois et vues associés inclus).", 'success')
     return redirect(url_for('admin_articles.list_articles'))
 
 
