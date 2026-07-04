@@ -81,7 +81,7 @@
                         data-title="{{ a.title }}"
                         data-intro="{{ a.newsletter_intro or '' }}"
                         data-last="{{ _last.sent_at.strftime('%d/%m/%Y') if _last else '' }}">
-                    <i class="fas fa-paper-plane"></i>
+                    <i class="fas fa-paper-plane"></i> Envoyer
                 </button>
                 {% endif %}
                 <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}"
