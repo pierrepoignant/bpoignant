@@ -207,7 +207,15 @@ def send_newsletter(article_id):
 def create_article():
     if request.method == 'POST':
         return _save_article(None)
-    return render_template('articles_admin_form.html', article=None, authors=_all_authors())
+    # Default a new article's author to Bernard Poignant (fallback: first author).
+    authors = _all_authors()
+    default = next((a for a in authors if a.name == 'Bernard Poignant'), None) or (authors[0] if authors else None)
+    return render_template(
+        'articles_admin_form.html',
+        article=None,
+        authors=authors,
+        default_author_id=(default.id if default else None),
+    )
 
 
 @admin_articles_bp.route('/<int:article_id>/edit', methods=['GET', 'POST'])
@@ -216,7 +224,12 @@ def edit_article(article_id):
     article = db.session.get(Article, article_id) or abort(404)
     if request.method == 'POST':
         return _save_article(article)
-    return render_template('articles_admin_form.html', article=article, authors=_all_authors())
+    return render_template(
+        'articles_admin_form.html',
+        article=article,
+        authors=_all_authors(),
+        default_author_id=None,
+    )
 
 
 def _all_authors():
