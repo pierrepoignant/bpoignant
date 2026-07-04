@@ -80,7 +80,7 @@
                     <select id="author_id" name="author_id" style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 0.95rem; font-family: inherit; background: white;">
                         <option value="">— Aucun auteur —</option>
                         {% for a in authors %}
-                        <option value="{{ a.id }}" {% if article and article.author_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+                        <option value="{{ a.id }}" {% if (article and article.author_id == a.id) or (not article and default_author_id == a.id) %}selected{% endif %}>{{ a.name }}</option>
                         {% endfor %}
                     </select>
                     <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
