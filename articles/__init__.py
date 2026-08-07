@@ -1,7 +1,7 @@
 from datetime import datetime, date, time
 
 import bleach
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from slugify import slugify
 
@@ -210,11 +210,13 @@ def create_article():
     # Default a new article's author to Bernard Poignant (fallback: first author).
     authors = _all_authors()
     default = next((a for a in authors if a.name == 'Bernard Poignant'), None) or (authors[0] if authors else None)
+    from gdrive import is_configured as gdrive_is_configured
     return render_template(
         'articles_admin_form.html',
         article=None,
         authors=authors,
         default_author_id=(default.id if default else None),
+        gdrive_configured=gdrive_is_configured(),
     )
 
 
@@ -224,12 +226,51 @@ def edit_article(article_id):
     article = db.session.get(Article, article_id) or abort(404)
     if request.method == 'POST':
         return _save_article(article)
+    from gdrive import is_configured as gdrive_is_configured
     return render_template(
         'articles_admin_form.html',
         article=article,
         authors=_all_authors(),
         default_author_id=None,
+        gdrive_configured=gdrive_is_configured(),
     )
+
+
+# ─── ADMIN: GOOGLE DRIVE IMPORT ─────────────────────────────
+#
+# The article editor has an "Importer depuis Google Drive" button that lists
+# Bernard's Google Docs and loads a chosen one into the editor. These two
+# JSON endpoints back that UI; both are admin-only and read-only.
+
+@admin_articles_bp.route('/gdrive/documents')
+@admin_required
+def gdrive_documents():
+    """List Bernard's Google Docs as JSON for the import picker."""
+    from gdrive import is_configured, list_documents, GoogleDriveError
+    if not is_configured():
+        return jsonify(configured=False, documents=[]), 200
+    try:
+        docs = list_documents(query=request.args.get('q'))
+    except GoogleDriveError as exc:
+        return jsonify(configured=True, error=str(exc)), 502
+    return jsonify(configured=True, documents=docs), 200
+
+
+@admin_articles_bp.route('/gdrive/documents/<file_id>')
+@admin_required
+def gdrive_document(file_id):
+    """Return one Google Doc's title and cleaned HTML body, ready to drop into
+    the editor. The HTML goes through the same bleach + normaliser pipeline as
+    a saved article, so imported content matches hand-typed content."""
+    from gdrive import is_configured, get_document, GoogleDriveError
+    if not is_configured():
+        return jsonify(error="Google Drive n'est pas configuré."), 400
+    try:
+        doc = get_document(file_id)
+    except GoogleDriveError as exc:
+        return jsonify(error=str(exc)), 502
+    content_html = clean_article_html(_clean_html(doc['html']))
+    return jsonify(title=doc['name'], content_html=content_html), 200
 
 
 def _all_authors():

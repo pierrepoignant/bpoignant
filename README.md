@@ -112,6 +112,8 @@ Faire pointer `bernardpoignant.fr` (et `www.bernardpoignant.fr`) vers l'IP du Lo
 │   ├── __init__.py              # 2 blueprints : articles_bp (public) + admin_articles_bp
 │   ├── models.py
 │   └── templates/articles_{public_list,public_show,admin_list,admin_form}.html
+├── gdrive/                      # import Google Drive (Google Docs → éditeur), lecture seule
+│   └── __init__.py
 ├── templates/{base,404}.html
 ├── static/css/style.css
 ├── Dockerfile
