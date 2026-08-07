@@ -1,0 +1,93 @@
+{% extends 'admin_base.html' %}
+{% block title %}Réglages{% endblock %}
+
+{% block admin_title %}<i class="fas fa-cog" style="color: var(--vert);"></i> Réglages{% endblock %}
+{% block admin_subtitle %}<p>Connexion des services externes utilisés par l'administration.</p>{% endblock %}
+
+{% block admin_content %}
+<div style="background: white; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 2rem; margin-bottom: 2rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.4rem;">
+        <i class="fab fa-google-drive" style="color: var(--vert);"></i> Google Drive
+    </h2>
+    <p style="color: var(--gris); margin-bottom: 1.4rem;">
+        Permet d'importer le contenu d'un Google Doc directement dans l'éditeur d'articles (lecture seule).
+    </p>
+
+    {# ── Connection status ── #}
+    {% if gdrive_connected %}
+    <div style="display: flex; align-items: center; gap: 0.7rem; background: rgba(46,160,67,0.08); border: 1px solid rgba(46,160,67,0.3); border-radius: 10px; padding: 0.9rem 1.2rem; margin-bottom: 1.5rem;">
+        <i class="fas fa-check-circle" style="color: var(--vert); font-size: 1.2rem;"></i>
+        <div style="flex: 1;">
+            <strong>Connecté.</strong>
+            <span style="color: var(--gris);">L'import est disponible dans l'éditeur d'articles.</span>
+        </div>
+        <form method="POST" action="{{ url_for('admin_settings.gdrive_disconnect') }}" style="margin: 0;"
+              onsubmit="return confirm('Déconnecter Google Drive ? Le jeton de connexion sera oublié.')">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: var(--rouge);">
+                <i class="fas fa-unlink"></i> Déconnecter
+            </button>
+        </form>
+    </div>
+    {% else %}
+    <div style="display: flex; align-items: center; gap: 0.7rem; background: rgba(0,0,0,0.03); border: 1px solid #e0e0e0; border-radius: 10px; padding: 0.9rem 1.2rem; margin-bottom: 1.5rem;">
+        <i class="fas fa-circle-info" style="color: var(--gris); font-size: 1.2rem;"></i>
+        <span style="color: var(--gris);">Non connecté. Renseignez les identifiants OAuth ci-dessous, puis cliquez sur « Connecter ».</span>
+    </div>
+    {% endif %}
+
+    {# ── OAuth client credentials ── #}
+    <form method="POST" action="{{ url_for('admin_settings.gdrive_credentials') }}">
+        <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="client_id" style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem;">
+                Identifiant client OAuth
+            </label>
+            <input type="text" id="client_id" name="client_id"
+                   value="{{ gdrive_client_id }}"
+                   placeholder="xxxxxxxx.apps.googleusercontent.com"
+                   style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 0.95rem; font-family: inherit;">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+            <label for="client_secret" style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem;">
+                Secret client OAuth
+            </label>
+            <input type="password" id="client_secret" name="client_secret" autocomplete="new-password"
+                   placeholder="{% if gdrive_has_secret %}•••••••• (laisser vide pour conserver){% else %}Secret OAuth{% endif %}"
+                   style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 0.95rem; font-family: inherit;">
+            <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                Le secret n'est jamais réaffiché. Laissez le champ vide pour garder le secret déjà enregistré.
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Enregistrer les identifiants
+            </button>
+            {% if gdrive_client_id and gdrive_has_secret %}
+            <a href="{{ url_for('admin_settings.gdrive_connect') }}" class="btn btn-vert">
+                <i class="fas fa-plug"></i> {% if gdrive_connected %}Reconnecter{% else %}Connecter{% endif %}
+            </a>
+            {% endif %}
+        </div>
+    </form>
+
+    {# ── Setup help ── #}
+    <details style="margin-top: 1.6rem;">
+        <summary style="cursor: pointer; font-weight: 600; color: var(--vert);">Comment obtenir ces identifiants ?</summary>
+        <ol style="color: var(--gris); font-size: 0.9rem; line-height: 1.7; margin: 0.8rem 0 0; padding-left: 1.2rem;">
+            <li>Dans <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console → Identifiants</a>, activez l'API « Google Drive ».</li>
+            <li>Créez un identifiant OAuth de type <strong>Application Web</strong>.</li>
+            <li>Ajoutez l'URI de redirection autorisé ci-dessous, à l'identique&nbsp;:</li>
+        </ol>
+        <div style="margin: 0.6rem 0 0.2rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <code id="redirect-uri" style="background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; word-break: break-all;">{{ gdrive_redirect_uri }}</code>
+            <button type="button" class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('redirect-uri').textContent).then(function(){var b=event.target.closest('button');var t=b.innerHTML;b.textContent='Copié';setTimeout(function(){b.innerHTML=t;},1200);})">
+                <i class="far fa-copy"></i> Copier
+            </button>
+        </div>
+        <p style="color: var(--gris); font-size: 0.9rem; margin: 0.8rem 0 0;">
+            Copiez l'identifiant et le secret dans les champs ci-dessus, enregistrez, puis cliquez sur « Connecter » et
+            autorisez l'accès avec le compte <strong>Bernard.Poignant@gmail.com</strong>. La connexion fournit un jeton
+            de rafraîchissement stocké en base ; il est renouvelé automatiquement à chaque import.
+        </p>
+    </details>
+</div>
+{% endblock %}

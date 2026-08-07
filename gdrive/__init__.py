@@ -3,29 +3,44 @@
 Lets the admin pull the body of one of Bernard's Google Docs straight into the
 article editor, instead of copy-pasting. We only ever *read* from Drive.
 
-Auth is a one-time OAuth "installed app" consent that yields a long-lived
-refresh token; the token is then exchanged for a short-lived access token on
-each request. Credentials follow the app's `<SECTION>__<KEY>` env convention
-(same as `ANTHROPIC__API_KEY` / `SEARCHAPI__API_KEY`):
+Credentials live in the database `config` table (see `settings/`), set through
+the admin "Réglages" page:
 
-    GOOGLE__CLIENT_ID       OAuth client id     (…apps.googleusercontent.com)
-    GOOGLE__CLIENT_SECRET   OAuth client secret
-    GOOGLE__REFRESH_TOKEN   refresh token for Bernard's account (drive.readonly)
+    google_client_id       OAuth client id     (…apps.googleusercontent.com)
+    google_client_secret   OAuth client secret
+    google_refresh_token    obtained via the "Connecter" OAuth flow
 
-When any of the three is missing the feature is simply "not configured": the
-import button is hidden and the endpoints report it cleanly. No heavy Google
-SDK — the Drive REST API is a couple of plain HTTPS calls via `requests`.
+For backward compatibility the matching `GOOGLE__CLIENT_ID` /
+`GOOGLE__CLIENT_SECRET` / `GOOGLE__REFRESH_TOKEN` env vars are used as a
+fallback when a value isn't set in the database.
+
+Auth is the standard OAuth "authorization code" flow: the admin clicks
+"Connecter", consents once as Bernard.Poignant@gmail.com, and Google returns a
+long-lived **refresh token** (we request `access_type=offline` +
+`prompt=consent`). That refresh token is stored and then exchanged for a
+short-lived **access token** on every Drive call. No heavy Google SDK — the
+whole thing is a handful of plain HTTPS calls via `requests`.
 """
 
 import os
+from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
 
+from settings.models import get_config, set_config, delete_config
 
+
+AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 FILES_URL = 'https://www.googleapis.com/drive/v3/files'
 DOC_MIME = 'application/vnd.google-apps.document'
+SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
+
+# Database config keys (with their env-var fallbacks).
+KEY_CLIENT_ID = 'google_client_id'
+KEY_CLIENT_SECRET = 'google_client_secret'
+KEY_REFRESH_TOKEN = 'google_refresh_token'
 
 _TIMEOUT = 20
 
@@ -34,23 +49,104 @@ class GoogleDriveError(RuntimeError):
     """Raised when Drive can't be reached or answers with an error."""
 
 
-def _creds():
-    return (
-        (os.environ.get('GOOGLE__CLIENT_ID') or '').strip(),
-        (os.environ.get('GOOGLE__CLIENT_SECRET') or '').strip(),
-        (os.environ.get('GOOGLE__REFRESH_TOKEN') or '').strip(),
-    )
+# ─── Credentials ────────────────────────────────────────────
+
+def _client_id():
+    return (get_config(KEY_CLIENT_ID) or os.environ.get('GOOGLE__CLIENT_ID') or '').strip()
+
+
+def _client_secret():
+    return (get_config(KEY_CLIENT_SECRET) or os.environ.get('GOOGLE__CLIENT_SECRET') or '').strip()
+
+
+def _refresh_token():
+    return (get_config(KEY_REFRESH_TOKEN) or os.environ.get('GOOGLE__REFRESH_TOKEN') or '').strip()
+
+
+def has_client_credentials():
+    """True when the OAuth client id + secret are set — enough to start the
+    "Connecter" flow (but not necessarily connected yet)."""
+    return bool(_client_id() and _client_secret())
+
+
+def is_connected():
+    """True when a refresh token is stored — i.e. the OAuth flow has run."""
+    return bool(_refresh_token())
 
 
 def is_configured():
-    """True only when all three OAuth credentials are present."""
-    return all(_creds())
+    """True when import can actually work: client credentials **and** a
+    refresh token are all present. Gates the editor's import button."""
+    return has_client_credentials() and is_connected()
+
+
+def save_client_credentials(client_id, client_secret):
+    set_config(KEY_CLIENT_ID, (client_id or '').strip())
+    set_config(KEY_CLIENT_SECRET, (client_secret or '').strip())
+
+
+def disconnect():
+    """Forget the stored refresh token (client id/secret are kept)."""
+    delete_config(KEY_REFRESH_TOKEN)
+
+
+# ─── OAuth flow ─────────────────────────────────────────────
+
+def authorization_url(redirect_uri, state):
+    """Build the Google consent URL to redirect the admin to.
+
+    `access_type=offline` + `prompt=consent` guarantee Google returns a
+    refresh token every time, even on a repeat authorisation.
+    """
+    if not has_client_credentials():
+        raise GoogleDriveError("Renseignez d'abord l'identifiant et le secret OAuth.")
+    params = {
+        'client_id': _client_id(),
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': SCOPE,
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'include_granted_scopes': 'true',
+        'state': state,
+    }
+    return f'{AUTH_URL}?{urlencode(params)}'
+
+
+def exchange_code(code, redirect_uri):
+    """Exchange the OAuth `code` from the callback for tokens and store the
+    refresh token. Returns nothing; raises `GoogleDriveError` on failure."""
+    if not code:
+        raise GoogleDriveError("Google n'a renvoyé aucun code d'autorisation.")
+    try:
+        resp = requests.post(
+            TOKEN_URL,
+            data={
+                'code': code,
+                'client_id': _client_id(),
+                'client_secret': _client_secret(),
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code',
+            },
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise GoogleDriveError(f"Connexion à Google impossible : {exc}") from exc
+    if resp.status_code != 200:
+        raise GoogleDriveError(_oauth_error(resp))
+    refresh_token = resp.json().get('refresh_token')
+    if not refresh_token:
+        # Should not happen with prompt=consent, but guard anyway.
+        raise GoogleDriveError(
+            "Google n'a pas renvoyé de refresh token. Réessayez la connexion."
+        )
+    set_config(KEY_REFRESH_TOKEN, refresh_token.strip())
 
 
 def _access_token():
-    client_id, client_secret, refresh_token = _creds()
+    client_id, client_secret, refresh_token = _client_id(), _client_secret(), _refresh_token()
     if not (client_id and client_secret and refresh_token):
-        raise GoogleDriveError("Google Drive n'est pas configuré.")
+        raise GoogleDriveError("Google Drive n'est pas connecté.")
     try:
         resp = requests.post(
             TOKEN_URL,
@@ -65,23 +161,29 @@ def _access_token():
     except requests.RequestException as exc:
         raise GoogleDriveError(f"Connexion à Google impossible : {exc}") from exc
     if resp.status_code != 200:
-        # Google returns e.g. {"error": "invalid_grant"} when the refresh token
-        # has been revoked or expired — surface that so it can be renewed.
-        detail = ''
-        try:
-            detail = resp.json().get('error_description') or resp.json().get('error') or ''
-        except ValueError:
-            detail = resp.text[:200]
-        raise GoogleDriveError(f"Authentification Google refusée : {detail}".strip())
+        # A revoked/expired refresh token comes back as invalid_grant here —
+        # surface it so the admin knows to reconnect.
+        raise GoogleDriveError(_oauth_error(resp) + " Reconnectez Google Drive.")
     token = resp.json().get('access_token')
     if not token:
         raise GoogleDriveError("Réponse Google sans jeton d'accès.")
     return token
 
 
+def _oauth_error(resp):
+    try:
+        body = resp.json()
+        detail = body.get('error_description') or body.get('error') or ''
+    except ValueError:
+        detail = resp.text[:200]
+    return f"Authentification Google refusée : {detail}".strip()
+
+
 def _auth_headers():
     return {'Authorization': f'Bearer {_access_token()}'}
 
+
+# ─── Drive reads ────────────────────────────────────────────
 
 def list_documents(query=None, limit=50):
     """Return Bernard's Google Docs, most-recently-modified first.
@@ -91,7 +193,7 @@ def list_documents(query=None, limit=50):
     """
     q = f"mimeType='{DOC_MIME}' and trashed=false"
     if query and query.strip():
-        # Escape single quotes for the Drive query language.
+        # Escape backslashes then single quotes for the Drive query language.
         safe = query.strip().replace('\\', '\\\\').replace("'", "\\'")
         q += f" and name contains '{safe}'"
     params = {
@@ -176,7 +278,7 @@ def _error_detail(resp, what):
     except (ValueError, AttributeError):
         msg = ''
     if resp.status_code in (401, 403):
-        return f"Accès refusé à {what} (vérifiez les autorisations Google Drive)."
+        return f"Accès refusé à {what} (reconnectez Google Drive ou vérifiez les autorisations)."
     if resp.status_code == 404:
         return f"Impossible de trouver {what}."
     return f"Erreur Google Drive ({resp.status_code}) sur {what}. {msg}".strip()

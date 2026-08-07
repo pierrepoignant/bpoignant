@@ -123,6 +123,10 @@ def create_app(db_name='ovh'):
     from seo import seo_bp
     app.register_blueprint(seo_bp)
 
+    from settings.models import Config  # noqa: F401
+    from settings import admin_settings_bp
+    app.register_blueprint(admin_settings_bp)
+
     with app.app_context():
         db.create_all()
         _migrate_schema()

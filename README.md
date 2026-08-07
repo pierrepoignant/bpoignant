@@ -113,7 +113,11 @@ Faire pointer `bernardpoignant.fr` (et `www.bernardpoignant.fr`) vers l'IP du Lo
 │   ├── models.py
 │   └── templates/articles_{public_list,public_show,admin_list,admin_form}.html
 ├── gdrive/                      # import Google Drive (Google Docs → éditeur), lecture seule
-│   └── __init__.py
+│   └── __init__.py              # OAuth (code→refresh→access) + Drive REST
+├── settings/                    # table config clé/valeur + page admin « Réglages »
+│   ├── __init__.py              # blueprint : credentials OAuth + flux « Connecter »
+│   ├── models.py                # modèle Config + get/set/delete
+│   └── templates/settings_index.html
 ├── templates/{base,404}.html
 ├── static/css/style.css
 ├── Dockerfile
