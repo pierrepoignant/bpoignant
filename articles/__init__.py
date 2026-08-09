@@ -262,7 +262,8 @@ def gdrive_document(file_id):
     """Return one Google Doc's title and cleaned HTML body, ready to drop into
     the editor. The HTML goes through the same bleach + normaliser pipeline as
     a saved article, so imported content matches hand-typed content."""
-    from gdrive import is_configured, get_document, GoogleDriveError
+    from gdrive import is_configured, get_document, strip_boilerplate, GoogleDriveError
+    from articles.cleanup import clean_text
     if not is_configured():
         return jsonify(error="Google Drive n'est pas configuré."), 400
     try:
@@ -270,7 +271,10 @@ def gdrive_document(file_id):
     except GoogleDriveError as exc:
         return jsonify(error=str(exc)), 502
     content_html = clean_article_html(_clean_html(doc['html']))
-    return jsonify(title=doc['name'], content_html=content_html), 200
+    # Lift the title line out of the body and drop trailing author/date lines,
+    # then tidy the title's typography (space after commas, etc.).
+    title, content_html = strip_boilerplate(content_html, doc['name'])
+    return jsonify(title=clean_text(title), content_html=content_html), 200
 
 
 def _all_authors():

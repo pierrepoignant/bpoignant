@@ -23,6 +23,7 @@ whole thing is a handful of plain HTTPS calls via `requests`.
 """
 
 import os
+import re
 from urllib.parse import urlencode
 
 import requests
@@ -270,6 +271,92 @@ def _body_inner_html(html):
     if body is not None:
         return body.decode_contents()
     return str(soup)
+
+
+# ─── Import boilerplate stripping ───────────────────────────
+#
+# Bernard's docs usually open with the article title on the first line and end
+# with two lines: "Bernard Poignant" and a date. On import we lift the title
+# out and drop those trailing lines so they don't end up inside the body.
+
+# Author lines to strip (normalised, lower-case). "par bernard poignant" and a
+# bare "bernard poignant" both match.
+_AUTHOR_LINES = {'bernard poignant'}
+
+_MONTHS_FR = (
+    r'(janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|'
+    r'septembre|octobre|novembre|décembre|decembre)'
+)
+_DATE_PATTERNS = [
+    re.compile(r'^(le\s+)?\d{1,2}(er)?\s+' + _MONTHS_FR + r'\s+\d{4}$', re.I),  # 9 août 2026
+    re.compile(r'^' + _MONTHS_FR + r'\s+\d{4}$', re.I),                          # août 2026
+    re.compile(r'^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}$'),                          # 09/08/2026
+    re.compile(r'^\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2}$'),                            # 2026-08-09
+]
+
+
+def _norm(text):
+    return re.sub(r'\s+', ' ', (text or '')).strip().rstrip('.').strip()
+
+
+def _is_author_line(text):
+    t = _norm(text).lower().strip('.,')
+    if t.startswith('par '):
+        t = t[4:].strip()
+    return t in _AUTHOR_LINES
+
+
+def _is_date_line(text):
+    return any(p.match(_norm(text)) for p in _DATE_PATTERNS)
+
+
+def _looks_like_title(el, text, doc_name):
+    if el.name in ('h1', 'h2', 'h3'):
+        return True
+    if doc_name and _norm(text).lower() == _norm(doc_name).lower():
+        return True
+    # A short opening line with no terminal sentence punctuation reads as a
+    # title rather than a sentence of the article.
+    if len(text) <= 100 and not re.search(r'[.!?:]$', text.strip()):
+        return True
+    return False
+
+
+def strip_boilerplate(html, doc_name):
+    """Given cleaned article HTML and the Google Doc's name, lift out the
+    title line and remove trailing author/date lines.
+
+    Returns ``(title, body_html)``: ``title`` is the in-document first line
+    when it looks like a title, otherwise the doc name; ``body_html`` is the
+    HTML with the detected title and any trailing author/date lines removed.
+    """
+    soup = BeautifulSoup(html or '', 'html.parser')
+    blocks = [b for b in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+              if b.get_text(strip=True)]
+    if not blocks:
+        return (doc_name or '', str(soup))
+
+    detected_title = None
+    first = blocks[0]
+    first_text = first.get_text(' ', strip=True)
+    if _looks_like_title(first, first_text, doc_name):
+        detected_title = first_text
+        first.decompose()
+        blocks = blocks[1:]
+
+    # Trailing author/date lines, in either order — up to 3 blocks from the end.
+    removed = 0
+    while blocks and removed < 3:
+        last = blocks[-1]
+        text = last.get_text(' ', strip=True)
+        if _is_author_line(text) or _is_date_line(text):
+            last.decompose()
+            blocks = blocks[:-1]
+            removed += 1
+        else:
+            break
+
+    return (detected_title or doc_name or '', str(soup))
 
 
 def _error_detail(resp, what):

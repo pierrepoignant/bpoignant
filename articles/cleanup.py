@@ -117,6 +117,19 @@ def _group_has_visible_content(group):
     return False
 
 
+def clean_text(text: str) -> str:
+    """Apply the same inline typography tidies as `clean_article_html` to a
+    plain string (titles, etc.): collapse whitespace, add a space after a
+    comma that isn't followed by a digit, and wrap semicolons in spaces
+    (French typography). Decimals like "3,14" are left intact."""
+    if not text:
+        return text or ''
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r',(?=[^\s\d])', ', ', text)
+    text = re.sub(r'\s*;\s*', ' ; ', text)
+    return text.strip()
+
+
 def summarize_html(html: str, max_len: int = 180) -> str:
     """Propose a one-line summary from an article's HTML body: the opening
     sentence when it fits, otherwise the text trimmed at a word boundary
