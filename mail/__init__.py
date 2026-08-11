@@ -24,6 +24,16 @@ log = logging.getLogger(__name__)
 
 SENDGRID_URL = 'https://api.sendgrid.com/v3/mail/send'
 
+# Account-wide suppression groups we pull to suppress bad addresses. These are
+# global to the SendGrid account (shared across every app that uses the same
+# key), so a bounce seen by any app is honoured here too.
+SUPPRESSION_ENDPOINTS = {
+    'bounce':        'https://api.sendgrid.com/v3/suppression/bounces',
+    'block':         'https://api.sendgrid.com/v3/suppression/blocks',
+    'spamreport':    'https://api.sendgrid.com/v3/suppression/spam_reports',
+    'invalid_email': 'https://api.sendgrid.com/v3/suppression/invalid_emails',
+}
+
 # Where replies to newsletter e-mails go. Hard-coded (not from the
 # environment) so a stray MAIL_REPLY_TO can't redirect replies elsewhere.
 REPLY_TO = 'bernard.poignant@gmail.com'
@@ -95,6 +105,56 @@ def send_email(
         resp.status_code, to_email, resp.text[:500],
     )
     return False
+
+
+def fetch_suppressions(kinds=None, start_time=None):
+    """Pull suppressed addresses from SendGrid's account-wide suppression
+    lists (bounces / blocks / spam reports / invalid emails).
+
+    Returns a dict ``{email: {'kind', 'reason', 'created'}}``. The first kind
+    that lists an address wins (bounce/block before spamreport/invalid).
+    ``start_time`` (unix seconds) limits to entries created since then — handy
+    for incremental syncs. Returns ``{}`` when SendGrid isn't configured.
+    """
+    cfg = _config()
+    if not cfg['api_key']:
+        return {}
+
+    kinds = kinds or list(SUPPRESSION_ENDPOINTS)
+    headers = {'Authorization': f"Bearer {cfg['api_key']}"}
+    out = {}
+    for kind in kinds:
+        url = SUPPRESSION_ENDPOINTS.get(kind)
+        if not url:
+            continue
+        offset, page = 0, 500
+        while True:
+            params = {'limit': page, 'offset': offset}
+            if start_time:
+                params['start_time'] = int(start_time)
+            try:
+                resp = requests.get(url, headers=headers, params=params, timeout=20)
+            except requests.RequestException as exc:
+                log.error("fetch_suppressions network error (%s): %s", kind, exc)
+                break
+            if resp.status_code != 200:
+                log.error("fetch_suppressions failed (%s): status=%s body=%s",
+                          kind, resp.status_code, resp.text[:300])
+                break
+            batch = resp.json() or []
+            for row in batch:
+                addr = (row.get('email') or '').strip().lower()
+                if not addr or addr in out:
+                    continue
+                out[addr] = {
+                    'kind': kind,
+                    'reason': row.get('reason') or kind,
+                    'created': row.get('created'),
+                }
+            if len(batch) < page:
+                break
+            offset += page
+    return out
 
 
 def _html_to_text(html: str) -> str:

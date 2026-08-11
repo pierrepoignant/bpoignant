@@ -487,6 +487,50 @@ def purge_bounced():
     return redirect(url_for('admin_subscribers.list_subscribers'))
 
 
+def sync_bounces_from_sendgrid():
+    """Pull SendGrid's account-wide suppression lists and mark any of our
+    subscribers found there as bounced (so they're never e-mailed again).
+    Returns the number newly marked. Only our own addresses are touched."""
+    from mail import fetch_suppressions
+    suppressed = fetch_suppressions()
+    if not suppressed:
+        return 0
+    marked = 0
+    for sub in Subscriber.query.filter(Subscriber.bounced_at.is_(None)).all():
+        info = suppressed.get((sub.email or '').lower())
+        if not info:
+            continue
+        sub.bounced_at = datetime.utcnow()
+        sub.bounce_reason = str(info.get('reason') or info.get('kind'))[:255]
+        # A spam complaint also unsubscribes them.
+        if info.get('kind') == 'spamreport' and sub.unsubscribed_at is None:
+            sub.unsubscribed_at = datetime.utcnow()
+        marked += 1
+    if marked:
+        db.session.commit()
+    return marked
+
+
+@admin_subscribers_bp.route('/sync-bounces', methods=['POST'])
+@admin_required
+def sync_bounces():
+    """Admin action: pull SendGrid suppressions on demand."""
+    if not mail_is_configured():
+        flash("SendGrid n'est pas configuré (SENDGRID__API_KEY manquant).", 'danger')
+        return redirect(url_for('admin_subscribers.list_subscribers'))
+    try:
+        n = sync_bounces_from_sendgrid()
+    except Exception as exc:
+        log.exception("SendGrid bounce sync failed")
+        flash(f"Échec de la synchronisation SendGrid : {exc}", 'danger')
+        return redirect(url_for('admin_subscribers.list_subscribers'))
+    if n:
+        flash(f"{n} adresse(s) marquée(s) en erreur d'après SendGrid.", 'success')
+    else:
+        flash("Synchronisation terminée — aucune nouvelle adresse en erreur.", 'info')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
 @admin_subscribers_bp.route('/purge-suspicious', methods=['POST'])
 @admin_required
 def purge_suspicious():
