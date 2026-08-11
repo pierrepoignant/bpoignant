@@ -37,7 +37,7 @@
             <strong>{{ suspicious_count }}</strong> abonné{{ 's' if suspicious_count != 1 else '' }} actif{{ 's' if suspicious_count != 1 else '' }} semble{{ '' if suspicious_count != 1 else '' }} suspect (adresse/nom aléatoires, domaine jetable). Repérés par le badge « suspect » ci-dessous.
         </span>
         <form method="POST" action="{{ url_for('admin_subscribers.purge_suspicious') }}" style="margin: 0;"
-              onsubmit="return confirm('Supprimer les {{ suspicious_count }} abonné(s) suspect(s) ? (ceux qui ont déjà reçu un e-mail sont épargnés)')">
+              onsubmit="return confirm('Supprimer définitivement les {{ suspicious_count }} abonné(s) suspect(s) ? (leur historique d\'envoi sera aussi supprimé)')">
             <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
                 <i class="fas fa-broom"></i> Supprimer les suspects
             </button>

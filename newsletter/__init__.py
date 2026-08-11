@@ -534,12 +534,12 @@ def sync_bounces():
 @admin_subscribers_bp.route('/purge-suspicious', methods=['POST'])
 @admin_required
 def purge_suspicious():
-    """Delete active subscribers that still score as spam — but never anyone
-    we've actually e-mailed, as a safety net against false positives."""
-    delivered = {sid for (sid,) in db.session.query(Delivery.subscriber_id).distinct().all()}
+    """Delete every active subscriber that still scores as spam. These are the
+    same rows flagged with the 'suspect' badge — the high score threshold makes
+    a real person very unlikely, and deleting cascades their delivery history."""
     candidates = [
         s for s in _mailable_query().all()
-        if s.id not in delivered and is_suspicious(s.email, s.prenom, s.nom, s.ville)
+        if is_suspicious(s.email, s.prenom, s.nom, s.ville)
     ]
     n = _delete_subscribers(candidates)
     flash(f"{n} abonné(s) suspect(s) supprimé(s).", 'success' if n else 'info')
