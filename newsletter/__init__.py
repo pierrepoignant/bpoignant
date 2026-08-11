@@ -653,7 +653,10 @@ def enqueue_article_send(article, sent_by=None):
     def _worker():
         with app.app_context():
             try:
-                _send_payload(article_id, campaign_id, payload)
+                # Refresh SendGrid suppressions first, then drop anyone freshly
+                # bounced/unsubscribed so this send never hits a bad address.
+                to_send = _suppress_before_send(payload)
+                _send_payload(article_id, campaign_id, to_send)
             except Exception:
                 log.exception("background newsletter send failed (campaign %s)", campaign_id)
             finally:
@@ -663,6 +666,24 @@ def enqueue_article_send(article, sent_by=None):
     return campaign
 
 
+def _suppress_before_send(payload):
+    """Sync SendGrid suppressions (best-effort) and return the payload items
+    whose subscriber is still mailable. Runs inside the send task so pulling
+    the account-wide bounce list never slows the admin request."""
+    try:
+        n = sync_bounces_from_sendgrid()
+        if n:
+            log.info("pre-send SendGrid sync suppressed %s address(es)", n)
+    except Exception:
+        log.exception("pre-send SendGrid bounce sync failed")
+    mailable_ids = {s.id for s in _mailable_query().all()}
+    kept = [p for p in payload if p['subscriber_id'] in mailable_ids]
+    dropped = len(payload) - len(kept)
+    if dropped:
+        log.info("pre-send suppression dropped %s recipient(s) from the send", dropped)
+    return kept
+
+
 def send_article_to_subscribers(article, sent_by=None):
     """Synchronous send (used by tests / the CLI). Returns the Campaign with
     success/error counts filled in."""
@@ -670,5 +691,6 @@ def send_article_to_subscribers(article, sent_by=None):
     campaign = _create_campaign(article, recipients, skipped, sent_by)
     if recipients:
         payload = _build_payload(article, recipients)
+        payload = _suppress_before_send(payload)
         _send_payload(article.id, campaign.id, payload)
     return campaign
