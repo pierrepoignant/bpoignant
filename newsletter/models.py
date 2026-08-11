@@ -11,16 +11,45 @@ class Subscriber(db.Model):
     prenom = db.Column(db.String(120), nullable=True)
     nom = db.Column(db.String(120), nullable=True)
     ville = db.Column(db.String(120), nullable=True)
-    # Random per-row token used in the unsubscribe link so anyone with the
-    # email cannot guess someone else's unsub URL.
+    # Random per-row token used in the unsubscribe / confirm links so anyone
+    # with the email cannot guess someone else's URL.
     token = db.Column(db.String(64), unique=True, nullable=False)
     subscribed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     unsubscribed_at = db.Column(db.DateTime, nullable=True)
+    # Double opt-in: null = pending confirmation (never emailed). Low-risk
+    # signups are auto-confirmed on subscribe; high-risk ones must click the
+    # link in the confirmation e-mail. Existing rows are backfilled as
+    # confirmed by the schema migration.
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    # Set when SendGrid reports a hard bounce / block / spam-report for this
+    # address — such rows are never e-mailed again.
+    bounced_at = db.Column(db.DateTime, nullable=True)
+    bounce_reason = db.Column(db.String(255), nullable=True)
+    # Spam heuristic score computed at signup, kept for admin visibility.
+    spam_score = db.Column(db.Integer, nullable=True)
 
     @property
     def display_name(self):
         full = ' '.join(p for p in (self.prenom, self.nom) if p)
         return full or None
+
+    @property
+    def is_confirmed(self):
+        return self.confirmed_at is not None
+
+    @property
+    def is_bounced(self):
+        return self.bounced_at is not None
+
+    @property
+    def is_mailable(self):
+        """True when this subscriber may receive newsletters: confirmed, not
+        unsubscribed, and not bounced."""
+        return (
+            self.confirmed_at is not None
+            and self.unsubscribed_at is None
+            and self.bounced_at is None
+        )
 
 
 class Campaign(db.Model):

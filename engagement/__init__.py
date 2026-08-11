@@ -130,11 +130,16 @@ def _subscribe_from_comment(email, prenom, nom):
         if existing.unsubscribed_at is not None:
             existing.unsubscribed_at = None
             existing.subscribed_at = datetime.utcnow()
+        # Posting a (moderated) comment proves a real person — confirm them so
+        # they're mailable without a separate double opt-in step.
+        if existing.confirmed_at is None:
+            existing.confirmed_at = datetime.utcnow()
         db.session.commit()
         return
     db.session.add(Subscriber(
         email=email, prenom=prenom or None, nom=nom or None,
         token=secrets.token_urlsafe(24),
+        confirmed_at=datetime.utcnow(),
     ))
     db.session.commit()
 

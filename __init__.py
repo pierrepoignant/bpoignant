@@ -252,6 +252,24 @@ def _migrate_schema():
             ))
             db.session.commit()
 
+    if 'subscribers' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('subscribers')}
+        if 'confirmed_at' not in cols:
+            db.session.execute(text("ALTER TABLE subscribers ADD COLUMN confirmed_at DATETIME NULL"))
+            # Everyone who existed before double opt-in stays mailable: treat
+            # them as already confirmed (as of when they subscribed).
+            db.session.execute(text("UPDATE subscribers SET confirmed_at = subscribed_at WHERE confirmed_at IS NULL"))
+            db.session.commit()
+        if 'bounced_at' not in cols:
+            db.session.execute(text("ALTER TABLE subscribers ADD COLUMN bounced_at DATETIME NULL"))
+            db.session.commit()
+        if 'bounce_reason' not in cols:
+            db.session.execute(text("ALTER TABLE subscribers ADD COLUMN bounce_reason VARCHAR(255) NULL"))
+            db.session.commit()
+        if 'spam_score' not in cols:
+            db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
+            db.session.commit()
+
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}
         if 'newsletter_intro' not in cols:

@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 import re
 import secrets
 import threading
@@ -11,10 +12,11 @@ from flask import (
 
 from init_db import db
 from newsletter.models import Subscriber, Campaign, Delivery
+from newsletter.antispam import score_signup, is_suspicious, CONFIRM_THRESHOLD
 from auth import admin_required
 from flask import current_app, render_template, url_for
 from flask_login import current_user
-from mail import send_email
+from mail import send_email, is_configured as mail_is_configured
 import logging
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,16 @@ _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 @newsletter_bp.route('/subscribe', methods=['POST'])
 def subscribe():
+    # Honeypot: the form has a hidden "website" field no human ever sees. Bots
+    # fill every field, so a non-empty value means a bot — swallow it silently
+    # (fake success, no row created) so it can't tell it was blocked.
+    if (request.form.get('website') or '').strip():
+        return render_template(
+            'subscribe_done.html',
+            email=(request.form.get('email') or '').strip(),
+            prenom=None, reactivated=False, already=True, pending=False,
+        )
+
     email = (request.form.get('email') or '').strip().lower()
     prenom = (request.form.get('prenom') or '').strip() or None
     nom = (request.form.get('nom') or '').strip() or None
@@ -43,6 +55,12 @@ def subscribe():
     if not _EMAIL_RE.match(email):
         flash("Adresse e-mail invalide.", 'danger')
         return redirect(redirect_to + '#newsletter')
+
+    score, _reasons = score_signup(email, prenom, nom, ville)
+    # A risky-looking signup must confirm by e-mail (double opt-in); real
+    # people score 0 and stay instant. If we can't send mail we don't lock
+    # anyone out — auto-confirm instead.
+    needs_confirmation = score >= CONFIRM_THRESHOLD and mail_is_configured()
 
     existing = Subscriber.query.filter_by(email=email).first()
     if existing:
@@ -54,13 +72,17 @@ def subscribe():
         if reactivated:
             existing.unsubscribed_at = None
             existing.subscribed_at = datetime.utcnow()
+        pending = existing.confirmed_at is None
         db.session.commit()
+        if pending:
+            _send_confirmation_email(existing)
         return render_template(
             'subscribe_done.html',
             email=existing.email,
             prenom=existing.prenom,
             reactivated=reactivated,
-            already=not reactivated,
+            already=not reactivated and not pending,
+            pending=pending,
         )
 
     sub = Subscriber(
@@ -69,16 +91,104 @@ def subscribe():
         nom=nom,
         ville=ville,
         token=secrets.token_urlsafe(24),
+        spam_score=score,
+        confirmed_at=None if needs_confirmation else datetime.utcnow(),
     )
     db.session.add(sub)
     db.session.commit()
+    if needs_confirmation:
+        _send_confirmation_email(sub)
     return render_template(
         'subscribe_done.html',
         email=sub.email,
         prenom=sub.prenom,
         reactivated=False,
         already=False,
+        pending=needs_confirmation,
     )
+
+
+def _send_confirmation_email(sub):
+    """Send the double opt-in confirmation e-mail. Best-effort — a failure is
+    logged, not surfaced (the visitor already saw the 'check your inbox' page,
+    and they can re-submit to trigger a resend)."""
+    try:
+        html = render_template(
+            'email/newsletter_confirm.html',
+            confirm_url=url_for('newsletter.confirm', token=sub.token, _external=True),
+            site_url=url_for('articles.public_list', _external=True),
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+            prenom=sub.prenom,
+        )
+        send_email(
+            to_email=sub.email,
+            to_name=sub.display_name,
+            subject="Confirmez votre inscription à la newsletter",
+            html=html,
+        )
+    except Exception:
+        log.exception("failed to send confirmation e-mail to %s", sub.email)
+
+
+@newsletter_bp.route('/confirm/<token>')
+def confirm(token):
+    sub = Subscriber.query.filter_by(token=token).first()
+    if sub is None:
+        abort(404)
+    newly = sub.confirmed_at is None
+    if newly:
+        sub.confirmed_at = datetime.utcnow()
+        # Confirming re-activates a previously unsubscribed address too.
+        if sub.unsubscribed_at is not None:
+            sub.unsubscribed_at = None
+        db.session.commit()
+    return render_template('subscribe_confirmed.html', email=sub.email, prenom=sub.prenom, newly=newly)
+
+
+@newsletter_bp.route('/sendgrid/events', methods=['POST'])
+def sendgrid_events():
+    """SendGrid Event Webhook receiver. Marks hard bounces / blocks / spam
+    reports so those addresses are never e-mailed again.
+
+    If a key is configured (config `sendgrid_webhook_key` or env
+    `SENDGRID__WEBHOOK_KEY`), it must be supplied as `?key=…` — otherwise the
+    endpoint accepts posts (best-effort) and just logs."""
+    from settings.models import get_config
+    expected = (get_config('sendgrid_webhook_key') or os.environ.get('SENDGRID__WEBHOOK_KEY') or '').strip()
+    if expected and request.args.get('key', '') != expected:
+        abort(403)
+
+    events = request.get_json(silent=True)
+    if not isinstance(events, list):
+        return ('', 204)
+
+    HARD = {'bounce', 'dropped', 'blocked', 'spamreport'}
+    changed = 0
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        etype = (ev.get('event') or '').lower()
+        if etype not in HARD:
+            continue
+        addr = (ev.get('email') or '').strip().lower()
+        if not addr:
+            continue
+        sub = Subscriber.query.filter_by(email=addr).first()
+        if sub is None:
+            continue
+        if sub.bounced_at is None:
+            sub.bounced_at = datetime.utcnow()
+        reason = ev.get('reason') or ev.get('type') or etype
+        sub.bounce_reason = str(reason)[:255]
+        # A spam complaint also unsubscribes them — never contact again.
+        if etype == 'spamreport' and sub.unsubscribed_at is None:
+            sub.unsubscribed_at = datetime.utcnow()
+        changed += 1
+
+    if changed:
+        db.session.commit()
+    return ('', 204)
 
 
 @newsletter_bp.route('/unsubscribe/<token>', methods=['GET', 'POST'])
@@ -98,24 +208,65 @@ def unsubscribe(token):
 
 # ─── ADMIN ──────────────────────────────────────────────────
 
+def _mailable_query():
+    """Active, confirmed, non-bounced subscribers — the ones a send goes to."""
+    return Subscriber.query.filter(
+        Subscriber.unsubscribed_at.is_(None),
+        Subscriber.confirmed_at.isnot(None),
+        Subscriber.bounced_at.is_(None),
+    )
+
+
 @admin_subscribers_bp.route('/')
 @admin_required
 def list_subscribers():
     page = request.args.get('page', 1, type=int) or 1
     active_pg = (
-        Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None))
+        _mailable_query()
         .order_by(Subscriber.subscribed_at.desc())
         .paginate(page=max(page, 1), per_page=50, error_out=False)
     )
-    unsubscribed = Subscriber.query.filter(Subscriber.unsubscribed_at.isnot(None)).order_by(
-        Subscriber.unsubscribed_at.desc()
-    ).all()
+    # Pending confirmation (double opt-in not yet clicked) — where bot signups
+    # pile up and never leave.
+    pending = (
+        Subscriber.query.filter(
+            Subscriber.confirmed_at.is_(None),
+            Subscriber.unsubscribed_at.is_(None),
+        )
+        .order_by(Subscriber.subscribed_at.desc())
+        .all()
+    )
+    bounced = (
+        Subscriber.query.filter(Subscriber.bounced_at.isnot(None))
+        .order_by(Subscriber.bounced_at.desc())
+        .all()
+    )
+    unsubscribed = (
+        Subscriber.query.filter(
+            Subscriber.unsubscribed_at.isnot(None),
+            Subscriber.bounced_at.is_(None),
+        )
+        .order_by(Subscriber.unsubscribed_at.desc())
+        .all()
+    )
+
+    # Flag confirmed/active rows that still look like spam (e.g. bots that
+    # slipped in before double opt-in existed) so they can be pruned.
+    suspicious_ids = {
+        s.id for s in _mailable_query().all()
+        if is_suspicious(s.email, s.prenom, s.nom, s.ville)
+    }
+
     return render_template(
         'subscribers_admin_list.html',
         active=active_pg.items,
         active_total=active_pg.total,
         pagination=active_pg,
+        pending=pending,
+        bounced=bounced,
         unsubscribed=unsubscribed,
+        suspicious_ids=suspicious_ids,
+        suspicious_count=len(suspicious_ids),
     )
 
 
@@ -254,6 +405,9 @@ def import_subscribers():
             ville=row.get('ville'),
             token=secrets.token_urlsafe(24),
             subscribed_at=row.get('subscribed_at') or datetime.utcnow(),
+            # Imported lists are admin-curated — treat them as confirmed so
+            # they're mailable without a double opt-in step.
+            confirmed_at=row.get('subscribed_at') or datetime.utcnow(),
         ))
         seen.add(email)
         added += 1
@@ -290,22 +444,71 @@ def export_csv():
     )
 
 
+def _delete_subscribers(subs):
+    """Delete subscriber rows, first clearing the delivery rows that
+    FK-reference them (there is no ON DELETE cascade, so a stale delivery would
+    otherwise make the DELETE fail with a 500)."""
+    n = 0
+    for sub in subs:
+        Delivery.query.filter_by(subscriber_id=sub.id).delete(synchronize_session=False)
+        db.session.delete(sub)
+        n += 1
+    db.session.commit()
+    return n
+
+
 @admin_subscribers_bp.route('/<int:subscriber_id>/delete', methods=['POST'])
 @admin_required
 def delete_subscriber(subscriber_id):
     sub = db.session.get(Subscriber, subscriber_id) or abort(404)
-    db.session.delete(sub)
-    db.session.commit()
+    _delete_subscribers([sub])
     flash("Abonné supprimé.", 'success')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
+@admin_subscribers_bp.route('/purge-pending', methods=['POST'])
+@admin_required
+def purge_pending():
+    """Delete every never-confirmed signup — this is where bot registrations
+    accumulate under double opt-in."""
+    subs = Subscriber.query.filter(Subscriber.confirmed_at.is_(None)).all()
+    n = _delete_subscribers(subs)
+    flash(f"{n} inscription(s) non confirmée(s) supprimée(s).", 'success' if n else 'info')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
+@admin_subscribers_bp.route('/purge-bounced', methods=['POST'])
+@admin_required
+def purge_bounced():
+    """Delete addresses SendGrid reported as bounced / spam."""
+    subs = Subscriber.query.filter(Subscriber.bounced_at.isnot(None)).all()
+    n = _delete_subscribers(subs)
+    flash(f"{n} adresse(s) en erreur supprimée(s).", 'success' if n else 'info')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
+@admin_subscribers_bp.route('/purge-suspicious', methods=['POST'])
+@admin_required
+def purge_suspicious():
+    """Delete active subscribers that still score as spam — but never anyone
+    we've actually e-mailed, as a safety net against false positives."""
+    delivered = {sid for (sid,) in db.session.query(Delivery.subscriber_id).distinct().all()}
+    candidates = [
+        s for s in _mailable_query().all()
+        if s.id not in delivered and is_suspicious(s.email, s.prenom, s.nom, s.ville)
+    ]
+    n = _delete_subscribers(candidates)
+    flash(f"{n} abonné(s) suspect(s) supprimé(s).", 'success' if n else 'info')
     return redirect(url_for('admin_subscribers.list_subscribers'))
 
 
 # ─── SEND NEWSLETTER FOR AN ARTICLE ─────────────────────────
 
 def _pending_recipients(article):
-    """Active subscribers who haven't already received this article, plus the
-    count of those skipped because they have."""
-    subscribers = Subscriber.query.filter(Subscriber.unsubscribed_at.is_(None)).all()
+    """Mailable subscribers (confirmed, active, not bounced) who haven't
+    already received this article, plus the count of those skipped because
+    they have."""
+    subscribers = _mailable_query().all()
     already_sent = {
         d.subscriber_id
         for d in Delivery.query.filter_by(article_id=article.id).all()

@@ -5,6 +5,13 @@
         <p>Soyez informés lors de la publication de nouveaux articles.</p>
         <form method="POST" action="{{ url_for('newsletter.subscribe') }}" class="newsletter-form">
             <input type="hidden" name="next" value="{{ request.path }}">
+            {# Honeypot — hidden from humans, tempting to bots. A filled value
+               means a bot and the signup is silently dropped. #}
+            <div aria-hidden="true" style="position:absolute;left:-5000px;top:auto;width:1px;height:1px;overflow:hidden;">
+                <label>Ne pas remplir ce champ
+                    <input type="text" name="website" tabindex="-1" autocomplete="off" value="">
+                </label>
+            </div>
             <div class="newsletter-row">
                 <input type="text" name="prenom" placeholder="Prénom" autocomplete="given-name">
                 <input type="text" name="nom" placeholder="Nom" autocomplete="family-name">

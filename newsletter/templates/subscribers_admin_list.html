@@ -2,7 +2,7 @@
 {% block title %}Newsletter{% endblock %}
 
 {% block admin_title %}<i class="far fa-envelope" style="color: var(--vert);"></i> Newsletter{% endblock %}
-{% block admin_subtitle %}<p>{{ active_total }} abonné{{ 's' if active_total != 1 else '' }} actif{{ 's' if active_total != 1 else '' }}{% if unsubscribed %} · {{ unsubscribed|length }} désinscrit{{ 's' if unsubscribed|length != 1 else '' }}{% endif %}</p>{% endblock %}
+{% block admin_subtitle %}<p>{{ active_total }} abonné{{ 's' if active_total != 1 else '' }} actif{{ 's' if active_total != 1 else '' }}{% if pending %} · {{ pending|length }} en attente{% endif %}{% if bounced %} · {{ bounced|length }} en erreur{% endif %}{% if unsubscribed %} · {{ unsubscribed|length }} désinscrit{{ 's' if unsubscribed|length != 1 else '' }}{% endif %}</p>{% endblock %}
 
 {% block admin_content %}
     <details style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1rem 1.5rem; margin-bottom: 1.5rem;">
@@ -30,6 +30,21 @@
         </form>
     </details>
 
+    {% if suspicious_count %}
+    <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; background: rgba(230,0,62,0.06); border: 1px solid rgba(230,0,62,0.25); border-radius: 10px; padding: 0.9rem 1.2rem; margin-bottom: 1.2rem;">
+        <i class="fas fa-triangle-exclamation" style="color: var(--rouge);"></i>
+        <span style="flex: 1; min-width: 200px;">
+            <strong>{{ suspicious_count }}</strong> abonné{{ 's' if suspicious_count != 1 else '' }} actif{{ 's' if suspicious_count != 1 else '' }} semble{{ '' if suspicious_count != 1 else '' }} suspect (adresse/nom aléatoires, domaine jetable). Repérés par le badge « suspect » ci-dessous.
+        </span>
+        <form method="POST" action="{{ url_for('admin_subscribers.purge_suspicious') }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer les {{ suspicious_count }} abonné(s) suspect(s) ? (ceux qui ont déjà reçu un e-mail sont épargnés)')">
+            <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
+                <i class="fas fa-broom"></i> Supprimer les suspects
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
     <div class="admin-row" style="justify-content: space-between; margin-bottom: 1rem;">
         <h2 style="font-size: 1.2rem; margin: 0;">
             <i class="fas fa-check-circle" style="color: var(--vert-fonce);"></i> Abonnés actifs ({{ active_total }})
@@ -56,7 +71,7 @@
             <tbody>
                 {% for s in active %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td data-label="Email" style="padding: 0.8rem 1rem; word-break: break-all;"><strong>{{ s.email }}</strong></td>
+                    <td data-label="Email" style="padding: 0.8rem 1rem; word-break: break-all;"><strong>{{ s.email }}</strong>{% if s.id in suspicious_ids %} <span style="display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--rouge); background: rgba(230,0,62,0.1); border-radius: 20px; padding: 1px 8px; vertical-align: middle;">suspect</span>{% endif %}</td>
                     <td data-label="Prénom" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.prenom or '—' }}</td>
                     <td data-label="Nom" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.nom or '—' }}</td>
                     <td data-label="Ville" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.ville or '—' }}</td>
@@ -80,6 +95,88 @@
     <div style="text-align: center; padding: 3rem; color: var(--gris); background: white; border-radius: 12px;">
         <i class="far fa-envelope-open" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
         <p>Aucun abonné pour le moment.</p>
+    </div>
+    {% endif %}
+
+    {% if pending %}
+    <div class="admin-row" style="justify-content: space-between; align-items: center; margin: 2.5rem 0 1rem;">
+        <h2 style="font-size: 1.2rem; margin: 0;">
+            <i class="fas fa-hourglass-half" style="color: var(--gris);"></i> En attente de confirmation ({{ pending|length }})
+        </h2>
+        <form method="POST" action="{{ url_for('admin_subscribers.purge_pending') }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer les {{ pending|length }} inscription(s) non confirmée(s) ?')">
+            <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
+                <i class="fas fa-broom"></i> Tout supprimer
+            </button>
+        </form>
+    </div>
+    <p style="color: var(--gris); font-size: 0.85rem; margin: -0.4rem 0 1rem;">
+        Inscriptions non confirmées (lien du double opt-in non cliqué) — c'est là que s'accumulent les inscriptions de robots. Elles ne reçoivent aucun e-mail.
+    </p>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <tbody>
+                {% for s in pending %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.6rem 1rem; word-break: break-all;">{{ s.email }}{% if s.id in suspicious_ids or (s.spam_score and s.spam_score >= 3) %} <span style="display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--rouge); background: rgba(230,0,62,0.1); border-radius: 20px; padding: 1px 8px; vertical-align: middle;">suspect</span>{% endif %}</td>
+                    <td style="padding: 0.6rem 1rem; color: var(--gris); font-size: 0.85rem; white-space: nowrap;">
+                        {{ s.subscribed_at.strftime('%d/%m/%Y') }}
+                    </td>
+                    <td class="actions" style="padding: 0.6rem 1rem; text-align: right;">
+                        <form method="POST" action="{{ url_for('admin_subscribers.delete_subscriber', subscriber_id=s.id) }}"
+                              style="margin: 0;" onsubmit="return confirm('Supprimer définitivement ?')">
+                            <button type="submit" class="btn btn-sm" style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if bounced %}
+    <div class="admin-row" style="justify-content: space-between; align-items: center; margin: 2.5rem 0 1rem;">
+        <h2 style="font-size: 1.2rem; margin: 0;">
+            <i class="fas fa-envelope-circle-check" style="color: var(--rouge);"></i> En erreur / bounce ({{ bounced|length }})
+        </h2>
+        <form method="POST" action="{{ url_for('admin_subscribers.purge_bounced') }}" style="margin: 0;"
+              onsubmit="return confirm('Supprimer les {{ bounced|length }} adresse(s) en erreur ?')">
+            <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
+                <i class="fas fa-broom"></i> Tout supprimer
+            </button>
+        </form>
+    </div>
+    <p style="color: var(--gris); font-size: 0.85rem; margin: -0.4rem 0 1rem;">
+        Adresses signalées par SendGrid (rebond, blocage ou plainte spam). Elles ne sont plus jamais contactées.
+    </p>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <tbody>
+                {% for s in bounced %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.6rem 1rem; word-break: break-all;">{{ s.email }}</td>
+                    <td style="padding: 0.6rem 1rem; color: var(--gris); font-size: 0.85rem;">
+                        {{ s.bounce_reason or 'bounce' }} · {{ s.bounced_at.strftime('%d/%m/%Y') }}
+                    </td>
+                    <td class="actions" style="padding: 0.6rem 1rem; text-align: right;">
+                        <form method="POST" action="{{ url_for('admin_subscribers.delete_subscriber', subscriber_id=s.id) }}"
+                              style="margin: 0;" onsubmit="return confirm('Supprimer définitivement ?')">
+                            <button type="submit" class="btn btn-sm" style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
     </div>
     {% endif %}
 
