@@ -613,6 +613,21 @@ a:hover { color: var(--rouge-fonce); }
 }
 .tile-reaction-emoji { font-size: 1rem; }
 
+/* Comment tally on an article card — highlighted so active discussions
+   stand out. */
+.tile-comments {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--rouge);
+    color: var(--blanc);
+    border-radius: 50px;
+    padding: 3px 11px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
 /* ─── Article body (rendered HTML from WYSIWYG) ─────── */
 .article-body {
     max-width: 760px;

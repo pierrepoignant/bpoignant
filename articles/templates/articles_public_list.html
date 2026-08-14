@@ -53,8 +53,12 @@
             <div class="tile-icon"><i class="fas fa-feather-alt"></i></div>
             <h3>{{ a.title }}</h3>
             <p>{{ a.summary or '' }}</p>
-            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
-                <i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
+                <span><i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}</span>
+                {% set ccount = comments_by_article.get(a.id, 0) %}
+                {% if ccount %}
+                <span class="tile-comments"><i class="far fa-comments"></i> {{ ccount }} commentaire{{ 's' if ccount != 1 else '' }}</span>
+                {% endif %}
             </div>
             {% set reacts = reactions_by_article.get(a.id) %}
             {% if reacts %}
