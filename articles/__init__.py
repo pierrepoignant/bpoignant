@@ -7,7 +7,7 @@ from slugify import slugify
 
 from init_db import db
 from articles.models import Article, Author
-from articles.cleanup import clean_article_html, summarize_html
+from articles.cleanup import clean_article_html, summarize_html, clean_text
 from auth import admin_required
 
 articles_bp = Blueprint('articles', __name__, url_prefix='/articles', template_folder='templates')
@@ -272,7 +272,6 @@ def gdrive_document(file_id):
     the editor. The HTML goes through the same bleach + normaliser pipeline as
     a saved article, so imported content matches hand-typed content."""
     from gdrive import is_configured, get_document, strip_boilerplate, GoogleDriveError
-    from articles.cleanup import clean_text
     if not is_configured():
         return jsonify(error="Google Drive n'est pas configuré."), 400
     try:
@@ -369,7 +368,9 @@ def _autosummary(title, content_html):
 
 
 def _save_article(article):
-    title = (request.form.get('title') or '').strip()
+    # Normalise the title's typography (space after commas, etc.) whatever its
+    # source — typed, edited, or imported.
+    title = clean_text((request.form.get('title') or '').strip())
     summary = (request.form.get('summary') or '').strip()
     content_html = clean_article_html(_clean_html(request.form.get('content_html')))
     published = request.form.get('published') == 'on'
@@ -421,14 +422,22 @@ def _save_article(article):
 @admin_articles_bp.route('/cleanup-all', methods=['POST'])
 @admin_required
 def cleanup_all():
-    """Re-run the HTML normaliser on every article. Skips rows whose
-    cleaned output is byte-identical to what's stored so we don't bump
-    `updated_at` for no reason."""
+    """Re-run the HTML normaliser (and title tidy) on every article. Skips
+    rows whose cleaned output is byte-identical to what's stored so we don't
+    bump `updated_at` for no reason. Titles are tidied in place without
+    re-slugging, so URLs stay stable."""
     changed = 0
     for article in Article.query.all():
+        touched = False
         cleaned = clean_article_html(article.content_html or '')
         if cleaned != (article.content_html or ''):
             article.content_html = cleaned
+            touched = True
+        cleaned_title = clean_text(article.title or '')
+        if cleaned_title and cleaned_title != (article.title or ''):
+            article.title = cleaned_title
+            touched = True
+        if touched:
             changed += 1
     db.session.commit()
     flash(f"Nettoyage terminé — {changed} article(s) mis à jour.", 'success')
