@@ -174,7 +174,7 @@ def list_articles():
         for a in articles:
             if a.published:
                 url = url_for('articles.public_show', slug=a.slug, _external=True)
-                x_proposed_by_article[a.id] = compose_article_tweet(a.title, a.summary, url)
+                x_proposed_by_article[a.id] = compose_article_tweet(a.title, a.tweet_summary, url)
 
     return render_template(
         'articles_admin_list.html',
@@ -234,7 +234,7 @@ def post_to_x(article_id):
     text = (request.form.get('text') or '').strip()
     if not text:
         url = url_for('articles.public_show', slug=article.slug, _external=True)
-        text = compose_article_tweet(article.title, article.summary, url)
+        text = compose_article_tweet(article.title, article.tweet_summary, url)
 
     ok, detail = post_tweet(text)
     if ok:
@@ -512,11 +512,26 @@ def _autosummary(title, content_html):
     return summarize_html(content_html or '')
 
 
+def _auto_social_summary(title, content_html):
+    """Build the social (X) one-liner for an article saved without one. Unlike
+    the editorial summary there is no text-extraction fallback: a first-person,
+    witty line only makes sense if the AI wrote it, so we return '' when the AI
+    is unavailable and the tweet falls back to the editorial summary."""
+    try:
+        from articles.ai_summary import generate_social_summary
+        return generate_social_summary(title, content_html) or ''
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.warning(f"AI social summary on save failed: {exc}")
+        return ''
+
+
 def _save_article(article):
     # Normalise the title's typography (space after commas, etc.) whatever its
     # source — typed, edited, or imported.
     title = clean_text((request.form.get('title') or '').strip())
     summary = (request.form.get('summary') or '').strip()
+    social_summary = (request.form.get('social_summary') or '').strip()
     content_html = clean_article_html(_clean_html(request.form.get('content_html')))
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))
@@ -533,11 +548,18 @@ def _save_article(article):
         summary = _autosummary(title, content_html)
         auto_summary = bool(summary)
 
+    # Same rule for the social line used on X.
+    auto_social = False
+    if not social_summary and content_html:
+        social_summary = _auto_social_summary(title, content_html)
+        auto_social = bool(social_summary)
+
     if article is None:
         article = Article(
             title=title,
             slug=_unique_slug(title),
             summary=summary,
+            social_summary=social_summary or None,
             content_html=content_html,
             published=published,
             created_at=created_at or datetime.utcnow(),
@@ -550,6 +572,7 @@ def _save_article(article):
             article.slug = _unique_slug(title, exclude_id=article.id)
         article.title = title
         article.summary = summary
+        article.social_summary = social_summary or None
         article.content_html = content_html
         article.published = published
         article.author_id = author.id if author else None
@@ -557,8 +580,12 @@ def _save_article(article):
             article.created_at = created_at
 
     db.session.commit()
-    if auto_summary:
+    if auto_summary and auto_social:
+        flash("Article enregistré. Résumé et accroche X générés automatiquement — pensez à les relire.", 'success')
+    elif auto_summary:
         flash("Article enregistré. Résumé généré automatiquement — pensez à le relire.", 'success')
+    elif auto_social:
+        flash("Article enregistré. Accroche X générée automatiquement — pensez à la relire.", 'success')
     else:
         flash("Article enregistré.", 'success')
     return redirect(url_for('admin_articles.edit_article', article_id=article.id))
@@ -647,6 +674,61 @@ def propose_summaries():
         if not ai_enabled:
             msg += " (IA non configurée : extraits du texte — définissez ANTHROPIC__API_KEY)"
         elif remaining > 0:
+            msg += f". {remaining} restant(s), relancez pour continuer"
+        flash(msg + ".", 'success')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/propose-social-summaries', methods=['POST'])
+@admin_required
+def propose_social_summaries():
+    """Same idea as `propose_summaries`, for the X accroche: a first-person,
+    livelier line written by Claude in Bernard's voice. There is no text
+    extraction fallback here — an article without an accroche simply keeps
+    using its editorial summary in the tweet — so this is a no-op when the AI
+    isn't configured.
+
+    Bounded per click like the summary backfill; relaunch to process the rest."""
+    from flask import current_app
+    from articles.ai_summary import generate_social_summary, is_configured
+
+    MAX_AI_PER_RUN = 12
+
+    if not is_configured():
+        flash("IA non configurée — définissez ANTHROPIC__API_KEY pour générer les accroches X.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
+               if not (a.social_summary or '').strip() and (a.content_html or '').strip()]
+
+    filled = 0
+    failed = 0
+    for article in pending[:MAX_AI_PER_RUN]:
+        try:
+            proposed = generate_social_summary(article.title, article.content_html or '')
+        except Exception as exc:
+            current_app.logger.warning(
+                f"AI social summary failed for article {article.id}: {exc}"
+            )
+            failed += 1
+            continue
+        if proposed:
+            article.social_summary = proposed
+            filled += 1
+
+    db.session.commit()
+
+    if not filled:
+        if failed:
+            flash(f"Aucune accroche générée — {failed} échec(s) côté IA, réessayez.", 'danger')
+        else:
+            flash("Tous les articles ont déjà une accroche X.", 'info')
+    else:
+        remaining = len(pending) - filled
+        msg = f"{filled} accroche(s) X rédigée(s) par l'IA"
+        if failed:
+            msg += f" — {failed} échec(s)"
+        if remaining > 0:
             msg += f". {remaining} restant(s), relancez pour continuer"
         flash(msg + ".", 'success')
     return redirect(url_for('admin_articles.list_articles'))

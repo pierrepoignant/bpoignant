@@ -19,6 +19,14 @@
                     <i class="fas fa-wand-magic-sparkles"></i> Résumés manquants (IA)
                 </button>
             </form>
+            <form method="POST" action="{{ url_for('admin_articles.propose_social_summaries') }}" style="margin: 0;"
+                  onsubmit="return confirm('Rédiger par IA une accroche X (première personne, style de Bernard) pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Rédiger par IA l'accroche X (première personne) pour les articles qui n'en ont pas">
+                    <i class="fa-brands fa-x-twitter"></i> Accroches manquantes (IA)
+                </button>
+            </form>
             <form method="POST" action="{{ url_for('admin_articles.cleanup_all') }}" style="margin: 0;"
                   onsubmit="return confirm('Nettoyer le HTML de tous les articles ? (supprime les &lt;br&gt;, ajoute les espaces manquants, etc.)')">
                 <button type="submit" class="btn btn-sm btn-outline"
@@ -167,7 +175,8 @@
                     Texte du post
                 </label>
                 <div style="font-size:0.8rem; color: var(--gris); margin-bottom:0.4rem;">
-                    Pré-rempli à partir du titre et du résumé. Modifiez-le librement avant de publier.
+                    Pré-rempli à partir du titre et de l'accroche X (à défaut, du résumé).
+                    Modifiez-le librement avant de publier.
                 </div>
                 <textarea id="x-modal-text" name="text" rows="6"
                           style="width:100%; padding:10px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit; font-size:0.95rem;"></textarea>

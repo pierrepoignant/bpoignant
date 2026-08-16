@@ -18,6 +18,9 @@ class Article(db.Model):
     title = db.Column(db.String(300), nullable=False)
     slug = db.Column(db.String(300), unique=True, nullable=False, index=True)
     summary = db.Column(db.Text, nullable=True)
+    # Social-media variant of the summary: first person, livelier. Used to
+    # pre-fill the tweet; falls back to `summary` when empty.
+    social_summary = db.Column(db.Text, nullable=True)
     # Optional "petit mot" shown in italics above the article in the newsletter
     # e-mail; persisted so it re-appears if the article is sent again.
     newsletter_intro = db.Column(db.Text, nullable=True)
@@ -35,6 +38,12 @@ class Article(db.Model):
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=True)
 
     author = db.relationship('Author', backref='articles', lazy='joined')
+
+    @property
+    def tweet_summary(self):
+        # What goes in the tweet body: the social line when we have one, the
+        # editorial summary otherwise.
+        return (self.social_summary or '').strip() or (self.summary or '')
 
     @property
     def display_date(self):

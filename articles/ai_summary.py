@@ -1,5 +1,11 @@
 """AI-generated article summaries in Bernard Poignant's tone of voice.
 
+Two flavours, same voice:
+  * `generate_summary`        — the editorial chapô shown on the site and in
+                                the newsletter: neutral, third person.
+  * `generate_social_summary` — the line that accompanies the article on X:
+                                first person, livelier, made to be clicked.
+
 Uses the Claude API (Anthropic SDK). The API key is read from
 `ANTHROPIC__API_KEY` (the app's `<SECTION>__<KEY>` secret convention, same as
 `SEARCHAPI__API_KEY`) or, failing that, the SDK-standard `ANTHROPIC_API_KEY`.
@@ -14,14 +20,19 @@ from bs4 import BeautifulSoup
 
 MODEL = 'claude-opus-4-8'
 
-# Tone-of-voice brief. Kept stable across a batch run so it can be prompt-cached.
-SYSTEM_PROMPT = """Tu rédiges la phrase de résumé d'un article du blog de Bernard Poignant — \
-homme politique français, socialiste, ancien maire de Quimper et ancien conseiller \
-de François Hollande.
+# Shared portrait of the author, reused by both briefs below.
+_VOICE = """Bernard Poignant est un homme politique français, socialiste, ancien \
+maire de Quimper et ancien conseiller de François Hollande.
 
 Sa voix : un français clair et soigné ; un propos engagé à gauche mais mesuré et \
-républicain ; un ton sobre et réfléchi, jamais racoleur ni sensationnaliste ; un \
-attachement à la laïcité, à la social-démocratie et à l'ancrage local et breton.
+républicain ; un attachement à la laïcité, à la social-démocratie et à l'ancrage \
+local et breton."""
+
+# Tone-of-voice brief. Kept stable across a batch run so it can be prompt-cached.
+SYSTEM_PROMPT = f"""Tu rédiges la phrase de résumé d'un article du blog de Bernard \
+Poignant. {_VOICE}
+
+Son ton ici est sobre et réfléchi, jamais racoleur ni sensationnaliste.
 
 À partir du titre et du texte fournis, rédige UNE seule phrase de résumé en français \
 (environ 120 à 160 caractères) qui restitue l'essentiel de l'article dans cette voix, \
@@ -32,6 +43,30 @@ Règles :
 - Pas de guillemets, pas de préfixe (« Résumé : »), pas de hashtag, pas d'emoji.
 - Formulation neutre ou à la troisième personne.
 - Reste fidèle au contenu : n'invente rien.
+Réponds uniquement par la phrase, sans aucun autre texte."""
+
+# Social brief. Same man, different register: on X he speaks in his own name and
+# allows himself the turn of phrase a press chapô would not.
+SOCIAL_SYSTEM_PROMPT = f"""Tu écris, à la place de Bernard Poignant, la phrase qui \
+accompagnera l'un de ses articles lorsqu'il le partage sur X (Twitter). {_VOICE}
+
+Sur les réseaux, il se permet ce qu'un chapô de presse ne permet pas : la première \
+personne, une pointe d'ironie, une formule qui accroche — sans jamais verser dans \
+la vulgarité, l'outrance ou le racolage.
+
+À partir du titre et du texte fournis, écris UNE seule phrase en français (environ \
+100 à 150 caractères) qui donne envie de lire l'article.
+
+Règles :
+- Écris à la première personne (« je », « j'ai », « mon »), comme Bernard s'exprimant \
+lui-même : ce qu'il a écrit, constaté, ou ce qui le préoccupe.
+- Une seule phrase, vive et incarnée : un angle, une prise de position, une pointe \
+d'humour ou une question adressée au lecteur — pas un résumé neutre.
+- Pas de guillemets autour de la phrase, pas de préfixe, pas de hashtag, pas d'emoji, \
+pas de lien : le titre et le lien sont ajoutés automatiquement, ne les répète pas.
+- Pas de majuscules d'insistance ni de points d'exclamation en rafale.
+- Reste fidèle au contenu et aux positions de l'article : n'invente rien et ne durcis \
+pas le propos.
 Réponds uniquement par la phrase, sans aucun autre texte."""
 
 
@@ -62,9 +97,10 @@ def _clean(text):
     return sentence.strip().strip('«»"“”\'').strip()
 
 
-def generate_summary(title, content_html):
-    """Return an AI-written one-line summary, or None when the API key is
-    missing. Raises on API errors so the caller can decide how to fall back."""
+def _generate(system_prompt, instruction, title, content_html):
+    """Run one brief against the article. Returns None when the API key is
+    missing and '' when the article has no usable text; raises on API errors so
+    the caller can decide how to fall back."""
     key = _api_key()
     if not key:
         return None
@@ -80,7 +116,7 @@ def generate_summary(title, content_html):
         max_tokens=200,
         system=[{
             'type': 'text',
-            'text': SYSTEM_PROMPT,
+            'text': system_prompt,
             'cache_control': {'type': 'ephemeral'},
         }],
         messages=[{
@@ -88,9 +124,25 @@ def generate_summary(title, content_html):
             'content': (
                 f"Titre : {title}\n\n"
                 f"Texte de l'article :\n{body}\n\n"
-                "Rédige la phrase de résumé."
+                f"{instruction}"
             ),
         }],
     )
     text = ''.join(b.text for b in response.content if b.type == 'text')
     return _clean(text)
+
+
+def generate_summary(title, content_html):
+    """Return the AI-written editorial one-liner (third person), or None when
+    the API key is missing."""
+    return _generate(
+        SYSTEM_PROMPT, "Rédige la phrase de résumé.", title, content_html,
+    )
+
+
+def generate_social_summary(title, content_html):
+    """Return the AI-written social one-liner (first person, for X), or None
+    when the API key is missing."""
+    return _generate(
+        SOCIAL_SYSTEM_PROMPT, "Écris la phrase pour X.", title, content_html,
+    )

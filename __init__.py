@@ -278,6 +278,9 @@ def _migrate_schema():
         if 'x_posted_at' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN x_posted_at DATETIME NULL"))
             db.session.commit()
+        if 'social_summary' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN social_summary TEXT NULL"))
+            db.session.commit()
 
 
 def _seed_admin_user():

@@ -120,6 +120,15 @@
                 <textarea id="summary" name="summary" rows="2"
                           placeholder="Une phrase de présentation affichée dans la liste des articles.">{{ article.summary if article else '' }}</textarea>
             </div>
+            <div class="form-group">
+                <label for="social_summary">Accroche X / réseaux (optionnel)</label>
+                <textarea id="social_summary" name="social_summary" rows="2"
+                          placeholder="Une phrase à la première personne, plus vive, pour le partage sur X.">{{ article.social_summary if article else '' }}</textarea>
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                    Sert à pré-remplir le tweet. Laissée vide, elle est rédigée par l'IA à
+                    l'enregistrement ; à défaut, c'est le résumé ci-dessus qui est utilisé.
+                </div>
+            </div>
             <div class="form-row">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label for="author_id">Auteur</label>
