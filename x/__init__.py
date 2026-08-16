@@ -10,10 +10,10 @@ refresh). Signing is delegated to requests-oauthlib.
 
 Required env vars (loaded via config/env_loader.py from bpoignant.json
 locally or BPOIGNANT_SECRETS_JSON in production):
-  X__API_KEY         App API key (consumer key)
-  X__API_SECRET      App API secret (consumer secret)
-  X__ACCESS_TOKEN    Access token for the posting account
-  X__ACCESS_SECRET   Access token secret
+  BPOIGNANT_X__API_KEY         App API key (consumer key)
+  BPOIGNANT_X__API_SECRET      App API secret (consumer secret)
+  BPOIGNANT_X__ACCESS_TOKEN    Access token for the posting account
+  BPOIGNANT_X__ACCESS_SECRET   Access token secret
 
 Create these at https://developer.x.com → your app → Keys and tokens. The
 app needs Read *and* Write permission, and the access token must be
@@ -42,10 +42,10 @@ _WS_RE = re.compile(r'\s+')
 def _config():
     """Read X config from env. Resolved at call time so tests can patch."""
     return {
-        'api_key': os.environ.get('X__API_KEY', ''),
-        'api_secret': os.environ.get('X__API_SECRET', ''),
-        'access_token': os.environ.get('X__ACCESS_TOKEN', ''),
-        'access_secret': os.environ.get('X__ACCESS_SECRET', ''),
+        'api_key': os.environ.get('BPOIGNANT_X__API_KEY', ''),
+        'api_secret': os.environ.get('BPOIGNANT_X__API_SECRET', ''),
+        'access_token': os.environ.get('BPOIGNANT_X__ACCESS_TOKEN', ''),
+        'access_secret': os.environ.get('BPOIGNANT_X__ACCESS_SECRET', ''),
     }
 
 
