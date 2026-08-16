@@ -36,6 +36,13 @@ class Article(db.Model):
     # Tweet id returned by the X API on a successful post, so we can link back
     # to it. NULL on rows posted before we started recording it.
     x_post_id = db.Column(db.String(40), nullable=True)
+    # Engagement counters pulled from the X API by the daily poll. NULL until
+    # the tweet has been synced once; x_metrics_at dates the snapshot.
+    x_like_count = db.Column(db.Integer, nullable=True)
+    x_view_count = db.Column(db.Integer, nullable=True)
+    x_reply_count = db.Column(db.Integer, nullable=True)
+    x_retweet_count = db.Column(db.Integer, nullable=True)
+    x_metrics_at = db.Column(db.DateTime, nullable=True)
     # author_id used to point at users.id; it now points at the standalone
     # `authors` table — authors are not necessarily login users.
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=True)

@@ -37,6 +37,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/comments') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-comments"></i> Commentaires
         </a>
+        <a href="{{ url_for('admin_tweets.list_tweets') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tweets') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fa-brands fa-x-twitter"></i> Tweets
+        </a>
         <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
            class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-envelope"></i> Newsletter

@@ -30,6 +30,16 @@ log = logging.getLogger(__name__)
 
 TWEETS_URL = 'https://api.twitter.com/2/tweets'
 VERIFY_URL = 'https://api.twitter.com/1.1/account/verify_credentials.json'
+ME_URL = 'https://api.twitter.com/2/users/me'
+MENTIONS_URL = 'https://api.twitter.com/2/users/{user_id}/mentions'
+
+# `GET /2/tweets` takes up to 100 ids per call, so metrics for the whole blog
+# cost a single request.
+METRICS_BATCH = 100
+# Safety valve on the mentions timeline: with `since_id` a daily run normally
+# needs one page, so anything beyond this is a backlog we'd rather cap than
+# spend credits paginating through.
+MAX_MENTION_PAGES = 5
 
 TWEET_LIMIT = 280
 # X wraps every link in a fixed-length t.co URL, so a link always costs this
@@ -54,6 +64,155 @@ def is_configured() -> bool:
     """True only when all four OAuth 1.0a credentials are present."""
     c = _config()
     return all([c['api_key'], c['api_secret'], c['access_token'], c['access_secret']])
+
+
+class XError(RuntimeError):
+    """Raised by the read endpoints when X can't be reached or answers with an
+    error. The posting helpers keep their (ok, detail) contract instead — a
+    failed share is best-effort, a failed sync is worth surfacing."""
+
+
+def _auth():
+    """OAuth 1.0a signer for the configured account."""
+    from requests_oauthlib import OAuth1
+    c = _config()
+    return OAuth1(
+        c['api_key'], c['api_secret'],
+        c['access_token'], c['access_secret'],
+    )
+
+
+def _get(url, params):
+    """GET an API v2 endpoint and return the decoded body, raising XError on
+    anything that isn't a 2xx. 402 and 429 get their own message because they
+    are the two an operator can actually act on."""
+    if not is_configured():
+        raise XError("X n'est pas configuré")
+    try:
+        resp = requests.get(url, params=params, auth=_auth(), timeout=20)
+    except requests.RequestException as exc:
+        raise XError(f"Erreur réseau : {exc}") from exc
+
+    if 200 <= resp.status_code < 300:
+        return resp.json()
+
+    if resp.status_code == 402:
+        raise XError("Crédits API X épuisés — rechargez dans la console développeur.")
+    if resp.status_code == 429:
+        raise XError("Limite de requêtes X atteinte — réessayez plus tard.")
+
+    detail = resp.text[:200]
+    try:
+        body = resp.json()
+        detail = body.get('detail') or body.get('title') or detail
+    except ValueError:
+        pass
+    raise XError(f"{resp.status_code} — {detail}")
+
+
+def account_id() -> str:
+    """Numeric id of the authenticated account, needed by the mentions
+    timeline. One cheap call; callers are expected to cache the result."""
+    data = _get(ME_URL, {}).get('data') or {}
+    user_id = data.get('id')
+    if not user_id:
+        raise XError("Réponse inattendue de /2/users/me.")
+    return str(user_id)
+
+
+def fetch_metrics(tweet_ids):
+    """Return {tweet_id: {likes, views, replies, retweets, quotes}} for the
+    given ids, in batches of 100. Ids X no longer knows about (deleted tweets)
+    are simply absent from the result rather than raising."""
+    out = {}
+    ids = [str(i) for i in tweet_ids if i]
+    for start in range(0, len(ids), METRICS_BATCH):
+        batch = ids[start:start + METRICS_BATCH]
+        body = _get(TWEETS_URL, {
+            'ids': ','.join(batch),
+            'tweet.fields': 'public_metrics',
+        })
+        for item in (body.get('data') or []):
+            m = item.get('public_metrics') or {}
+            out[str(item['id'])] = {
+                'likes': m.get('like_count', 0),
+                # impression_count is only returned for the authenticated
+                # account's own tweets — which is exactly what we ask for.
+                'views': m.get('impression_count', 0),
+                'replies': m.get('reply_count', 0),
+                'retweets': m.get('retweet_count', 0),
+                'quotes': m.get('quote_count', 0),
+            }
+        for err in (body.get('errors') or []):
+            log.info("fetch_metrics: id absente (%s) — %s",
+                     err.get('value'), err.get('detail', '')[:120])
+    return out
+
+
+def fetch_mentions(user_id, since_id=None):
+    """Return (replies, newest_id) from the mentions timeline.
+
+    A reply to one of Bernard's tweets mentions him by construction, so this
+    one endpoint surfaces new replies across every tweet whatever its age —
+    unlike `search/recent`, which is per-conversation and only reaches back
+    seven days. `since_id` keeps each run to the handful that arrived since
+    the last one.
+
+    Each reply is a dict with id, conversation_id (the root tweet, i.e. our
+    `x_post_id`), author_id, author_username, author_name, text, created_at.
+    `newest_id` is what to pass as `since_id` next time — None when nothing
+    new came back, so the caller leaves its cursor alone.
+    """
+    params = {
+        'max_results': 100,
+        'tweet.fields': 'created_at,conversation_id,author_id',
+        'expansions': 'author_id',
+        'user.fields': 'username,name',
+    }
+    if since_id:
+        params['since_id'] = str(since_id)
+
+    # Cold start (no cursor): take the most recent page only. Paginating back
+    # through years of mentions costs a call per page to read replies that
+    # pre-date every article tweet — the cursor we set from this run makes
+    # every later run cheap. With a cursor we do allow catching up, for the
+    # rare day that draws more than one page of replies.
+    max_pages = MAX_MENTION_PAGES if since_id else 1
+
+    replies = []
+    newest_id = None
+    token = None
+    for _ in range(max_pages):
+        page_params = dict(params)
+        if token:
+            page_params['pagination_token'] = token
+        body = _get(MENTIONS_URL.format(user_id=user_id), page_params)
+
+        users = {u['id']: u for u in ((body.get('includes') or {}).get('users') or [])}
+        for item in (body.get('data') or []):
+            author = users.get(item.get('author_id')) or {}
+            replies.append({
+                'id': str(item['id']),
+                'conversation_id': str(item.get('conversation_id') or ''),
+                'author_id': str(item.get('author_id') or ''),
+                'author_username': author.get('username') or '',
+                'author_name': author.get('name') or '',
+                'text': item.get('text') or '',
+                'created_at': item.get('created_at') or '',
+            })
+
+        meta = body.get('meta') or {}
+        # `newest_id` is per page; the first page holds the newest of the run.
+        newest_id = newest_id or meta.get('newest_id')
+        token = meta.get('next_token')
+        if not token:
+            break
+    else:
+        if since_id:
+            log.warning("fetch_mentions: arrêt à %s pages, backlog restant",
+                        MAX_MENTION_PAGES)
+
+    return replies, newest_id
 
 
 def _plain(text: str) -> str:

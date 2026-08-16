@@ -39,3 +39,49 @@ spec:
                 limits:
                   cpu: "1"
                   memory: 512Mi
+---
+# Daily X sync: engagement metrics + new replies, then the digest e-mail.
+#
+# Cost is flat at ~2 API calls per run however many articles exist: metrics for
+# every tweet come back in one batched GET /2/tweets, and new replies across
+# every conversation come from a single GET /2/users/:id/mentions with
+# since_id. See tweets/__init__.py.
+#
+# Schedule: every day at 07:30 Europe/Paris — before Bernard's morning, and
+# late enough that replies from the previous evening are all in.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-x-poll
+  namespace: default
+spec:
+  schedule: "30 7 * * *"          # daily 07:30
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid       # never let two syncs overlap the cursor
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2             # transient 5xx / network blips
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: x-poll
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "poll_x.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets   # DATABASE_OVH__*, BPOIGNANT_X__*, SENDGRID__API_KEY
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

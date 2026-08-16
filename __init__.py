@@ -127,6 +127,10 @@ def create_app(db_name='ovh'):
     from settings import admin_settings_bp
     app.register_blueprint(admin_settings_bp)
 
+    from tweets.models import TweetReply  # noqa: F401
+    from tweets import admin_tweets_bp
+    app.register_blueprint(admin_tweets_bp)
+
     with app.app_context():
         db.create_all()
         _migrate_schema()
@@ -283,6 +287,14 @@ def _migrate_schema():
             db.session.commit()
         if 'x_post_id' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN x_post_id VARCHAR(40) NULL"))
+            db.session.commit()
+        # Engagement counters synced from the X API by the daily poll.
+        for col in ('x_like_count', 'x_view_count', 'x_reply_count', 'x_retweet_count'):
+            if col not in cols:
+                db.session.execute(text(f"ALTER TABLE articles ADD COLUMN {col} INTEGER NULL"))
+                db.session.commit()
+        if 'x_metrics_at' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN x_metrics_at DATETIME NULL"))
             db.session.commit()
 
 

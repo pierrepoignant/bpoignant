@@ -1,0 +1,290 @@
+"""Admin "Tweets" section: engagement figures and replies pulled from X.
+
+Two things are synced, and the whole design is about keeping the API bill flat:
+
+  * **Metrics** — `GET /2/tweets` accepts 100 ids per call, so likes / views /
+    reply counts for every article cost exactly one request.
+  * **Replies** — via the mentions timeline rather than one
+    `search/recent?conversation_id:…` per tweet. A reply to Bernard mentions
+    him by construction, so a single call returns new replies across every
+    tweet whatever its age, and `since_id` keeps each run to what arrived
+    since the last one. (`search/recent` only reaches back seven days, so the
+    per-conversation approach costs one call per tweet *and* goes blind on
+    anything older than a week.)
+
+That is ~2 calls a day, flat, however many articles exist — which is why there
+is no tiered "old tweets less often" schedule.
+
+New replies are e-mailed once, to the same admins that get comment alerts.
+"""
+
+import logging
+import os
+from contextlib import contextmanager
+from datetime import datetime
+
+from flask import (
+    Blueprint, current_app, flash, has_request_context, redirect,
+    render_template, url_for,
+)
+
+from auth import admin_required
+from init_db import db
+from articles.models import Article
+from settings.models import get_config, set_config
+from tweets.models import TweetReply
+
+log = logging.getLogger(__name__)
+
+admin_tweets_bp = Blueprint(
+    'admin_tweets', __name__, url_prefix='/admin/tweets', template_folder='templates'
+)
+
+# Config keys: the mentions cursor and the cached numeric account id.
+KEY_SINCE_ID = 'x_mentions_since_id'
+KEY_ACCOUNT_ID = 'x_account_id'
+KEY_LAST_SYNC = 'x_last_sync_at'
+
+
+@contextmanager
+def _external_urls():
+    """Let `url_for(_external=True)` work from the CronJob.
+
+    The digest is built both from a web request (the "Rafraîchir" button) and
+    from `poll_x.py`, which has an app context but no request — and Flask
+    can't build absolute URLs there without SERVER_NAME. Setting SERVER_NAME
+    globally would make the app reject requests whose Host doesn't match
+    (it's served on both bernardpoignant.fr and www), so we push a throwaway
+    request context only when there isn't a real one.
+    """
+    if has_request_context():
+        yield
+    else:
+        base = os.environ.get('SITE_BASE_URL', 'https://bernardpoignant.fr')
+        with current_app.test_request_context(base_url=base):
+            yield
+
+
+def _parse_x_time(value):
+    """X returns ISO 8601 in UTC ('…Z'); we store naive UTC like the rest of
+    the app."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00')).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _account_id():
+    """Numeric id of the X account, cached in the config table so the daily
+    run doesn't spend a call rediscovering it."""
+    import x
+
+    cached = (get_config(KEY_ACCOUNT_ID) or '').strip()
+    if cached:
+        return cached
+    resolved = x.account_id()
+    set_config(KEY_ACCOUNT_ID, resolved)
+    db.session.commit()
+    return resolved
+
+
+def sync_metrics():
+    """Refresh like / view / reply counts for every article we've tweeted.
+    Returns the number of articles updated."""
+    import x
+
+    articles = Article.query.filter(Article.x_post_id.isnot(None)).all()
+    if not articles:
+        return 0
+
+    by_post_id = {a.x_post_id: a for a in articles}
+    metrics = x.fetch_metrics(list(by_post_id))
+
+    now = datetime.utcnow()
+    updated = 0
+    for post_id, m in metrics.items():
+        article = by_post_id.get(post_id)
+        if article is None:
+            continue
+        article.x_like_count = m['likes']
+        article.x_view_count = m['views']
+        article.x_reply_count = m['replies']
+        article.x_retweet_count = m['retweets']
+        article.x_metrics_at = now
+        updated += 1
+
+    db.session.commit()
+    return updated
+
+
+def sync_replies():
+    """Pull new replies from the mentions timeline and store the ones that
+    belong to an article tweet. Returns the list of newly-created rows."""
+    import x
+
+    account = _account_id()
+    since_id = (get_config(KEY_SINCE_ID) or '').strip() or None
+    mentions, newest_id = x.fetch_mentions(account, since_id=since_id)
+
+    # conversation_id of a reply is the root tweet — i.e. our x_post_id.
+    by_post_id = {
+        a.x_post_id: a
+        for a in Article.query.filter(Article.x_post_id.isnot(None)).all()
+    }
+
+    created = []
+    for m in mentions:
+        article = by_post_id.get(m['conversation_id'])
+        if article is None:
+            # A mention that isn't a reply to one of our article tweets.
+            continue
+        if m['author_id'] == account:
+            # Bernard answering in his own thread.
+            continue
+        if TweetReply.query.filter_by(reply_id=m['id']).first():
+            continue
+        reply = TweetReply(
+            reply_id=m['id'],
+            article_id=article.id,
+            author_username=m['author_username'][:80] or None,
+            author_name=m['author_name'][:150] or None,
+            content=m['text'],
+            posted_at=_parse_x_time(m['created_at']),
+        )
+        db.session.add(reply)
+        created.append(reply)
+
+    # Advance the cursor even when nothing matched an article: those mentions
+    # have been seen, and re-reading them tomorrow would just cost credits.
+    if newest_id:
+        set_config(KEY_SINCE_ID, str(newest_id))
+
+    db.session.commit()
+    return created
+
+
+def notify_admins_of_replies(replies):
+    """E-mail the admins one digest for all un-notified replies. Same
+    recipients as the comment alerts: every admin user with an address.
+    Returns the number of messages sent."""
+    from auth.models import User
+    from mail import is_configured as mail_is_configured, send_email
+
+    if not replies:
+        return 0
+    if not mail_is_configured():
+        log.info("x-replies digest skipped — mail not configured")
+        return 0
+
+    recipients = User.query.filter(User.is_admin == True, User.email.isnot(None)).all()
+    if not recipients:
+        log.info("x-replies digest skipped — no admin has an e-mail")
+        return 0
+
+    # Group by article so the digest reads like a conversation list.
+    by_article = {}
+    for reply in replies:
+        by_article.setdefault(reply.article, []).append(reply)
+    groups = [
+        (article, sorted(rs, key=lambda r: r.posted_at or r.fetched_at))
+        for article, rs in by_article.items()
+    ]
+
+    n = len(replies)
+    subject = (
+        f"{n} nouvelle réponse sur X" if n == 1 else f"{n} nouvelles réponses sur X"
+    )
+    with _external_urls():
+        admin_url = url_for('admin_tweets.list_tweets', _external=True)
+        site_url = url_for('articles.public_list', _external=True)
+
+    sent = 0
+    for admin in recipients:
+        html = render_template(
+            'email/x_replies_digest.html',
+            groups=groups,
+            total=n,
+            admin_url=admin_url,
+            site_url=site_url,
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+        )
+        if send_email(to_email=admin.email, to_name=admin.username,
+                      subject=subject, html=html, categories=['x-replies']):
+            sent += 1
+
+    if sent:
+        now = datetime.utcnow()
+        for reply in replies:
+            reply.notified_at = now
+        db.session.commit()
+    return sent
+
+
+def poll(notify=True):
+    """One full sync: metrics, then replies, then the digest. Returns a
+    summary dict. Raises x.XError when the API is unreachable — the caller
+    decides whether that's a flash message or a non-zero exit code."""
+    updated = sync_metrics()
+    created = sync_replies()
+    mailed = notify_admins_of_replies(created) if notify else 0
+
+    set_config(KEY_LAST_SYNC, datetime.utcnow().isoformat(timespec='seconds'))
+    db.session.commit()
+    return {'metrics': updated, 'replies': len(created), 'emails': mailed}
+
+
+# ─── ADMIN ──────────────────────────────────────────────────
+
+@admin_tweets_bp.route('/')
+@admin_required
+def list_tweets():
+    import x
+
+    articles = (
+        Article.query
+        .filter(Article.x_post_id.isnot(None))
+        .order_by(Article.x_posted_at.desc())
+        .all()
+    )
+    replies_by_article = {}
+    for reply in TweetReply.query.order_by(TweetReply.posted_at.desc()).all():
+        replies_by_article.setdefault(reply.article_id, []).append(reply)
+
+    return render_template(
+        'tweets_admin_list.html',
+        articles=articles,
+        replies_by_article=replies_by_article,
+        x_configured=x.is_configured(),
+        last_sync=get_config(KEY_LAST_SYNC),
+        total_replies=TweetReply.query.count(),
+    )
+
+
+@admin_tweets_bp.route('/refresh', methods=['POST'])
+@admin_required
+def refresh():
+    """Manual "rafraîchir tout" — the same sync the daily cron runs."""
+    import x
+
+    if not x.is_configured():
+        flash("X n'est pas configuré (clés API manquantes).", 'danger')
+        return redirect(url_for('admin_tweets.list_tweets'))
+
+    try:
+        result = poll()
+    except x.XError as exc:
+        flash(f"Échec de la synchronisation X : {exc}", 'danger')
+        return redirect(url_for('admin_tweets.list_tweets'))
+
+    msg = f"{result['metrics']} tweet(s) mis à jour"
+    if result['replies']:
+        msg += f", {result['replies']} nouvelle(s) réponse(s)"
+        if result['emails']:
+            msg += f" — digest envoyé à {result['emails']} admin(s)"
+    else:
+        msg += ", aucune nouvelle réponse"
+    flash(msg + ".", 'success')
+    return redirect(url_for('admin_tweets.list_tweets'))

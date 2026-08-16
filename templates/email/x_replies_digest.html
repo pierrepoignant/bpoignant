@@ -1,0 +1,56 @@
+{% extends 'email/_base.html' %}
+{% block subject %}Nouvelles réponses sur X{% endblock %}
+
+{% block content %}
+    <h1 style="font-size:20px;line-height:1.3;margin:0 0 8px;color:#1A1A2E;">
+        {{ total }} nouvelle{{ 's' if total > 1 else '' }} réponse{{ 's' if total > 1 else '' }} sur X
+    </h1>
+    <p style="color:#6C757D;margin:0 0 20px;font-size:14px;">
+        Cliquez sur « Répondre sur X » pour ouvrir la réponse et y répondre directement.
+    </p>
+
+    {% for article, replies in groups %}
+    <p style="font-size:13px;color:#6C757D;margin:20px 0 8px;">
+        Sur <strong style="color:#1A1A2E;">{{ article.title }}</strong>
+        {% if article.x_post_url %}
+        — <a href="{{ article.x_post_url }}" style="color:#E6003E;text-decoration:none;">voir le tweet</a>
+        {% endif %}
+    </p>
+
+    {% for r in replies %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background:#F4F5F7;border-left:3px solid #E6003E;border-radius:0 8px 8px 0;margin-bottom:10px;">
+        <tr>
+            <td style="padding:14px 16px;">
+                <div style="font-size:13px;color:#6C757D;margin-bottom:6px;">
+                    <strong style="color:#1A1A2E;">{{ r.display_author }}</strong>
+                    {% if r.author_name and r.author_username %}({{ r.author_name }}){% endif %}
+                    {% if r.posted_at %} · {{ r.posted_at.strftime('%d/%m/%Y à %H:%M') }}{% endif %}
+                </div>
+                <div style="white-space:pre-wrap;font-size:14px;color:#1A1A2E;line-height:1.6;">
+{{ r.content }}
+                </div>
+                <div style="margin-top:10px;">
+                    <a href="{{ r.url }}"
+                       style="display:inline-block;background:#000000;color:#ffffff;padding:8px 18px;border-radius:50px;text-decoration:none;font-weight:700;font-size:13px;">
+                        Répondre sur X
+                    </a>
+                </div>
+            </td>
+        </tr>
+    </table>
+    {% endfor %}
+    {% endfor %}
+
+    <div style="text-align:center;margin:24px 0 8px;">
+        <a href="{{ admin_url }}"
+           style="display:inline-block;background:transparent;color:#1A1A2E;padding:12px 28px;border:2px solid #e0e0e0;border-radius:50px;text-decoration:none;font-weight:600;font-size:14px;">
+            Ouvrir la page Tweets
+        </a>
+    </div>
+{% endblock %}
+
+{% block footer %}
+    Vous recevez cet e-mail parce que vous êtes administrateur de
+    <a href="{{ site_url }}" style="color:#E6003E;text-decoration:none;">bernardpoignant.fr</a>.
+{% endblock %}
