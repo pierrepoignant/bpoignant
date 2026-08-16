@@ -1,6 +1,6 @@
 import hashlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, date, time, timedelta
 
 from flask import Blueprint, current_app, render_template, request
 from flask_login import current_user
@@ -96,6 +96,97 @@ def register_tracking(app):
 
 # ─── ADMIN DASHBOARD ────────────────────────────────────────
 
+_FR_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.',
+              'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+
+def default_grouping(days):
+    """Sensible bucket size for a window: short spans by day, ~quarter by
+    week, a year by month."""
+    if days <= 31:
+        return 'day'
+    if days <= 92:
+        return 'week'
+    return 'month'
+
+
+def stat_buckets(days, group, today):
+    """Ordered time buckets covering the last ``days`` days, each a dict with an
+    exclusive [start, end) date range and display labels. Weeks start on Monday;
+    months on the 1st. Boundary buckets may reach just before the window start so
+    a partial week/month is still shown whole."""
+    start = today - timedelta(days=days - 1)
+    buckets = []
+    if group == 'week':
+        cur = start - timedelta(days=start.weekday())  # back to Monday
+        while cur <= today:
+            end = cur + timedelta(days=7)
+            buckets.append({'start': cur, 'end': end,
+                            'label': cur.strftime('%d/%m'),
+                            'full': 'Semaine du ' + cur.strftime('%d/%m/%Y')})
+            cur = end
+    elif group == 'month':
+        cur = date(start.year, start.month, 1)
+        while cur <= today:
+            end = date(cur.year + 1, 1, 1) if cur.month == 12 else date(cur.year, cur.month + 1, 1)
+            buckets.append({'start': cur, 'end': end,
+                            'label': _FR_MONTHS[cur.month - 1],
+                            'full': _FR_MONTHS[cur.month - 1] + ' ' + str(cur.year)})
+            cur = end
+    else:  # day
+        cur = start
+        while cur <= today:
+            end = cur + timedelta(days=1)
+            buckets.append({'start': cur, 'end': end,
+                            'label': cur.strftime('%d/%m'),
+                            'full': cur.strftime('%d/%m/%Y')})
+            cur = end
+    return buckets
+
+
+def bucketed_series(base_window, days, group, today):
+    """Views + unique visitors per bucket for the given base filter
+    ``base_window`` (a list of SQLAlchemy conditions, e.g. a path restriction).
+
+    Day grouping runs one grouped query; week/month count uniques per bucket
+    over each bucket's own range, since distinct visitors can't be summed from
+    daily counts. Buckets are few for week/month, so it stays cheap."""
+    buckets = stat_buckets(days, group, today)
+    if not buckets:
+        return []
+
+    if group == 'day':
+        lo = datetime.combine(buckets[0]['start'], time.min)
+        hi = datetime.combine(buckets[-1]['end'], time.min)
+        rows = db.session.query(
+            func.date(PageView.created_at).label('d'),
+            func.count(PageView.id),
+            func.count(func.distinct(PageView.visitor_hash)),
+        ).filter(*base_window, PageView.created_at >= lo,
+                 PageView.created_at < hi).group_by('d').all()
+        by_day = {str(r[0]): (r[1], r[2]) for r in rows}
+        return [
+            {'label': b['label'], 'full': b['full'],
+             'views': by_day.get(str(b['start']), (0, 0))[0],
+             'uniques': by_day.get(str(b['start']), (0, 0))[1]}
+            for b in buckets
+        ]
+
+    series = []
+    for b in buckets:
+        row = db.session.query(
+            func.count(PageView.id),
+            func.count(func.distinct(PageView.visitor_hash)),
+        ).filter(
+            *base_window,
+            PageView.created_at >= datetime.combine(b['start'], time.min),
+            PageView.created_at < datetime.combine(b['end'], time.min),
+        ).one()
+        series.append({'label': b['label'], 'full': b['full'],
+                       'views': row[0] or 0, 'uniques': row[1] or 0})
+    return series
+
+
 def _parse_days():
     try:
         days = int(request.args.get('days', 30))
@@ -104,25 +195,32 @@ def _parse_days():
     return max(1, min(days, 365))
 
 
+def _parse_group(days):
+    group = request.args.get('group')
+    if group not in ('day', 'week', 'month'):
+        group = default_grouping(days)
+    return group
+
+
 @analytics_bp.route('/')
 @admin_required
 def dashboard():
     days = _parse_days()
+    group = _parse_group(days)
     today = datetime.utcnow().date()
 
-    # Build the window + the list of calendar days the chart will show.
-    # days == 1 is the "Hier" shortcut: the full previous calendar day,
-    # bounded above so today's partial data doesn't leak in. Everything
-    # else is a rolling "last N days" window ending today.
+    # Build the window for the KPI totals. days == 1 is the "Hier" shortcut:
+    # the full previous calendar day, bounded above so today's partial data
+    # doesn't leak in. Everything else is a rolling "last N days" window
+    # ending today.
     if days == 1:
         start = today - timedelta(days=1)
         since = datetime.combine(start, datetime.min.time())
         until = datetime.combine(today, datetime.min.time())
-        day_list = [start]
+        group = 'day'
     else:
         since = datetime.utcnow() - timedelta(days=days)
         until = None
-        day_list = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
 
     window = [PageView.created_at >= since]
     if until is not None:
@@ -150,32 +248,28 @@ def dashboard():
         func.count(PageView.id).desc()
     ).limit(10).all()
 
-    # Daily series: views + unique visitors per day.
-    rows = db.session.query(
-        func.date(PageView.created_at).label('d'),
-        func.count(PageView.id).label('views'),
-        func.count(func.distinct(PageView.visitor_hash)).label('uniques'),
-    ).filter(*window).group_by('d').order_by('d').all()
-
-    by_day = {str(r.d): (r.views, r.uniques) for r in rows}
-    series = []
-    for d in day_list:
-        v, u = by_day.get(str(d), (0, 0))
-        series.append({'date': d, 'views': v, 'uniques': u})
+    # Series: views + unique visitors per bucket (day / week / month). The "Hier"
+    # shortcut keeps its single upper-bounded day; everything else is bucketed
+    # over the window, with whole boundary weeks/months shown.
+    if days == 1:
+        series = [{'label': start.strftime('%d/%m'), 'full': start.strftime('%d/%m/%Y'),
+                   'views': total_views, 'uniques': unique_visitors}]
+    else:
+        series = bucketed_series([], days, group, today)
     max_views = max((p['views'] for p in series), default=0) or 1
 
-    # Per-day averages shown on the KPI cards.
-    n_days = len(day_list)
-    avg_views = round(total_views / n_days, 1) if n_days else 0
-    avg_uniques = round(unique_visitors / n_days, 1) if n_days else 0
+    # Per-bucket averages shown on the KPI cards.
+    n_buckets = len(series)
+    avg_views = round(total_views / n_buckets, 1) if n_buckets else 0
+    avg_uniques = round(unique_visitors / n_buckets, 1) if n_buckets else 0
 
     # Compact, JSON-serialisable copy of the series for the client-side chart.
     # Carries all three switchable metrics (trafic / visiteurs / pages par
-    # visiteur) plus pre-formatted date labels.
+    # visiteur) plus pre-formatted labels.
     chart_data = [
         {
-            'label': p['date'].strftime('%d/%m'),
-            'full': p['date'].strftime('%d/%m/%Y'),
+            'label': p['label'],
+            'full': p['full'],
             'views': p['views'],
             'uniques': p['uniques'],
             'ratio': round(p['views'] / p['uniques'], 1) if p['uniques'] else 0,
@@ -195,6 +289,7 @@ def dashboard():
     return render_template(
         'analytics_dashboard.html',
         days=days,
+        group=group,
         total_views=total_views,
         unique_visitors=unique_visitors,
         avg_views=avg_views,

@@ -5,11 +5,19 @@
 {% block admin_subtitle %}<p>{% if days == 1 %}Visites d'hier{% else %}Visites des {{ days }} derniers jours{% endif %}</p>{% endblock %}
 
 {% block admin_content %}
-    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;">
         {% for d, lbl in [(1, 'Hier'), (7, '7 j'), (30, '30 j'), (90, '90 j'), (365, '1 an')] %}
         <a href="?days={{ d }}" class="btn btn-sm {% if days == d %}btn-primary{% else %}btn-outline{% endif %}"
            {% if days != d %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ lbl }}</a>
         {% endfor %}
+        {% if days != 1 %}
+        <span style="width: 1px; height: 24px; background: var(--gris-clair); margin: 0 0.3rem;"></span>
+        <span style="color: var(--gris); font-size: 0.85rem;">Grouper&nbsp;:</span>
+        {% for g, lbl in [('day', 'Jour'), ('week', 'Semaine'), ('month', 'Mois')] %}
+        <a href="?days={{ days }}&group={{ g }}" class="btn btn-sm {% if group == g %}btn-vert{% else %}btn-outline{% endif %}"
+           {% if group != g %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ lbl }}</a>
+        {% endfor %}
+        {% endif %}
     </div>
 
     <!-- KPI cards — click one to switch the chart metric -->
@@ -18,13 +26,13 @@
              style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
             <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Pages vues</div>
             <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(total_views).replace(',', ' ') }}</div>
-            <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ ('%.1f'|format(avg_views)).rstrip('0').rstrip('.') }} / jour</div>
+            <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ ('%.1f'|format(avg_views)).rstrip('0').rstrip('.') }} / {{ {'day': 'jour', 'week': 'semaine', 'month': 'mois'}[group] }}</div>
         </div>
         <div class="kpi-card" data-metric="uniques" role="button" tabindex="0" aria-pressed="false"
              style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
             <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Visiteurs uniques</div>
             <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce); margin-top: 0.3rem;">{{ '{:,}'.format(unique_visitors).replace(',', ' ') }}</div>
-            <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ ('%.1f'|format(avg_uniques)).rstrip('0').rstrip('.') }} / jour</div>
+            <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ ('%.1f'|format(avg_uniques)).rstrip('0').rstrip('.') }} / {{ {'day': 'jour', 'week': 'semaine', 'month': 'mois'}[group] }}</div>
         </div>
         <div class="kpi-card" data-metric="ratio" role="button" tabindex="0" aria-pressed="false"
              style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
@@ -38,7 +46,7 @@
 
     <!-- Daily chart — metric chosen via the KPI cards above -->
     <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
-        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Trafic quotidien — Pages vues</span></h2>
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Trafic — Pages vues</span></h2>
         <div id="chart" style="position: relative;">
             <div id="chart-bars" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px;"></div>
             <div id="chart-tooltip" role="status"
@@ -46,8 +54,8 @@
                         background: var(--noir); color: white; padding: 6px 9px; border-radius: 8px; font-size: 0.78rem; white-space: nowrap; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,0.2);"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--gris); margin-top: 6px;">
-            <span>{{ series[0].date.strftime('%d/%m') }}</span>
-            <span>{{ series[-1].date.strftime('%d/%m') }}</span>
+            <span>{{ series[0].label if series }}</span>
+            <span>{{ series[-1].label if series }}</span>
         </div>
     </div>
 
@@ -65,6 +73,7 @@
         var title = document.getElementById('chart-title');
         var cards = Array.prototype.slice.call(document.querySelectorAll('.kpi-card[data-metric]'));
         var current = 'views';
+        var TREND = {day: 'quotidien', week: 'hebdomadaire', month: 'mensuel'}['{{ group }}'] || 'quotidien';
 
         function fmt(n) {
             return (Math.round(n * 10) / 10).toLocaleString('fr-FR');
@@ -73,7 +82,7 @@
         function render(metric) {
             current = metric;
             var meta = METRICS[metric];
-            title.textContent = 'Trafic quotidien — ' + meta.label;
+            title.textContent = 'Trafic ' + TREND + ' — ' + meta.label;
             var max = data.reduce(function (m, p) { return Math.max(m, p[metric]); }, 0) || 1;
             bars.innerHTML = '';
             data.forEach(function (p) {
