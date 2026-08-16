@@ -29,6 +29,7 @@ import requests
 log = logging.getLogger(__name__)
 
 TWEETS_URL = 'https://api.twitter.com/2/tweets'
+VERIFY_URL = 'https://api.twitter.com/1.1/account/verify_credentials.json'
 
 TWEET_LIMIT = 280
 # X wraps every link in a fixed-length t.co URL, so a link always costs this
@@ -97,6 +98,48 @@ def compose_article_tweet(title: str, summary: str, url: str, limit: int = TWEET
         summary = _truncate(summary, room_for_summary)
         return f"{title}{sep}{summary}{sep}{url}"
     return f"{title}{sep}{url}"
+
+
+def verify_credentials():
+    """Non-destructive credentials check. Calls the v1.1 verify_credentials
+    endpoint and reads the ``x-access-level`` response header, which reports
+    whether the access token is ``read`` or ``read-write`` — so we can confirm
+    both that auth works *and* that posting is permitted, without tweeting.
+
+    Returns (True, info) with keys ``screen_name`` and ``access_level`` on
+    success, or (False, {'error': ...}) otherwise. Never raises."""
+    cfg = _config()
+    if not is_configured():
+        return False, {'error': "X n'est pas configuré"}
+
+    from requests_oauthlib import OAuth1
+    auth = OAuth1(
+        cfg['api_key'], cfg['api_secret'],
+        cfg['access_token'], cfg['access_secret'],
+    )
+    try:
+        resp = requests.get(VERIFY_URL, params={'skip_status': 'true'}, auth=auth, timeout=15)
+    except requests.RequestException as exc:
+        log.error("verify_credentials network error: %s", exc)
+        return False, {'error': f"Erreur réseau : {exc}"}
+
+    access_level = resp.headers.get('x-access-level', '')
+    if resp.status_code == 200:
+        data = resp.json()
+        return True, {
+            'screen_name': data.get('screen_name'),
+            'name': data.get('name'),
+            'access_level': access_level,
+        }
+
+    detail = resp.text[:200]
+    try:
+        errors = resp.json().get('errors') or []
+        if errors:
+            detail = errors[0].get('message', detail)
+    except ValueError:
+        pass
+    return False, {'error': f"{resp.status_code} — {detail}", 'access_level': access_level}
 
 
 def post_tweet(text: str):

@@ -188,6 +188,33 @@ def list_articles():
     )
 
 
+@admin_articles_bp.route('/x-test', methods=['POST'])
+@admin_required
+def x_test():
+    """Non-destructive check that the X credentials are wired and can post."""
+    from x import is_configured, verify_credentials
+
+    if not is_configured():
+        flash("X n'est pas configuré — les 4 clés BPOIGNANT_X__… sont absentes de l'environnement.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    ok, info = verify_credentials()
+    if not ok:
+        flash(f"Échec de la connexion à X : {info.get('error')}", 'danger')
+    else:
+        level = info.get('access_level') or 'inconnu'
+        handle = info.get('screen_name') or '?'
+        if 'write' in level:
+            flash(f"Connexion X OK — @{handle} (accès : {level}). Prêt à publier.", 'success')
+        else:
+            flash(
+                f"Connexion X OK pour @{handle}, mais l'accès est « {level} » (lecture seule). "
+                "Passez l'app en « Lecture et écriture » puis régénérez le jeton d'accès.",
+                'warning',
+            )
+    return redirect(url_for('admin_articles.list_articles'))
+
+
 @admin_articles_bp.route('/<int:article_id>/post-x', methods=['POST'])
 @admin_required
 def post_to_x(article_id):
