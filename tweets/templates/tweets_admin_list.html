@@ -31,6 +31,39 @@
         </div>
     </div>
 
+    {% if snapshot %}
+    {% macro delta(value) %}
+        {% if value > 0 %}<span style="color: var(--vert); font-weight: 700;">+{{ value }}</span>
+        {% elif value < 0 %}<span style="color: var(--rouge); font-weight: 700;">{{ value }}</span>
+        {% else %}<span style="color: var(--gris);">=</span>{% endif %}
+    {% endmacro %}
+    <div style="background: white; border-radius: 12px; padding: 1.2rem 1.4rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); display: flex; gap: 2rem; flex-wrap: wrap; align-items: center;">
+        <div>
+            <div style="font-size: 2rem; font-weight: 800; line-height: 1;">{{ snapshot.followers }}</div>
+            <div style="font-size: 0.85rem; color: var(--gris);">abonnés</div>
+        </div>
+        <div style="display: flex; gap: 1.6rem; font-size: 0.9rem;">
+            {# A period is shown only once there's a snapshot old enough to compare with. #}
+            {% for days, label in [('1', 'depuis hier'), ('7', 'sur 7 jours'), ('30', 'sur 30 jours')] %}
+                {% if days in follower_deltas %}
+                <div>
+                    <div>{{ delta(follower_deltas[days]) }}</div>
+                    <div style="font-size: 0.78rem; color: var(--gris);">{{ label }}</div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            {% if not follower_deltas %}
+            <div style="font-size: 0.82rem; color: var(--gris);">
+                Les tendances apparaîtront après quelques jours de suivi.
+            </div>
+            {% endif %}
+        </div>
+        <div style="margin-left: auto; font-size: 0.82rem; color: var(--gris); text-align: right;">
+            {{ snapshot.tweets }} publications · {{ snapshot.following }} abonnements
+        </div>
+    </div>
+    {% endif %}
+
     {% if not x_configured %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
         X n'est pas configuré — les clés <code>BPOIGNANT_X__…</code> sont absentes de l'environnement.

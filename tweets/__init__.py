@@ -21,7 +21,7 @@ New replies are e-mailed once, to the same admins that get comment alerts.
 import logging
 import os
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint, current_app, flash, has_request_context, redirect,
@@ -32,7 +32,7 @@ from auth import admin_required
 from init_db import db
 from articles.models import Article
 from settings.models import get_config, set_config
-from tweets.models import TweetReply
+from tweets.models import AccountSnapshot, TweetReply
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +88,58 @@ def _account_id():
     set_config(KEY_ACCOUNT_ID, resolved)
     db.session.commit()
     return resolved
+
+
+def sync_account():
+    """Record today's follower figures. Returns the snapshot row.
+
+    Also caches the account id from the same response, so the mentions
+    timeline doesn't need its own call to discover it.
+    """
+    import x
+
+    info = x.fetch_account()
+    if not (get_config(KEY_ACCOUNT_ID) or '').strip():
+        set_config(KEY_ACCOUNT_ID, info['id'])
+
+    today = datetime.utcnow().date()
+    snap = AccountSnapshot.query.filter_by(day=today).first()
+    if snap is None:
+        snap = AccountSnapshot(day=today)
+        db.session.add(snap)
+    # Re-running the sync the same day refreshes the row rather than adding one.
+    snap.followers = info['followers']
+    snap.following = info['following']
+    snap.tweets = info['tweets']
+    snap.listed = info['listed']
+
+    db.session.commit()
+    return snap
+
+
+def follower_trend():
+    """Latest follower count plus how it moved, for the admin header.
+
+    Returns (latest_snapshot, {'1': delta_since_yesterday, '7': …, '30': …}),
+    with a delta left out when there's no snapshot old enough to compare
+    against — a made-up zero would read as "no growth" rather than "no data".
+    """
+    latest = AccountSnapshot.query.order_by(AccountSnapshot.day.desc()).first()
+    if latest is None or latest.followers is None:
+        return None, {}
+
+    deltas = {}
+    for days in (1, 7, 30):
+        cutoff = latest.day - timedelta(days=days)
+        past = (
+            AccountSnapshot.query
+            .filter(AccountSnapshot.day <= cutoff, AccountSnapshot.followers.isnot(None))
+            .order_by(AccountSnapshot.day.desc())
+            .first()
+        )
+        if past is not None:
+            deltas[str(days)] = latest.followers - past.followers
+    return latest, deltas
 
 
 def sync_metrics():
@@ -227,13 +279,17 @@ def poll(notify=True):
     """One full sync: metrics, then replies, then the digest. Returns a
     summary dict. Raises x.XError when the API is unreachable — the caller
     decides whether that's a flash message or a non-zero exit code."""
+    # Account first: it caches the account id that sync_replies needs, so a
+    # cold start doesn't spend a separate call discovering it.
+    snap = sync_account()
     updated = sync_metrics()
     created = sync_replies()
     mailed = notify_admins_of_replies(created) if notify else 0
 
     set_config(KEY_LAST_SYNC, datetime.utcnow().isoformat(timespec='seconds'))
     db.session.commit()
-    return {'metrics': updated, 'replies': len(created), 'emails': mailed}
+    return {'metrics': updated, 'replies': len(created), 'emails': mailed,
+            'followers': snap.followers}
 
 
 # ─── ADMIN ──────────────────────────────────────────────────
@@ -253,9 +309,13 @@ def list_tweets():
     for reply in TweetReply.query.order_by(TweetReply.posted_at.desc()).all():
         replies_by_article.setdefault(reply.article_id, []).append(reply)
 
+    latest_snapshot, follower_deltas = follower_trend()
+
     return render_template(
         'tweets_admin_list.html',
         articles=articles,
+        snapshot=latest_snapshot,
+        follower_deltas=follower_deltas,
         replies_by_article=replies_by_article,
         x_configured=x.is_configured(),
         last_sync=get_config(KEY_LAST_SYNC),
@@ -279,7 +339,7 @@ def refresh():
         flash(f"Échec de la synchronisation X : {exc}", 'danger')
         return redirect(url_for('admin_tweets.list_tweets'))
 
-    msg = f"{result['metrics']} tweet(s) mis à jour"
+    msg = f"{result['followers']} abonné(s), {result['metrics']} tweet(s) mis à jour"
     if result['replies']:
         msg += f", {result['replies']} nouvelle(s) réponse(s)"
         if result['emails']:

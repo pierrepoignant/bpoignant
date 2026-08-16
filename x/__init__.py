@@ -120,6 +120,29 @@ def account_id() -> str:
     return str(user_id)
 
 
+def fetch_account() -> dict:
+    """Account id, handle and follower figures in one call.
+
+    Same endpoint as `account_id()` with `user.fields=public_metrics`, so the
+    daily follower snapshot costs nothing extra beyond the call itself — and
+    it hands back the id, which the caller can cache instead of asking again.
+    """
+    body = _get(ME_URL, {'user.fields': 'public_metrics,username,name'})
+    data = body.get('data') or {}
+    if not data.get('id'):
+        raise XError("Réponse inattendue de /2/users/me.")
+    m = data.get('public_metrics') or {}
+    return {
+        'id': str(data['id']),
+        'username': data.get('username') or '',
+        'name': data.get('name') or '',
+        'followers': m.get('followers_count', 0),
+        'following': m.get('following_count', 0),
+        'tweets': m.get('tweet_count', 0),
+        'listed': m.get('listed_count', 0),
+    }
+
+
 def fetch_metrics(tweet_ids):
     """Return {tweet_id: {likes, views, replies, retweets, quotes}} for the
     given ids, in batches of 100. Ids X no longer knows about (deleted tweets)

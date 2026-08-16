@@ -13,6 +13,27 @@ from datetime import datetime
 from init_db import db
 
 
+class AccountSnapshot(db.Model):
+    """One row per day of the account's own figures.
+
+    A follower count on its own says very little — what's worth seeing is
+    whether it moved. Keeping a daily snapshot (365 rows a year, written by
+    the same poll that fetches everything else) is what makes the trend
+    possible, and `day` is unique so re-running the sync overwrites the day
+    rather than stacking duplicates.
+    """
+
+    __tablename__ = 'x_account_snapshots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Date, unique=True, nullable=False, index=True)
+    followers = db.Column(db.Integer, nullable=True)
+    following = db.Column(db.Integer, nullable=True)
+    tweets = db.Column(db.Integer, nullable=True)
+    listed = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class TweetReply(db.Model):
     __tablename__ = 'tweet_replies'
 
