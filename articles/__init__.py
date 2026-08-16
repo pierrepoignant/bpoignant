@@ -14,6 +14,53 @@ articles_bp = Blueprint('articles', __name__, url_prefix='/articles', template_f
 admin_articles_bp = Blueprint('admin_articles', __name__, url_prefix='/admin/articles', template_folder='templates')
 admin_authors_bp = Blueprint('admin_authors', __name__, url_prefix='/admin/authors', template_folder='templates')
 
+_FR_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.',
+              'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+
+def _default_grouping(days):
+    """Sensible bucket size for a window: short spans by day, ~quarter by
+    week, a year by month."""
+    if days <= 31:
+        return 'day'
+    if days <= 92:
+        return 'week'
+    return 'month'
+
+
+def _stat_buckets(days, group, today):
+    """Return the ordered time buckets covering the last ``days`` days, each a
+    dict with an exclusive [start, end) date range and display labels. Weeks
+    start on Monday; months on the 1st. Boundary buckets may extend just before
+    the window start so a partial week/month is still shown whole."""
+    start = today - timedelta(days=days - 1)
+    buckets = []
+    if group == 'week':
+        cur = start - timedelta(days=start.weekday())  # back to Monday
+        while cur <= today:
+            end = cur + timedelta(days=7)
+            buckets.append({'start': cur, 'end': end,
+                            'label': cur.strftime('%d/%m'),
+                            'full': 'Semaine du ' + cur.strftime('%d/%m/%Y')})
+            cur = end
+    elif group == 'month':
+        cur = date(start.year, start.month, 1)
+        while cur <= today:
+            end = date(cur.year + 1, 1, 1) if cur.month == 12 else date(cur.year, cur.month + 1, 1)
+            buckets.append({'start': cur, 'end': end,
+                            'label': _FR_MONTHS[cur.month - 1],
+                            'full': _FR_MONTHS[cur.month - 1] + ' ' + str(cur.year)})
+            cur = end
+    else:  # day
+        cur = start
+        while cur <= today:
+            end = cur + timedelta(days=1)
+            buckets.append({'start': cur, 'end': end,
+                            'label': cur.strftime('%d/%m'),
+                            'full': cur.strftime('%d/%m/%Y')})
+            cur = end
+    return buckets
+
 
 # HTML tags / attributes allowed in the WYSIWYG output. Anything outside this
 # is stripped before saving — keeps the editor safe from XSS while still
@@ -266,9 +313,12 @@ def article_stats(article_id):
         days = 90
     days = max(7, min(days, 365))
 
+    group = request.args.get('group')
+    if group not in ('day', 'week', 'month'):
+        group = _default_grouping(days)
+
     today = datetime.utcnow().date()
     since = datetime.utcnow() - timedelta(days=days)
-    day_list = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
     window = [PageView.path == path, PageView.created_at >= since]
 
     total_views = db.session.query(func.count(PageView.id)).filter(
@@ -277,18 +327,22 @@ def article_stats(article_id):
     unique_visitors = db.session.query(
         func.count(func.distinct(PageView.visitor_hash))).filter(*window).scalar() or 0
 
-    rows = db.session.query(
-        func.date(PageView.created_at).label('d'),
-        func.count(PageView.id).label('views'),
-        func.count(func.distinct(PageView.visitor_hash)).label('uniques'),
-    ).filter(*window).group_by('d').all()
-    by_day = {str(r.d): (r.views, r.uniques) for r in rows}
+    # Per-bucket views + unique visitors. Uniques can't be summed from daily
+    # counts, so each bucket is queried over its own [start, end) range. Buckets
+    # are few (~a dozen for week/month), so this stays cheap.
     chart_data = []
-    for d in day_list:
-        v, u = by_day.get(str(d), (0, 0))
+    for b in _stat_buckets(days, group, today):
+        row = db.session.query(
+            func.count(PageView.id),
+            func.count(func.distinct(PageView.visitor_hash)),
+        ).filter(
+            PageView.path == path,
+            PageView.created_at >= datetime.combine(b['start'], time.min),
+            PageView.created_at < datetime.combine(b['end'], time.min),
+        ).one()
         chart_data.append({
-            'label': d.strftime('%d/%m'), 'full': d.strftime('%d/%m/%Y'),
-            'views': v, 'uniques': u,
+            'label': b['label'], 'full': b['full'],
+            'views': row[0] or 0, 'uniques': row[1] or 0,
         })
 
     top_referrers = db.session.query(
@@ -313,6 +367,7 @@ def article_stats(article_id):
         'articles_admin_stats.html',
         article=article,
         days=days,
+        group=group,
         total_views=total_views,
         window_views=window_views,
         unique_visitors=unique_visitors,

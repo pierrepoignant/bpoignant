@@ -26,6 +26,14 @@
                style="padding: 6px 14px;{% if days != d %} color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ d }} j</a>
             {% endfor %}
         </div>
+        <div style="display: inline-flex; gap: 0.3rem; align-items: center;">
+            <span style="color: var(--gris); font-size: 0.85rem;">Grouper&nbsp;:</span>
+            {% for g, lbl in [('day', 'Jour'), ('week', 'Semaine'), ('month', 'Mois')] %}
+            <a href="{{ url_for('admin_articles.article_stats', article_id=article.id, days=days, group=g) }}"
+               class="btn btn-sm {% if group == g %}btn-vert{% else %}btn-outline{% endif %}"
+               style="padding: 6px 14px;{% if group != g %} color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ lbl }}</a>
+            {% endfor %}
+        </div>
     </div>
 
     {# ── KPI cards ── #}
@@ -56,7 +64,7 @@
 
     {# ── View timeline ── #}
     <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
-        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Vues par jour</span></h2>
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Vues</span></h2>
         <div id="chart" style="position: relative;">
             <div id="chart-bars" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px;"></div>
             <div id="chart-tooltip" role="status" style="position: absolute; transform: translate(-50%, -100%); background: var(--noir); color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; pointer-events: none; opacity: 0; white-space: nowrap;"></div>
@@ -79,11 +87,12 @@
         var title = document.getElementById('chart-title');
         var cards = Array.prototype.slice.call(document.querySelectorAll('.kpi-card[data-metric]'));
         var current = 'views';
+        var GROUP_LABEL = {day: 'jour', week: 'semaine', month: 'mois'}['{{ group }}'] || 'jour';
         function fmt(n) { return (Math.round(n * 10) / 10).toLocaleString('fr-FR'); }
         function render(metric) {
             current = metric;
             var meta = METRICS[metric];
-            title.textContent = (metric === 'views' ? 'Vues' : 'Visiteurs uniques') + ' par jour';
+            title.textContent = (metric === 'views' ? 'Vues' : 'Visiteurs uniques') + ' par ' + GROUP_LABEL;
             var max = data.reduce(function (m, p) { return Math.max(m, p[metric]); }, 0) || 1;
             bars.innerHTML = '';
             data.forEach(function (p) {
