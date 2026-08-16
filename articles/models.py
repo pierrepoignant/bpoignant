@@ -26,6 +26,10 @@ class Article(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     published_at = db.Column(db.DateTime, nullable=True)
+    # When this article was posted to X (Twitter). NULL = never posted; set on
+    # the first publish auto-post and on any manual share, guarding against
+    # double-posting.
+    x_posted_at = db.Column(db.DateTime, nullable=True)
     # author_id used to point at users.id; it now points at the standalone
     # `authors` table — authors are not necessarily login users.
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=True)

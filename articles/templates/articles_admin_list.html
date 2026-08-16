@@ -83,6 +83,15 @@
                         data-last="{{ _last.sent_at.strftime('%d/%m/%Y') if _last else '' }}">
                     <i class="fas fa-paper-plane"></i> Envoyer
                 </button>
+                {% if x_configured %}
+                <form method="POST" action="{{ url_for('admin_articles.post_to_x', article_id=a.id) }}" style="margin: 0;"
+                      onsubmit="return confirm('{% if a.x_posted_at %}Cet article a déjà été partagé sur X. Le publier à nouveau ?{% else %}Partager cet article sur X ?{% endif %}')">
+                    <button type="submit" class="btn btn-sm" style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px;"
+                            title="{% if a.x_posted_at %}Déjà partagé le {{ a.x_posted_at.strftime('%d/%m/%Y') }} — republier{% else %}Partager sur X{% endif %}">
+                        <i class="fa-brands fa-x-twitter"></i>{% if a.x_posted_at %} <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>{% endif %}
+                    </button>
+                </form>
+                {% endif %}
                 {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"
                    class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;" title="Statistiques détaillées">
