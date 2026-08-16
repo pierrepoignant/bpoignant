@@ -50,6 +50,13 @@ class GoogleDriveError(RuntimeError):
     """Raised when Drive can't be reached or answers with an error."""
 
 
+class GoogleDriveAuthError(GoogleDriveError):
+    """Raised when the problem is the connection itself — no refresh token, or
+    one Google has revoked/expired. Callers use this to offer a reconnect link
+    rather than a generic failure message; a network blip or a Drive 500 stays
+    a plain GoogleDriveError, where reconnecting would fix nothing."""
+
+
 # ─── Credentials ────────────────────────────────────────────
 
 def _client_id():
@@ -147,7 +154,7 @@ def exchange_code(code, redirect_uri):
 def _access_token():
     client_id, client_secret, refresh_token = _client_id(), _client_secret(), _refresh_token()
     if not (client_id and client_secret and refresh_token):
-        raise GoogleDriveError("Google Drive n'est pas connecté.")
+        raise GoogleDriveAuthError("Google Drive n'est pas connecté.")
     try:
         resp = requests.post(
             TOKEN_URL,
@@ -164,7 +171,7 @@ def _access_token():
     if resp.status_code != 200:
         # A revoked/expired refresh token comes back as invalid_grant here —
         # surface it so the admin knows to reconnect.
-        raise GoogleDriveError(_oauth_error(resp) + " Reconnectez Google Drive.")
+        raise GoogleDriveAuthError(_oauth_error(resp) + " Reconnectez Google Drive.")
     token = resp.json().get('access_token')
     if not token:
         raise GoogleDriveError("Réponse Google sans jeton d'accès.")

@@ -413,11 +413,16 @@ def article_stats(article_id):
 @admin_required
 def gdrive_documents():
     """List Bernard's Google Docs as JSON for the import picker."""
-    from gdrive import is_configured, list_documents, GoogleDriveError
+    from gdrive import (
+        is_configured, list_documents, GoogleDriveError, GoogleDriveAuthError,
+    )
     if not is_configured():
         return jsonify(configured=False, documents=[]), 200
     try:
         docs = list_documents(query=request.args.get('q'))
+    except GoogleDriveAuthError as exc:
+        # `reconnect` tells the picker to offer the OAuth link under the error.
+        return jsonify(configured=True, error=str(exc), reconnect=True), 502
     except GoogleDriveError as exc:
         return jsonify(configured=True, error=str(exc)), 502
     return jsonify(configured=True, documents=docs), 200
@@ -429,11 +434,16 @@ def gdrive_document(file_id):
     """Return one Google Doc's title and cleaned HTML body, ready to drop into
     the editor. The HTML goes through the same bleach + normaliser pipeline as
     a saved article, so imported content matches hand-typed content."""
-    from gdrive import is_configured, get_document, strip_boilerplate, GoogleDriveError
+    from gdrive import (
+        is_configured, get_document, strip_boilerplate, GoogleDriveError,
+        GoogleDriveAuthError,
+    )
     if not is_configured():
         return jsonify(error="Google Drive n'est pas configuré."), 400
     try:
         doc = get_document(file_id)
+    except GoogleDriveAuthError as exc:
+        return jsonify(error=str(exc), reconnect=True), 502
     except GoogleDriveError as exc:
         return jsonify(error=str(exc)), 502
     content_html = clean_article_html(_clean_html(doc['html']))

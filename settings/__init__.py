@@ -20,6 +20,24 @@ admin_settings_bp = Blueprint(
 # Session key holding the anti-CSRF `state` between the redirect to Google and
 # the callback.
 _STATE_SESSION_KEY = 'gdrive_oauth_state'
+# Where to land once the consent flow is over. Lets the article editor send the
+# admin through the reconnect and get him back to the page he was writing on,
+# instead of dumping him on the settings page.
+_NEXT_SESSION_KEY = 'gdrive_oauth_next'
+
+
+def _safe_next(raw):
+    """Accept only same-site relative paths, so `?next=` can never be turned
+    into an open redirect to another host."""
+    if not raw or not raw.startswith('/') or raw.startswith('//') or '\\' in raw:
+        return None
+    return raw
+
+
+def _after_connect():
+    """Where the callback should send the admin: back where he came from when
+    the editor asked for it, else the settings page."""
+    return session.pop(_NEXT_SESSION_KEY, None) or url_for('admin_settings.index')
 
 
 def _callback_url():
@@ -65,11 +83,18 @@ def gdrive_connect():
     from gdrive import GoogleDriveError
     state = secrets.token_urlsafe(24)
     session[_STATE_SESSION_KEY] = state
+    # The editor passes ?next=<its own path> so the admin comes straight back
+    # to his article once Google is done.
+    nxt = _safe_next(request.args.get('next'))
+    if nxt:
+        session[_NEXT_SESSION_KEY] = nxt
+    else:
+        session.pop(_NEXT_SESSION_KEY, None)
     try:
         url = gdrive.authorization_url(_callback_url(), state)
     except GoogleDriveError as exc:
         flash(str(exc), 'danger')
-        return redirect(url_for('admin_settings.index'))
+        return redirect(_after_connect())
     return redirect(url)
 
 
@@ -83,21 +108,21 @@ def gdrive_callback():
     error = request.args.get('error')
     if error:
         flash(f"Connexion Google annulée ou refusée ({error}).", 'danger')
-        return redirect(url_for('admin_settings.index'))
+        return redirect(_after_connect())
 
     state = request.args.get('state')
     if not expected or state != expected:
         flash("Échec de la vérification de sécurité (state). Réessayez la connexion.", 'danger')
-        return redirect(url_for('admin_settings.index'))
+        return redirect(_after_connect())
 
     try:
         gdrive.exchange_code(request.args.get('code'), _callback_url())
     except GoogleDriveError as exc:
         flash(str(exc), 'danger')
-        return redirect(url_for('admin_settings.index'))
+        return redirect(_after_connect())
 
-    flash("Google Drive connecté. L'import est disponible dans l'éditeur d'articles.", 'success')
-    return redirect(url_for('admin_settings.index'))
+    flash("Google Drive reconnecté.", 'success')
+    return redirect(_after_connect())
 
 
 @admin_settings_bp.route('/gdrive/disconnect', methods=['POST'])

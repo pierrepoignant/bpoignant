@@ -266,12 +266,90 @@
         const searchEl = document.getElementById('gd-search');
         let searchTimer = null;
 
-        function msg(text, isError) {
+        // Reconnect happens in this same window: one click, Google's consent
+        // screen, and back here. What's in the editor is stashed on the way out
+        // and put back on the way in — including reopening this picker — so the
+        // detour leaves no trace to clean up by hand.
+        const reconnectUrl = "{{ url_for('admin_settings.gdrive_connect') }}";
+        const DRAFT_KEY = 'gd-draft';
+        const DRAFT_TTL_MS = 30 * 60 * 1000;
+
+        function fieldValue(id) {
+            const el = document.getElementById(id);
+            return el ? el.value : '';
+        }
+
+        function stashDraft() {
+            try {
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    path: window.location.pathname,
+                    at: Date.now(),
+                    title: fieldValue('title'),
+                    summary: fieldValue('summary'),
+                    social: fieldValue('social_summary'),
+                    created: fieldValue('created_date'),
+                    html: quill.root.innerHTML,
+                }));
+            } catch (e) {
+                // Private mode / storage full: the reconnect still works, the
+                // draft just isn't carried over. Not worth blocking on.
+            }
+        }
+
+        function restoreDraft() {
+            let raw = null;
+            try {
+                raw = sessionStorage.getItem(DRAFT_KEY);
+                if (raw) sessionStorage.removeItem(DRAFT_KEY);
+            } catch (e) { return; }
+            if (!raw) return;
+
+            let d;
+            try { d = JSON.parse(raw); } catch (e) { return; }
+            // Only restore onto the page it was written on, and only while
+            // fresh — a stale draft reappearing over a new article would be
+            // worse than losing it.
+            if (!d || d.path !== window.location.pathname) return;
+            if (!d.at || Date.now() - d.at > DRAFT_TTL_MS) return;
+
+            ['title', 'summary', 'social_summary', 'created_date'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const v = { title: d.title, summary: d.summary,
+                            social_summary: d.social, created_date: d.created }[id];
+                if (v) el.value = v;
+            });
+            if (d.html) {
+                quill.setContents([]);
+                quill.clipboard.dangerouslyPasteHTML(0, d.html);
+            }
+            // Pick up exactly where he left off: the picker, freshly loaded.
+            open();
+        }
+
+        function msg(text, isError, showReconnect) {
             listEl.innerHTML = '';
             const d = document.createElement('div');
             d.className = 'gd-msg' + (isError ? ' error' : '');
             d.textContent = text;
             listEl.appendChild(d);
+            if (!showReconnect) return;
+
+            const wrap = document.createElement('div');
+            wrap.className = 'gd-msg';
+            const a = document.createElement('a');
+            a.href = reconnectUrl + '?next='
+                + encodeURIComponent(window.location.pathname + window.location.search);
+            a.className = 'btn btn-sm btn-primary';
+            a.innerHTML = '<i class="fab fa-google-drive"></i> Reconnecter Google Drive';
+            a.addEventListener('click', stashDraft);
+            wrap.appendChild(a);
+            const hint = document.createElement('div');
+            hint.style.cssText = 'font-size:0.8rem;color:var(--gris);margin-top:0.6rem;';
+            hint.textContent = "Un seul clic : Google vous demande votre accord, "
+                + "puis vous revenez ici, à votre article.";
+            wrap.appendChild(hint);
+            listEl.appendChild(wrap);
         }
 
         function fmtDate(iso) {
@@ -300,7 +378,7 @@
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
                 .then(function (res) {
                     if (!res.ok || res.body.error) {
-                        msg(res.body.error || 'Impossible de charger les documents.', true);
+                        msg(res.body.error || 'Impossible de charger les documents.', true, res.body.reconnect);
                         return;
                     }
                     renderDocs(res.body.documents || []);
@@ -344,7 +422,7 @@
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
                 .then(function (res) {
                     if (!res.ok || res.body.error) {
-                        msg(res.body.error || 'Import impossible.', true);
+                        msg(res.body.error || 'Import impossible.', true, res.body.reconnect);
                         return;
                     }
                     quill.setContents([]);
@@ -369,6 +447,10 @@
             const q = searchEl.value.trim();
             searchTimer = setTimeout(function () { loadDocs(q); }, 300);
         });
+
+        // Coming back from the Google consent screen: put the article back as
+        // it was and reopen the picker.
+        restoreDraft();
     })();
     {% endif %}
 </script>
