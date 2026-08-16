@@ -166,7 +166,16 @@ def list_articles():
         .all()
     )
 
-    from x import is_configured as x_is_configured
+    from x import is_configured as x_is_configured, compose_article_tweet
+    x_configured = x_is_configured()
+    # Proposed (editable) tweet text per published article, for the share modal.
+    x_proposed_by_article = {}
+    if x_configured:
+        for a in articles:
+            if a.published:
+                url = url_for('articles.public_show', slug=a.slug, _external=True)
+                x_proposed_by_article[a.id] = compose_article_tweet(a.title, a.summary, url)
+
     return render_template(
         'articles_admin_list.html',
         articles=articles,
@@ -174,28 +183,18 @@ def list_articles():
         views_by_article=views_by_article,
         comments_by_article=comments_by_article,
         reactions_by_article=reactions_by_article,
-        x_configured=x_is_configured(),
+        x_configured=x_configured,
+        x_proposed_by_article=x_proposed_by_article,
     )
-
-
-def _share_on_x(article):
-    """Compose and post this article to X. On success, stamps ``x_posted_at``.
-    Returns ``(ok, detail)``; never raises (X is best-effort)."""
-    from x import compose_article_tweet, post_tweet
-
-    url = url_for('articles.public_show', slug=article.slug, _external=True)
-    text = compose_article_tweet(article.title, article.summary, url)
-    ok, detail = post_tweet(text)
-    if ok:
-        article.x_posted_at = datetime.utcnow()
-        db.session.commit()
-    return ok, detail
 
 
 @admin_articles_bp.route('/<int:article_id>/post-x', methods=['POST'])
 @admin_required
 def post_to_x(article_id):
-    from x import is_configured
+    """Post the article to X using the text edited in the share modal. Falls
+    back to the auto-composed text if the field came through empty. Stamps
+    ``x_posted_at`` on success."""
+    from x import is_configured, compose_article_tweet, post_tweet
 
     article = db.session.get(Article, article_id) or abort(404)
     if not article.published:
@@ -205,8 +204,15 @@ def post_to_x(article_id):
         flash("X n'est pas configuré (clés API manquantes).", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
-    ok, detail = _share_on_x(article)
+    text = (request.form.get('text') or '').strip()
+    if not text:
+        url = url_for('articles.public_show', slug=article.slug, _external=True)
+        text = compose_article_tweet(article.title, article.summary, url)
+
+    ok, detail = post_tweet(text)
     if ok:
+        article.x_posted_at = datetime.utcnow()
+        db.session.commit()
         flash("Article partagé sur X.", 'success')
     else:
         flash(f"Échec du partage sur X : {detail}", 'danger')
@@ -500,8 +506,6 @@ def _save_article(article):
         summary = _autosummary(title, content_html)
         auto_summary = bool(summary)
 
-    was_published = bool(article.published) if article is not None else False
-
     if article is None:
         article = Article(
             title=title,
@@ -530,18 +534,6 @@ def _save_article(article):
         flash("Article enregistré. Résumé généré automatiquement — pensez à le relire.", 'success')
     else:
         flash("Article enregistré.", 'success')
-
-    # Auto-post to X the first time an article becomes published. Guarded by
-    # x_posted_at so re-saving or editing a published article never re-posts.
-    if published and not was_published and article.x_posted_at is None:
-        from x import is_configured as x_is_configured
-        if x_is_configured():
-            ok, detail = _share_on_x(article)
-            if ok:
-                flash("Article publié sur X.", 'success')
-            else:
-                flash(f"Publication automatique sur X échouée : {detail}", 'warning')
-
     return redirect(url_for('admin_articles.edit_article', article_id=article.id))
 
 
