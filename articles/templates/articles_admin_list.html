@@ -10,7 +10,12 @@
         <h2 style="font-size: 1.5rem; margin: 0;">
             <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Articles ({{ articles|length }})
         </h2>
-        <div style="display: flex; gap: 0.5rem;">
+        {# Primary action on its own line; batch/maintenance tools underneath. #}
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+            <a href="{{ url_for('admin_articles.create_article') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus"></i> Nouvel article
+            </a>
+            <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem;">
             <form method="POST" action="{{ url_for('admin_articles.propose_summaries') }}" style="margin: 0;"
                   onsubmit="return confirm('Rédiger par IA un résumé, dans le style de Bernard, pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
                 <button type="submit" class="btn btn-sm btn-outline"
@@ -44,9 +49,7 @@
                 </button>
             </form>
             {% endif %}
-            <a href="{{ url_for('admin_articles.create_article') }}" class="btn btn-sm btn-primary">
-                <i class="fas fa-plus"></i> Nouvel article
-            </a>
+            </div>
         </div>
     </div>
 
@@ -101,15 +104,31 @@
                     <i class="fas fa-paper-plane"></i> Envoyer
                 </button>
                 {% if x_configured %}
+                {% if a.x_posted_at %}
+                    {# Already shared: no re-post, just a way back to the tweet. #}
+                    {% if a.x_post_url %}
+                    <a href="{{ a.x_post_url }}" target="_blank" rel="noopener"
+                       class="btn btn-sm" style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px;"
+                       title="Partagé sur X le {{ a.x_posted_at.strftime('%d/%m/%Y') }} — voir le post">
+                        <i class="fa-brands fa-x-twitter"></i> <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                    </a>
+                    {% else %}
+                    <button type="button" class="btn btn-sm" disabled
+                            style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px; opacity: 0.45; cursor: default;"
+                            title="Partagé sur X le {{ a.x_posted_at.strftime('%d/%m/%Y') }} (lien du post non enregistré)">
+                        <i class="fa-brands fa-x-twitter"></i> <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                    </button>
+                    {% endif %}
+                {% else %}
                 <button type="button" class="btn btn-sm" style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px;"
-                        title="{% if a.x_posted_at %}Déjà partagé le {{ a.x_posted_at.strftime('%d/%m/%Y') }} — republier{% else %}Partager sur X{% endif %}"
+                        title="Partager sur X"
                         onclick="openXModal(this)"
                         data-action="{{ url_for('admin_articles.post_to_x', article_id=a.id) }}"
                         data-title="{{ a.title }}"
-                        data-text="{{ x_proposed_by_article.get(a.id, '') }}"
-                        data-posted="{{ a.x_posted_at.strftime('%d/%m/%Y') if a.x_posted_at else '' }}">
-                    <i class="fa-brands fa-x-twitter"></i>{% if a.x_posted_at %} <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>{% endif %}
+                        data-text="{{ x_proposed_by_article.get(a.id, '') }}">
+                    <i class="fa-brands fa-x-twitter"></i>
                 </button>
+                {% endif %}
                 {% endif %}
                 {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"
@@ -169,7 +188,6 @@
                 <i class="fa-brands fa-x-twitter"></i> Partager sur X
             </h3>
             <p id="x-modal-title" style="color: var(--gris); margin:0 0 0.8rem; font-size:0.9rem;"></p>
-            <div id="x-modal-warning" style="display:none; background: rgba(255,165,0,0.12); color:#8a6d00; border-radius:8px; padding:8px 12px; font-size:0.85rem; margin-bottom:0.8rem;"></div>
             <form id="x-modal-form" method="POST" action="">
                 <label for="x-modal-text" style="display:block; font-weight:600; font-size:0.9rem; margin-bottom:0.3rem;">
                     Texte du post
@@ -210,13 +228,6 @@
         f.action = btn.dataset.action;
         document.getElementById('x-modal-title').textContent = btn.dataset.title || '';
         document.getElementById('x-modal-text').value = btn.dataset.text || '';
-        var w = document.getElementById('x-modal-warning');
-        if (btn.dataset.posted) {
-            w.style.display = 'block';
-            w.textContent = 'Déjà partagé le ' + btn.dataset.posted + '. Republier créera un nouveau post (X refuse un texte identique).';
-        } else {
-            w.style.display = 'none';
-        }
         xUpdateCount();
         document.getElementById('x-modal').style.display = 'flex';
         document.getElementById('x-modal-text').focus();

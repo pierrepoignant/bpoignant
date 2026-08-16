@@ -33,11 +33,23 @@ class Article(db.Model):
     # the first publish auto-post and on any manual share, guarding against
     # double-posting.
     x_posted_at = db.Column(db.DateTime, nullable=True)
+    # Tweet id returned by the X API on a successful post, so we can link back
+    # to it. NULL on rows posted before we started recording it.
+    x_post_id = db.Column(db.String(40), nullable=True)
     # author_id used to point at users.id; it now points at the standalone
     # `authors` table — authors are not necessarily login users.
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=True)
 
     author = db.relationship('Author', backref='articles', lazy='joined')
+
+    @property
+    def x_post_url(self):
+        """Permalink to the tweet, or None when we don't have its id. The
+        handle-less `/i/web/status/` form redirects to the canonical URL, so we
+        don't need to know which account posted it."""
+        if not self.x_post_id:
+            return None
+        return f"https://x.com/i/web/status/{self.x_post_id}"
 
     @property
     def tweet_summary(self):

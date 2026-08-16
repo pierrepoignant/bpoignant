@@ -230,6 +230,14 @@ def post_to_x(article_id):
     if not is_configured():
         flash("X n'est pas configuré (clés API manquantes).", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
+    # The share button is hidden once an article is posted; this guards against
+    # a stale page or a re-submitted form double-posting.
+    if article.x_posted_at:
+        flash(
+            f"Article déjà partagé sur X le {article.x_posted_at.strftime('%d/%m/%Y')}.",
+            'info',
+        )
+        return redirect(url_for('admin_articles.list_articles'))
 
     text = (request.form.get('text') or '').strip()
     if not text:
@@ -239,8 +247,13 @@ def post_to_x(article_id):
     ok, detail = post_tweet(text)
     if ok:
         article.x_posted_at = datetime.utcnow()
+        # `detail` is the tweet id on success — keep it so we can link to the post.
+        article.x_post_id = str(detail) if detail else None
         db.session.commit()
-        flash("Article partagé sur X.", 'success')
+        if article.x_post_url:
+            flash(f"Article partagé sur X : {article.x_post_url}", 'success')
+        else:
+            flash("Article partagé sur X.", 'success')
     else:
         flash(f"Échec du partage sur X : {detail}", 'danger')
     return redirect(url_for('admin_articles.list_articles'))
