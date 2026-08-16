@@ -1,4 +1,4 @@
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 
 import bleach
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
@@ -242,6 +242,86 @@ def edit_article(article_id):
         authors=_all_authors(),
         default_author_id=None,
         gdrive_configured=gdrive_is_configured(),
+    )
+
+
+@admin_articles_bp.route('/<int:article_id>/stats')
+@admin_required
+def article_stats(article_id):
+    """Detailed per-article stats: a daily view timeline (views + unique
+    visitors), top referrers, reactions/comments, and newsletter send figures
+    enriched with SendGrid open/click rates when available."""
+    from sqlalchemy import func
+    from analytics.models import PageView
+    from engagement.models import Reaction, Comment
+    from engagement import EMOJIS
+    from newsletter import article_email_stats
+
+    article = db.session.get(Article, article_id) or abort(404)
+    path = f'/articles/{article.slug}'
+
+    try:
+        days = int(request.args.get('days', 90))
+    except (TypeError, ValueError):
+        days = 90
+    days = max(7, min(days, 365))
+
+    today = datetime.utcnow().date()
+    since = datetime.utcnow() - timedelta(days=days)
+    day_list = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    window = [PageView.path == path, PageView.created_at >= since]
+
+    total_views = db.session.query(func.count(PageView.id)).filter(
+        PageView.path == path).scalar() or 0
+    window_views = db.session.query(func.count(PageView.id)).filter(*window).scalar() or 0
+    unique_visitors = db.session.query(
+        func.count(func.distinct(PageView.visitor_hash))).filter(*window).scalar() or 0
+
+    rows = db.session.query(
+        func.date(PageView.created_at).label('d'),
+        func.count(PageView.id).label('views'),
+        func.count(func.distinct(PageView.visitor_hash)).label('uniques'),
+    ).filter(*window).group_by('d').all()
+    by_day = {str(r.d): (r.views, r.uniques) for r in rows}
+    chart_data = []
+    for d in day_list:
+        v, u = by_day.get(str(d), (0, 0))
+        chart_data.append({
+            'label': d.strftime('%d/%m'), 'full': d.strftime('%d/%m/%Y'),
+            'views': v, 'uniques': u,
+        })
+
+    top_referrers = db.session.query(
+        PageView.referrer, func.count(PageView.id).label('n')
+    ).filter(*window, PageView.referrer.isnot(None)).group_by(
+        PageView.referrer).order_by(func.count(PageView.id).desc()).limit(10).all()
+
+    # Reactions (in display order) + comment counts.
+    reaction_rows = dict(
+        db.session.query(Reaction.emoji, func.count(Reaction.id))
+        .filter(Reaction.article_id == article.id).group_by(Reaction.emoji).all()
+    )
+    reactions = [{'emoji': e, 'count': reaction_rows[e]} for e in EMOJIS if reaction_rows.get(e)]
+    approved_comments = db.session.query(func.count(Comment.id)).filter(
+        Comment.article_id == article.id, Comment.approved == True).scalar() or 0
+    pending_comments = db.session.query(func.count(Comment.id)).filter(
+        Comment.article_id == article.id, Comment.approved == False).scalar() or 0
+
+    email_stats = article_email_stats(article)
+
+    return render_template(
+        'articles_admin_stats.html',
+        article=article,
+        days=days,
+        total_views=total_views,
+        window_views=window_views,
+        unique_visitors=unique_visitors,
+        chart_data=chart_data,
+        top_referrers=top_referrers,
+        reactions=reactions,
+        approved_comments=approved_comments,
+        pending_comments=pending_comments,
+        email_stats=email_stats,
     )
 
 

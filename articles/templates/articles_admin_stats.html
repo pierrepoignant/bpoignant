@@ -1,0 +1,176 @@
+{% extends 'admin_base.html' %}
+{% block title %}Stats : {{ article.title }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-chart-line" style="color: var(--vert);"></i> Statistiques de l'article{% endblock %}
+{% block admin_subtitle %}<p style="text-transform: uppercase; font-weight: 700;">{{ article.title }}</p>{% endblock %}
+
+{% block admin_content %}
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <a href="{{ url_for('admin_articles.list_articles') }}" class="btn btn-sm btn-outline">
+            <i class="fas fa-arrow-left"></i> Tous les articles
+        </a>
+        <a href="{{ url_for('admin_articles.edit_article', article_id=article.id) }}" class="btn btn-sm btn-outline">
+            <i class="fas fa-edit"></i> Éditer
+        </a>
+        {% if article.published %}
+        <a href="{{ url_for('articles.public_show', slug=article.slug) }}" target="_blank" class="btn btn-sm btn-vert">
+            <i class="fas fa-eye"></i> Voir
+        </a>
+        {% endif %}
+        <div style="flex: 1;"></div>
+        <div style="display: inline-flex; gap: 0.3rem; align-items: center;">
+            <span style="color: var(--gris); font-size: 0.85rem;">Période&nbsp;:</span>
+            {% for d in [7, 30, 90, 365] %}
+            <a href="{{ url_for('admin_articles.article_stats', article_id=article.id, days=d) }}"
+               class="btn btn-sm {% if days == d %}btn-primary{% else %}btn-outline{% endif %}">{{ d }} j</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── KPI cards ── #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="kpi-card active" data-metric="views" role="button" tabindex="0" style="background: white; padding: 1.3rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Vues ({{ days }} j)</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--noir);">{{ '{:,}'.format(window_views).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">{{ '{:,}'.format(total_views).replace(',', ' ') }} depuis toujours</div>
+        </div>
+        <div class="kpi-card" data-metric="uniques" role="button" tabindex="0" style="background: white; padding: 1.3rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Visiteurs uniques</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--vert-fonce);">{{ '{:,}'.format(unique_visitors).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">sur {{ days }} jours</div>
+        </div>
+        <div style="background: white; padding: 1.3rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Réactions</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--rouge);">{{ reactions | sum(attribute='count') }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">
+                {% for r in reactions %}{{ r.emoji }}&nbsp;{{ r.count }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}
+            </div>
+        </div>
+        <div style="background: white; padding: 1.3rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Commentaires</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--noir);">{{ approved_comments }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">{% if pending_comments %}{{ pending_comments }} en attente{% else %}publiés{% endif %}</div>
+        </div>
+    </div>
+
+    {# ── View timeline ── #}
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Vues par jour</span></h2>
+        <div id="chart" style="position: relative;">
+            <div id="chart-bars" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px;"></div>
+            <div id="chart-tooltip" role="status" style="position: absolute; transform: translate(-50%, -100%); background: var(--noir); color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; pointer-events: none; opacity: 0; white-space: nowrap;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; color: var(--gris); font-size: 0.75rem; margin-top: 6px;">
+            <span>{{ chart_data[0].label if chart_data }}</span>
+            <span>{{ chart_data[-1].label if chart_data }}</span>
+        </div>
+    </div>
+    <script id="chart-data" type="application/json">{{ chart_data|tojson }}</script>
+    <script>
+    (function () {
+        var data = JSON.parse(document.getElementById('chart-data').textContent || '[]');
+        var METRICS = {
+            views:   { label: 'Vues',              unit: 'vues',      grad: ['var(--rouge)', 'var(--rouge-fonce)'] },
+            uniques: { label: 'Visiteurs uniques', unit: 'visiteurs', grad: ['var(--vert)', 'var(--vert-fonce)'] }
+        };
+        var bars = document.getElementById('chart-bars');
+        var tooltip = document.getElementById('chart-tooltip');
+        var title = document.getElementById('chart-title');
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.kpi-card[data-metric]'));
+        var current = 'views';
+        function fmt(n) { return (Math.round(n * 10) / 10).toLocaleString('fr-FR'); }
+        function render(metric) {
+            current = metric;
+            var meta = METRICS[metric];
+            title.textContent = (metric === 'views' ? 'Vues' : 'Visiteurs uniques') + ' par jour';
+            var max = data.reduce(function (m, p) { return Math.max(m, p[metric]); }, 0) || 1;
+            bars.innerHTML = '';
+            data.forEach(function (p) {
+                var val = p[metric];
+                var bar = document.createElement('div');
+                bar.style.flex = '1'; bar.style.minWidth = '2px';
+                bar.style.height = (val / max * 100).toFixed(1) + '%';
+                bar.style.borderRadius = '2px 2px 0 0';
+                bar.style.opacity = val === 0 ? '0.3' : '1';
+                bar.style.background = 'linear-gradient(180deg, ' + meta.grad[0] + ', ' + meta.grad[1] + ')';
+                bar.addEventListener('mouseenter', function () { showTip(p, bar, meta); });
+                bar.addEventListener('mousemove', function () { showTip(p, bar, meta); });
+                bar.addEventListener('mouseleave', hideTip);
+                bars.appendChild(bar);
+            });
+            cards.forEach(function (c) { c.classList.toggle('active', c.dataset.metric === metric); });
+        }
+        function showTip(p, bar, meta) {
+            tooltip.innerHTML = '<strong>' + p.full + '</strong><br>' + fmt(p[current]) + ' ' + meta.unit;
+            tooltip.style.left = (bar.offsetLeft + bar.offsetWidth / 2) + 'px';
+            tooltip.style.top = (bar.offsetTop - 6) + 'px';
+            tooltip.style.opacity = '1';
+        }
+        function hideTip() { tooltip.style.opacity = '0'; }
+        cards.forEach(function (c) {
+            c.addEventListener('click', function () { render(c.dataset.metric); });
+            c.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); render(c.dataset.metric); } });
+        });
+        render('views');
+    })();
+    </script>
+
+    {# ── Newsletter ── #}
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-paper-plane" style="color: var(--vert-fonce);"></i> Newsletter</h2>
+        {% if email_stats.campaigns %}
+        {% set sg = email_stats.sendgrid %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.2rem;">
+            <div><div style="color: var(--gris); font-size: 0.8rem;">Destinataires</div><div style="font-size: 1.5rem; font-weight: 800;">{{ email_stats.success or email_stats.delivered }}</div></div>
+            {% if sg and sg.delivered %}
+            <div><div style="color: var(--gris); font-size: 0.8rem;">Délivrés</div><div style="font-size: 1.5rem; font-weight: 800;">{{ sg.delivered }}</div></div>
+            <div><div style="color: var(--gris); font-size: 0.8rem;">Taux d'ouverture</div><div style="font-size: 1.5rem; font-weight: 800; color: var(--vert-fonce);">{{ '%.0f'|format(sg.open_rate * 100) }}%</div><div style="color: var(--gris); font-size: 0.75rem;">{{ sg.unique_opens }} ouverture(s)</div></div>
+            <div><div style="color: var(--gris); font-size: 0.8rem;">Taux de clic</div><div style="font-size: 1.5rem; font-weight: 800; color: var(--rouge);">{{ '%.0f'|format(sg.click_rate * 100) }}%</div><div style="color: var(--gris); font-size: 0.75rem;">{{ sg.unique_clicks }} clic(s)</div></div>
+            {% endif %}
+        </div>
+        {% if not sg %}
+        <p style="color: var(--gris); font-size: 0.85rem; background: var(--gris-clair); padding: 0.7rem 1rem; border-radius: 8px;">
+            <i class="fas fa-circle-info"></i> Ouvertures / clics indisponibles (SendGrid non configuré, ou suivi Open/Click non activé). Une fois activé, les statistiques apparaîtront pour les envois suivants.
+        </p>
+        {% elif not sg.delivered %}
+        <p style="color: var(--gris); font-size: 0.85rem; background: var(--gris-clair); padding: 0.7rem 1rem; border-radius: 8px;">
+            <i class="fas fa-circle-info"></i> Aucune donnée d'ouverture/clic pour cet article dans SendGrid (envoi antérieur au marquage par catégorie, ou suivi désactivé).
+        </p>
+        {% endif %}
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead><tr style="font-size: 0.8rem; color: var(--gris); text-align: left;">
+                <th style="padding: 0.4rem 0;">Envoi</th><th>Destinataires</th><th>Réussis</th><th>Erreurs</th>
+            </tr></thead>
+            <tbody>
+            {% for c in email_stats.campaigns %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0;">{{ c.sent_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>{{ c.recipient_count }}</td>
+                    <td style="color: var(--vert-fonce); font-weight: 600;">{{ c.success_count }}</td>
+                    <td style="color: {{ 'var(--rouge)' if c.error_count else 'var(--gris)' }};">{{ c.error_count }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--gris);">Cet article n'a pas encore été envoyé par newsletter.</p>
+        {% endif %}
+    </div>
+
+    {# ── Referrers ── #}
+    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-sign-in-alt" style="color: var(--rouge);"></i> Sources de trafic ({{ days }} j)</h2>
+        {% if top_referrers %}
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            {% for r in top_referrers %}
+            <tr style="border-top: 1px solid var(--gris-clair);">
+                <td style="padding: 0.5rem 0; word-break: break-all;"><a href="{{ r.referrer }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ r.referrer }}</a></td>
+                <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p style="color: var(--gris);">Aucune source externe sur la période (accès directs ou navigation interne).</p>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -60,11 +60,15 @@ def send_email(
     html: str,
     text: Optional[str] = None,
     to_name: Optional[str] = None,
+    categories=None,
 ) -> bool:
     """Send one email via SendGrid. Returns True on 2xx, False otherwise.
 
     Returns False (and logs) if SendGrid isn't configured, rather than
     raising — callers don't need to check is_configured() first.
+
+    `categories` tags the message (e.g. ['newsletter', 'article-42']) so its
+    opens/clicks can later be pulled per-category from the Stats API.
     """
     cfg = _config()
     if not cfg['api_key']:
@@ -83,6 +87,9 @@ def send_email(
             {'type': 'text/html',  'value': html},
         ],
     }
+    if categories:
+        # SendGrid caps categories at 10 and 255 chars each.
+        body['categories'] = [str(c)[:255] for c in categories][:10]
     if cfg['reply_to']:
         body['reply_to'] = {'email': cfg['reply_to']}
 
@@ -155,6 +162,78 @@ def fetch_suppressions(kinds=None, start_time=None):
                 break
             offset += page
     return out
+
+
+CATEGORY_STATS_URL = 'https://api.sendgrid.com/v3/categories/stats'
+
+
+def fetch_category_stats(category, start_date, end_date=None):
+    """Pull aggregated open/click stats for one SendGrid category (e.g.
+    ``article-42``) between ``start_date`` and ``end_date`` (``date`` objects
+    or ``YYYY-MM-DD`` strings; end defaults to today).
+
+    Returns a dict with summed ``delivered / opens / unique_opens / clicks /
+    unique_clicks / bounces / spam_reports`` plus derived ``open_rate`` and
+    ``click_rate`` (unique / delivered, as fractions), and a per-day ``series``.
+    Returns ``None`` when SendGrid isn't configured or the call fails, so the
+    caller can degrade gracefully.
+
+    Note: requires Open & Click Tracking to be enabled in SendGrid, and only
+    reflects mail sent *with* this category (i.e. going forward).
+    """
+    cfg = _config()
+    if not cfg['api_key']:
+        return None
+
+    def _fmt(d):
+        return d if isinstance(d, str) else d.strftime('%Y-%m-%d')
+
+    params = {
+        'start_date': _fmt(start_date),
+        'categories': category,
+        'aggregated_by': 'day',
+    }
+    if end_date is not None:
+        params['end_date'] = _fmt(end_date)
+
+    try:
+        resp = requests.get(
+            CATEGORY_STATS_URL,
+            headers={'Authorization': f"Bearer {cfg['api_key']}"},
+            params=params,
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        log.error("fetch_category_stats network error (%s): %s", category, exc)
+        return None
+    if resp.status_code != 200:
+        log.error("fetch_category_stats failed (%s): status=%s body=%s",
+                  category, resp.status_code, resp.text[:300])
+        return None
+
+    keys = ('delivered', 'opens', 'unique_opens', 'clicks', 'unique_clicks',
+            'bounces', 'spam_reports', 'requests', 'unsubscribes')
+    totals = {k: 0 for k in keys}
+    series = []
+    for day in resp.json() or []:
+        m = {}
+        for stat in day.get('stats', []):
+            m = stat.get('metrics', {}) or {}
+            break
+        for k in keys:
+            totals[k] += int(m.get(k, 0) or 0)
+        series.append({
+            'date': day.get('date'),
+            'delivered': int(m.get('delivered', 0) or 0),
+            'unique_opens': int(m.get('unique_opens', 0) or 0),
+            'unique_clicks': int(m.get('unique_clicks', 0) or 0),
+        })
+
+    delivered = totals['delivered'] or 0
+    totals['open_rate'] = (totals['unique_opens'] / delivered) if delivered else 0.0
+    totals['click_rate'] = (totals['unique_clicks'] / delivered) if delivered else 0.0
+    totals['series'] = series
+    return totals
 
 
 def _html_to_text(html: str) -> str:

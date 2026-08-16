@@ -548,6 +548,48 @@ def purge_suspicious():
 
 # ─── SEND NEWSLETTER FOR AN ARTICLE ─────────────────────────
 
+def article_category(article_id):
+    """SendGrid category tag for an article's newsletter, used to pull its
+    opens/clicks later."""
+    return f'article-{article_id}'
+
+
+def article_email_stats(article):
+    """Combined newsletter stats for one article: our own Campaign/Delivery
+    figures, enriched with SendGrid opens/clicks for the article's category
+    (best-effort — None-safe when SendGrid is off or tracking not enabled).
+
+    Returns a dict: sends (list of campaigns), recipients, delivered, and
+    (when available) opens/clicks + rates.
+    """
+    from datetime import date, timedelta
+
+    campaigns = (
+        Campaign.query.filter_by(article_id=article.id)
+        .order_by(Campaign.sent_at.desc())
+        .all()
+    )
+    delivered = Delivery.query.filter_by(article_id=article.id).count()
+    stats = {
+        'campaigns': campaigns,
+        'recipients': sum(c.recipient_count for c in campaigns),
+        'success': sum(c.success_count for c in campaigns),
+        'delivered': delivered,
+        'sendgrid': None,
+    }
+
+    if campaigns and mail_is_configured():
+        from mail import fetch_category_stats
+        first_sent = min(c.sent_at for c in campaigns).date() - timedelta(days=1)
+        try:
+            stats['sendgrid'] = fetch_category_stats(
+                article_category(article.id), start_date=first_sent, end_date=date.today()
+            )
+        except Exception:
+            log.exception("article_email_stats: SendGrid pull failed (article %s)", article.id)
+    return stats
+
+
 def _pending_recipients(article):
     """Mailable subscribers (confirmed, active, not bounced) who haven't
     already received this article, plus the count of those skipped because
@@ -604,6 +646,8 @@ def _build_payload(article, recipients):
 def _send_payload(article_id, campaign_id, payload):
     """Send the pre-rendered e-mails and record deliveries. Requires an active
     app context; safe to run in a background thread."""
+    # Tag every message so opens/clicks can be pulled per-article later.
+    categories = ['newsletter', article_category(article_id)]
     successes, errors = 0, 0
     for item in payload:
         ok = send_email(
@@ -611,6 +655,7 @@ def _send_payload(article_id, campaign_id, payload):
             to_name=item['name'],
             subject=item['subject'],
             html=item['html'],
+            categories=categories,
         )
         if ok:
             successes += 1
