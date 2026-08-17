@@ -1,12 +1,12 @@
 """Daily automatic share: post the oldest article that has never been on X.
 
-Runs at midnight and posts at most one article, and only when nothing has gone
-out in the last 23 hours — so a share done by hand during the evening
+Runs at 09:30 Europe/Paris and posts at most one article, and only when nothing
+has gone out in the last 23 hours — so a share done by hand during the evening
 suppresses the automatic one, and the backlog drips out rather than arriving as
 a burst. When every published article has been shared, the run is a no-op.
 
-The 23h (rather than 24h) window is deliberate: a run at 00:00 following
-yesterday's post at 00:00:05 would otherwise measure 23h59m55s and skip,
+The 23h (rather than 24h) window is deliberate: a run at 09:30 following
+yesterday's post at 09:30:05 would otherwise measure 23h59m55s and skip,
 drifting the automation into posting every other day.
 
 Wired to the `bpoignant-x-autopost` k8s CronJob.

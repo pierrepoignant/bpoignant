@@ -64,12 +64,12 @@
     </div>
     {% endif %}
 
-    {# Publication automatique : ce qui partira à minuit. #}
+    {# Publication automatique : ce qui partira à 9h30. #}
     <div style="background: white; border-radius: 12px; padding: 0.9rem 1.3rem; margin-bottom: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); font-size: 0.9rem; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap;">
         <i class="fas fa-robot" style="color: var(--vert);"></i>
         {% if next_to_post %}
         <span>
-            Publication automatique à minuit — prochain :
+            Publication automatique à 9h30 — prochain :
             <strong>{{ next_to_post.title }}</strong>
             <span style="color: var(--gris);">
                 ({{ pending_count }} article{{ 's' if pending_count != 1 else '' }} en attente)
@@ -77,7 +77,7 @@
         </span>
         {% else %}
         <span style="color: var(--gris);">
-            Publication automatique à minuit — tous les articles publiés ont déjà été partagés.
+            Publication automatique à 9h30 — tous les articles publiés ont déjà été partagés.
         </span>
         {% endif %}
     </div>

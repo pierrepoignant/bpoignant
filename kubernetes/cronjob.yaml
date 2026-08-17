@@ -93,17 +93,20 @@ spec:
 # backlog drips out instead of arriving as a burst. No-op once every published
 # article has been shared. See tweets.auto_post().
 #
-# Schedule: every day at 00:00 Europe/Paris.
+# Schedule: every day at 09:30 Europe/Paris — the morning press-review slot,
+# when a politically-engaged French audience is actually reading. Midnight (the
+# first version of this job) is about the worst available hour. Europe/Paris
+# rather than UTC so the slot stays at 09:30 local across the CET/CEST switch.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: bpoignant-x-autopost
   namespace: default
 spec:
-  schedule: "0 0 * * *"           # daily midnight
+  schedule: "30 9 * * *"          # daily 09:30
   timeZone: "Europe/Paris"
   concurrencyPolicy: Forbid       # two overlapping runs could double-post
-  # No startingDeadlineSeconds: if the cluster was busy at midnight we would
+  # No startingDeadlineSeconds: if the cluster was busy at 09:30 we would
   # rather skip the day than fire a public post at an unexpected hour.
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

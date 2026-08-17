@@ -142,7 +142,7 @@ def follower_trend():
     return latest, deltas
 
 
-# A run at 00:00 that follows yesterday's post at 00:00:05 has only 23h59m55s
+# A run at 09:30 that follows yesterday's post at 09:30:05 has only 23h59m55s
 # of elapsed time, so a strict 24h test would skip it and the automation would
 # drift into posting every *other* day. 23h absorbs that jitter while still
 # suppressing the automatic post when anything went out during the evening —
@@ -375,7 +375,7 @@ def list_tweets():
         replies_by_article.setdefault(reply.article_id, []).append(reply)
 
     latest_snapshot, follower_deltas = follower_trend()
-    # What the midnight automation will do next, so it isn't a black box.
+    # What the daily automation will do next, so it isn't a black box.
     pending = (
         Article.query
         .filter(Article.published == True,  # noqa: E712
