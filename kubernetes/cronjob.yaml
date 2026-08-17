@@ -85,3 +85,50 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Automatic daily share: post the oldest article never put on X.
+#
+# Posts at most one article per run, and only when nothing has gone out in the
+# last 23 hours — so a manual share during the evening suppresses it, and the
+# backlog drips out instead of arriving as a burst. No-op once every published
+# article has been shared. See tweets.auto_post().
+#
+# Schedule: every day at 00:00 Europe/Paris.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-x-autopost
+  namespace: default
+spec:
+  schedule: "0 0 * * *"           # daily midnight
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid       # two overlapping runs could double-post
+  # No startingDeadlineSeconds: if the cluster was busy at midnight we would
+  # rather skip the day than fire a public post at an unexpected hour.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0             # never retry a post — a retry after a
+                                  # partial failure risks tweeting twice
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: x-autopost
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "auto_tweet.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets   # DATABASE_OVH__*, BPOIGNANT_X__*
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

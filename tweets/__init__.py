@@ -142,6 +142,71 @@ def follower_trend():
     return latest, deltas
 
 
+# A run at 00:00 that follows yesterday's post at 00:00:05 has only 23h59m55s
+# of elapsed time, so a strict 24h test would skip it and the automation would
+# drift into posting every *other* day. 23h absorbs that jitter while still
+# suppressing the automatic post when anything went out during the evening —
+# including a share done by hand, which stamps the same column.
+AUTO_POST_MIN_GAP = timedelta(hours=23)
+
+
+def next_article_to_post():
+    """The oldest published article never shared on X, or None when the
+    backlog is empty."""
+    return (
+        Article.query
+        .filter(Article.published == True,  # noqa: E712 — SQL, not Python truthiness
+                Article.x_posted_at.is_(None))
+        .order_by(Article.created_at.asc())
+        .first()
+    )
+
+
+def last_post_at():
+    """When anything was last shared on X, automatic or by hand."""
+    from sqlalchemy import func
+    return db.session.query(func.max(Article.x_posted_at)).scalar()
+
+
+def auto_post():
+    """Share the oldest never-posted article, unless something went out in the
+    last 23 hours. Returns a dict describing what happened — `status` is one of
+    posted / too_soon / nothing_to_post / not_configured / failed.
+
+    Deliberately posts at most one article per run: the point is a steady drip
+    through the backlog, not a burst that reads as spam.
+    """
+    import x
+
+    if not x.is_configured():
+        return {'status': 'not_configured'}
+
+    last = last_post_at()
+    if last is not None:
+        elapsed = datetime.utcnow() - last
+        if elapsed < AUTO_POST_MIN_GAP:
+            return {'status': 'too_soon', 'last': last, 'elapsed': elapsed}
+
+    article = next_article_to_post()
+    if article is None:
+        return {'status': 'nothing_to_post'}
+
+    with _external_urls():
+        url = url_for('articles.public_show', slug=article.slug, _external=True)
+    text = x.compose_article_tweet(article.title, article.tweet_summary, url)
+
+    ok, detail = x.post_tweet(text)
+    if not ok:
+        log.error("auto_post failed for article %s: %s", article.id, detail)
+        return {'status': 'failed', 'article': article, 'detail': detail}
+
+    article.x_posted_at = datetime.utcnow()
+    article.x_post_id = str(detail) if detail else None
+    db.session.commit()
+    log.info("auto_post: article %s partagé (%s)", article.id, article.x_post_url)
+    return {'status': 'posted', 'article': article, 'text': text}
+
+
 def sync_metrics():
     """Refresh like / view / reply counts for every article we've tweeted.
     Returns the number of articles updated."""
@@ -310,12 +375,21 @@ def list_tweets():
         replies_by_article.setdefault(reply.article_id, []).append(reply)
 
     latest_snapshot, follower_deltas = follower_trend()
+    # What the midnight automation will do next, so it isn't a black box.
+    pending = (
+        Article.query
+        .filter(Article.published == True,  # noqa: E712
+                Article.x_posted_at.is_(None))
+        .count()
+    )
 
     return render_template(
         'tweets_admin_list.html',
         articles=articles,
         snapshot=latest_snapshot,
         follower_deltas=follower_deltas,
+        next_to_post=next_article_to_post(),
+        pending_count=pending,
         replies_by_article=replies_by_article,
         x_configured=x.is_configured(),
         last_sync=get_config(KEY_LAST_SYNC),
