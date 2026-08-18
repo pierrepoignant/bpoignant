@@ -98,6 +98,22 @@
 
 {% block admin_content %}
     <form method="POST" id="article-form" enctype="multipart/form-data">
+        {% if gdrive_configured %}
+        {# Same action as the button above the editor. Duplicated on purpose:
+           importing a Google Doc is usually the first step, and the other one
+           sits below every metadata field. #}
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 1rem 1.4rem; margin-bottom: 1.2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+            <div style="font-size: 0.9rem; color: var(--gris);">
+                <i class="fab fa-google-drive" style="color: var(--vert);"></i>
+                Vous partez d'un Google Doc ? Importez-le, le titre et le texte se remplissent tout seuls.
+            </div>
+            <button type="button" class="btn btn-sm btn-outline gdrive-import-btn"
+                    style="color: var(--vert); border-color: var(--vert); white-space: nowrap;">
+                <i class="fab fa-google-drive"></i> Importer depuis Google Drive
+            </button>
+        </div>
+        {% endif %}
+
         <div class="form-container" style="max-width: 100%;">
             <div class="form-row">
                 <div class="form-group" style="grid-column: span 1;">
@@ -191,7 +207,7 @@
                     Contenu (mise en forme)
                 </label>
                 {% if gdrive_configured %}
-                <button type="button" id="gdrive-import-btn" class="btn btn-sm btn-outline"
+                <button type="button" id="gdrive-import-btn" class="btn btn-sm btn-outline gdrive-import-btn"
                         style="color: var(--vert); border-color: var(--vert);">
                     <i class="fab fa-google-drive"></i> Importer depuis Google Drive
                 </button>
@@ -294,7 +310,7 @@
         const listUrl = "{{ url_for('admin_articles.gdrive_documents') }}";
         // Path param is filled in per document (placeholder swapped client-side).
         const docUrlTpl = "{{ url_for('admin_articles.gdrive_document', file_id='__ID__') }}";
-        const openBtn = document.getElementById('gdrive-import-btn');
+        const openBtns = document.querySelectorAll('.gdrive-import-btn');
         const overlay = document.getElementById('gd-overlay');
         const closeBtn = document.getElementById('gd-close');
         const listEl = document.getElementById('gd-list');
@@ -471,7 +487,7 @@
                 .catch(function () { msg('Erreur réseau lors de l’import.', true); });
         }
 
-        openBtn.addEventListener('click', open);
+        openBtns.forEach(function (b) { b.addEventListener('click', open); });
         closeBtn.addEventListener('click', close);
         overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
         document.addEventListener('keydown', function (e) {
