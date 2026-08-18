@@ -324,6 +324,37 @@ def verify_credentials():
     return False, {'error': f"{resp.status_code} — {detail}", 'access_level': access_level}
 
 
+def delete_tweet(tweet_id):
+    """Delete a tweet we posted. Returns (True, None) on success or
+    (False, reason) — same best-effort contract as post_tweet."""
+    cfg = _config()
+    if not is_configured():
+        return False, "X n'est pas configuré"
+
+    from requests_oauthlib import OAuth1
+    auth = OAuth1(
+        cfg['api_key'], cfg['api_secret'],
+        cfg['access_token'], cfg['access_secret'],
+    )
+    try:
+        resp = requests.delete(f"{TWEETS_URL}/{tweet_id}", auth=auth, timeout=15)
+    except requests.RequestException as exc:
+        log.error("delete_tweet network error: %s", exc)
+        return False, f"Erreur réseau : {exc}"
+
+    if 200 <= resp.status_code < 300:
+        return True, None
+
+    log.error("delete_tweet failed: status=%s body=%s", resp.status_code, resp.text[:300])
+    detail = resp.text[:200]
+    try:
+        body = resp.json()
+        detail = body.get('detail') or body.get('title') or detail
+    except ValueError:
+        pass
+    return False, f"{resp.status_code} — {detail}"
+
+
 def post_tweet(text: str):
     """Post `text` as a tweet. Returns (True, tweet_id) on success or
     (False, reason) otherwise — never raises, so callers can treat X as

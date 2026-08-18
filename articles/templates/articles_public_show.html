@@ -2,8 +2,12 @@
 {% block title %}{{ article.title }}{% endblock %}
 {% block meta_description %}{{ article.summary or (article.title ~ ' — Bernard Poignant') }}{% endblock %}
 {% block og_type %}article{% endblock %}
-{# Per-article illustration when there is one; base.html's portrait otherwise. #}
-{% if article.image_url %}{% block og_image %}{{ article.image_url }}{% endblock %}{% endif %}
+{# Per-article illustration when there is one; base.html's portrait otherwise.
+   The fallback MUST live inside the block: Jinja hoists block definitions at
+   compile time, so wrapping the block in an {% if %} does not stop it
+   overriding the parent — it just rendered "None" for every article without
+   an image, killing the preview on every share. #}
+{% block og_image %}{{ article.image_url or url_for('static', filename='images/bernardpoignant.jpg', _external=True) }}{% endblock %}
 {% block og_extra %}
     <meta property="article:published_time" content="{{ article.created_at.isoformat() }}Z">
     <meta property="article:modified_time"  content="{{ article.updated_at.isoformat() }}Z">
