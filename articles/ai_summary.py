@@ -1,10 +1,12 @@
-"""AI-generated article summaries in Bernard Poignant's tone of voice.
+"""AI-written article metadata: summaries in Bernard Poignant's voice, plus
+thematic classification.
 
-Two flavours, same voice:
   * `generate_summary`        — the editorial chapô shown on the site and in
                                 the newsletter: neutral, third person.
   * `generate_social_summary` — the line that accompanies the article on X:
                                 first person, livelier, made to be clicked.
+  * `generate_themes`         — 1–3 labels from a fixed vocabulary, used to
+                                browse the archive and to relate articles.
 
 Uses the Claude API (Anthropic SDK). The API key is read from
 `ANTHROPIC__API_KEY` (the app's `<SECTION>__<KEY>` secret convention, same as
@@ -68,6 +70,49 @@ pas de lien : le titre et le lien sont ajoutés automatiquement, ne les répète
 - Reste fidèle au contenu et aux positions de l'article : n'invente rien et ne durcis \
 pas le propos.
 Réponds uniquement par la phrase, sans aucun autre texte."""
+
+
+# Fixed vocabulary. A closed list is the point: free-form tags drift into
+# near-duplicates ("Europe", "européen", "UE") that make the archive less
+# navigable, not more. Tuned to what Bernard actually writes about — add to it
+# deliberately rather than letting the model invent labels.
+THEMES = [
+    'Bretagne',
+    'Décentralisation',
+    'Économie et dette',
+    'Éducation',
+    'Élections',
+    'Europe',
+    'Extrême droite',
+    'Gauche et socialisme',
+    'Histoire',
+    'Immigration',
+    'Institutions',
+    'International',
+    'La France insoumise',
+    'Laïcité',
+    'Médias et réseaux',
+    'Social-démocratie',
+]
+
+THEMES_SYSTEM_PROMPT = """Tu classes les articles du blog de Bernard Poignant, \
+homme politique français, socialiste, ancien maire de Quimper.
+
+Voici la liste FERMÉE des thèmes disponibles :
+{themes}
+
+À partir du titre et du texte fournis, choisis les thèmes qui correspondent \
+vraiment au propos de l'article.
+
+Règles :
+- Entre 1 et 3 thèmes, classés du plus pertinent au moins pertinent.
+- Uniquement des thèmes de la liste ci-dessus, recopiés à l'identique.
+- Ne retiens un thème que s'il est central dans l'article, pas s'il est \
+simplement mentionné en passant. Un seul thème juste vaut mieux que trois \
+approximatifs.
+- N'invente aucun thème nouveau.
+Réponds uniquement par les thèmes retenus, un par ligne, sans numérotation \
+ni ponctuation."""
 
 
 def _api_key():
@@ -138,6 +183,50 @@ def generate_summary(title, content_html):
     return _generate(
         SYSTEM_PROMPT, "Rédige la phrase de résumé.", title, content_html,
     )
+
+
+def generate_themes(title, content_html):
+    """Return 1–3 themes from the fixed vocabulary, or None when the API key is
+    missing. Anything the model returns that isn't in THEMES is dropped — the
+    prompt forbids invention, but the vocabulary is enforced here rather than
+    trusted."""
+    key = _api_key()
+    if not key:
+        return None
+    body = _plain_text(content_html)
+    if not body:
+        return []
+
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=key, timeout=30.0, max_retries=1)
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=200,
+        system=[{
+            'type': 'text',
+            'text': THEMES_SYSTEM_PROMPT.format(themes='\n'.join(f'- {t}' for t in THEMES)),
+            'cache_control': {'type': 'ephemeral'},
+        }],
+        messages=[{
+            'role': 'user',
+            'content': (
+                f"Titre : {title}\n\n"
+                f"Texte de l'article :\n{body}\n\n"
+                "Donne les thèmes."
+            ),
+        }],
+    )
+    text = ''.join(b.text for b in response.content if b.type == 'text')
+
+    by_lower = {t.lower(): t for t in THEMES}
+    picked = []
+    for line in text.splitlines():
+        cleaned = line.strip().lstrip('-•*0123456789. ').strip()
+        canonical = by_lower.get(cleaned.lower())
+        if canonical and canonical not in picked:
+            picked.append(canonical)
+    return picked[:3]
 
 
 def generate_social_summary(title, content_html):

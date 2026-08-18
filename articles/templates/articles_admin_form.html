@@ -97,7 +97,7 @@
 {% endblock %}
 
 {% block admin_content %}
-    <form method="POST" id="article-form">
+    <form method="POST" id="article-form" enctype="multipart/form-data">
         <div class="form-container" style="max-width: 100%;">
             <div class="form-row">
                 <div class="form-group" style="grid-column: span 1;">
@@ -127,6 +127,41 @@
                 <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
                     Sert à pré-remplir le tweet. Laissée vide, elle est rédigée par l'IA à
                     l'enregistrement ; à défaut, c'est le résumé ci-dessus qui est utilisé.
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="image_file">Image de l'article (optionnel)</label>
+                <input type="hidden" name="image_url" value="{{ article.image_url if article else '' }}">
+                {% if article and article.image_url %}
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.6rem;">
+                    <img src="{{ article.image_url }}" alt=""
+                         style="width: 140px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #e0e0e0;">
+                    <label style="font-size: 0.85rem; color: var(--gris); display: flex; align-items: center; gap: 0.4rem;">
+                        <input type="checkbox" name="remove_image" value="1" style="width: auto;">
+                        Retirer l'image
+                    </label>
+                </div>
+                {% endif %}
+                <input type="file" id="image_file" name="image_file" accept="image/*"
+                       style="width: 100%; padding: 10px; border: 2px dashed #e0e0e0; border-radius: 10px; font-family: inherit; background: white;">
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                    Sert d'illustration en haut de l'article et d'aperçu lors des partages
+                    (Facebook, X, WhatsApp). Sans image, c'est le portrait par défaut qui s'affiche.
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Thèmes</label>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.4rem 1rem;">
+                    {% for t in all_themes %}
+                    <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; font-weight: 400;">
+                        <input type="checkbox" name="themes" value="{{ t }}" style="width: auto;"
+                               {% if article and t in article.themes|map(attribute='name')|list %}checked{% endif %}>
+                        {{ t }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.4rem;">
+                    Laissés vides à la création, ils sont proposés par l'IA à l'enregistrement.
                 </div>
             </div>
             <div class="form-row">

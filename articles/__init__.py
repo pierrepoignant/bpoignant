@@ -6,7 +6,7 @@ from flask_login import current_user
 from slugify import slugify
 
 from init_db import db
-from articles.models import Article, Author
+from articles.models import Article, Author, Theme
 from articles.cleanup import clean_article_html, summarize_html, clean_text
 from auth import admin_required
 
@@ -62,11 +62,19 @@ def _unique_slug(title, exclude_id=None):
 def public_list():
     from engagement.models import Reaction, Comment
     from engagement import EMOJIS
-    articles = (
-        Article.query.filter_by(published=True)
-        .order_by(Article.created_at.desc())
-        .all()
-    )
+    # Free-text search over title, summary and body. At 25 articles a LIKE
+    # scan is far cheaper than maintaining an index, and MySQL's default
+    # collation makes it accent- and case-insensitive for free.
+    query = (request.args.get('q') or '').strip()
+    base = Article.query.filter_by(published=True)
+    if query:
+        like = f"%{query}%"
+        base = base.filter(db.or_(
+            Article.title.like(like),
+            Article.summary.like(like),
+            Article.content_html.like(like),
+        ))
+    articles = base.order_by(Article.created_at.desc()).all()
     # Reaction counts per article (emoji → n), computed in one grouped query
     # and kept in EMOJIS display order, dropping any emoji with no reactions.
     reactions_by_article = {}
@@ -108,12 +116,7 @@ def public_show(slug):
     article = Article.query.filter_by(slug=slug, published=True).first()
     if article is None:
         abort(404)
-    related = (
-        Article.query.filter(Article.published == True, Article.id != article.id)
-        .order_by(Article.created_at.desc())
-        .limit(4)
-        .all()
-    )
+    related = _related_articles(article)
     from engagement.models import Comment
     from engagement import reactions_context
     comments = (
@@ -128,6 +131,54 @@ def public_show(slug):
         comments=comments,
         reactions=reactions_context(article),
     )
+
+
+def _related_articles(article, limit=4):
+    """Other articles sharing a theme, newest first, topped up with recent
+    ones when the article has few or no themes — the page always shows
+    something rather than an empty block."""
+    theme_ids = {t.id for t in article.themes}
+    picked = []
+    if theme_ids:
+        candidates = (
+            Article.query
+            .filter(Article.published == True,  # noqa: E712
+                    Article.id != article.id,
+                    Article.themes.any(Theme.id.in_(theme_ids)))
+            .all()
+        )
+        # Rank by how many themes are shared, then by recency. Ordering by date
+        # alone lets an article sharing one theme outrank one sharing three,
+        # which is what "sur le même sujet" is supposed to surface.
+        candidates.sort(
+            key=lambda a: (-len(theme_ids & {t.id for t in a.themes}), -a.created_at.timestamp())
+        )
+        picked = candidates[:limit]
+    if len(picked) < limit:
+        seen = {a.id for a in picked} | {article.id}
+        filler = (
+            Article.query
+            .filter(Article.published == True,  # noqa: E712
+                    Article.id.notin_(seen))
+            .order_by(Article.created_at.desc())
+            .limit(limit - len(picked))
+            .all()
+        )
+        picked.extend(filler)
+    return picked
+
+
+@articles_bp.route('/theme/<slug>')
+def public_theme(slug):
+    theme = Theme.query.filter_by(slug=slug).first() or abort(404)
+    articles = (
+        Article.query
+        .filter(Article.published == True,  # noqa: E712
+                Article.themes.any(Theme.id == theme.id))
+        .order_by(Article.created_at.desc())
+        .all()
+    )
+    return render_template('articles_public_theme.html', theme=theme, articles=articles)
 
 
 # ─── ADMIN ──────────────────────────────────────────────────
@@ -310,6 +361,7 @@ def create_article():
         authors=authors,
         default_author_id=(default.id if default else None),
         gdrive_configured=gdrive_is_configured(),
+        all_themes=ai_summary_themes(),
     )
 
 
@@ -326,6 +378,7 @@ def edit_article(article_id):
         authors=_all_authors(),
         default_author_id=None,
         gdrive_configured=gdrive_is_configured(),
+        all_themes=ai_summary_themes(),
     )
 
 
@@ -549,12 +602,44 @@ def _auto_social_summary(title, content_html):
         return ''
 
 
+def ai_summary_themes():
+    from articles.ai_summary import THEMES
+    return THEMES
+
+
+def _theme_by_name(name):
+    """Get-or-create a Theme row. The vocabulary is fixed in ai_summary.THEMES,
+    so rows are created lazily the first time a theme is actually used rather
+    than seeded up front."""
+    theme = Theme.query.filter_by(name=name).first()
+    if theme is None:
+        theme = Theme(name=name, slug=slugify(name))
+        db.session.add(theme)
+        db.session.flush()
+    return theme
+
+
+def _auto_themes(title, content_html):
+    """Ask the AI to classify the article. Returns [] when the AI is
+    unavailable — an untagged article is fine, a wrongly tagged one is not."""
+    try:
+        from articles.ai_summary import generate_themes
+        return [_theme_by_name(n) for n in (generate_themes(title, content_html) or [])]
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.warning(f"AI themes on save failed: {exc}")
+        return []
+
+
 def _save_article(article):
     # Normalise the title's typography (space after commas, etc.) whatever its
     # source — typed, edited, or imported.
     title = clean_text((request.form.get('title') or '').strip())
     summary = (request.form.get('summary') or '').strip()
     social_summary = (request.form.get('social_summary') or '').strip()
+    # Themes the admin ticked; empty means "let the AI decide" on first save.
+    chosen_themes = request.form.getlist('themes')
+    image_url = (request.form.get('image_url') or '').strip()
     content_html = clean_article_html(_clean_html(request.form.get('content_html')))
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))
@@ -571,6 +656,18 @@ def _save_article(article):
         summary = _autosummary(title, content_html)
         auto_summary = bool(summary)
 
+    # An uploaded file wins over whatever the hidden URL field carried, so
+    # re-saving without choosing a new image keeps the current one.
+    if request.form.get('remove_image'):
+        image_url = ''
+    upload = request.files.get('image_file')
+    if upload and upload.filename:
+        import storage
+        try:
+            image_url = storage.upload_image(upload)
+        except storage.StorageError as exc:
+            flash(f"Image non enregistrée : {exc}", 'danger')
+
     # Same rule for the social line used on X.
     auto_social = False
     if not social_summary and content_html:
@@ -583,6 +680,7 @@ def _save_article(article):
             slug=_unique_slug(title),
             summary=summary,
             social_summary=social_summary or None,
+            image_url=image_url or None,
             content_html=content_html,
             published=published,
             created_at=created_at or datetime.utcnow(),
@@ -596,11 +694,22 @@ def _save_article(article):
         article.title = title
         article.summary = summary
         article.social_summary = social_summary or None
+        article.image_url = image_url or None
         article.content_html = content_html
         article.published = published
         article.author_id = author.id if author else None
         if created_at is not None:
             article.created_at = created_at
+
+    # Explicit ticks always win; the AI only fills a blank slate.
+    auto_theme = False
+    if chosen_themes:
+        article.themes = [_theme_by_name(n) for n in chosen_themes
+                          if n in ai_summary_themes()]
+    elif not article.themes and content_html:
+        found = _auto_themes(title, content_html)
+        article.themes = found
+        auto_theme = bool(found)
 
     db.session.commit()
     if auto_summary and auto_social:
@@ -751,6 +860,49 @@ def propose_social_summaries():
         msg = f"{filled} accroche(s) X rédigée(s) par l'IA"
         if failed:
             msg += f" — {failed} échec(s)"
+        if remaining > 0:
+            msg += f". {remaining} restant(s), relancez pour continuer"
+        flash(msg + ".", 'success')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/propose-themes', methods=['POST'])
+@admin_required
+def propose_themes():
+    """Classify every article that has no theme yet. Same bounded-per-click
+    shape as the summary backfills — sequential AI calls are slow."""
+    from flask import current_app
+    from articles.ai_summary import generate_themes, is_configured
+
+    MAX_AI_PER_RUN = 12
+
+    if not is_configured():
+        flash("IA non configurée — définissez ANTHROPIC__API_KEY pour classer les articles.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
+               if not a.themes and (a.content_html or '').strip()]
+
+    tagged = failed = 0
+    for article in pending[:MAX_AI_PER_RUN]:
+        try:
+            names = generate_themes(article.title, article.content_html or '')
+        except Exception as exc:
+            current_app.logger.warning(f"AI themes failed for article {article.id}: {exc}")
+            failed += 1
+            continue
+        if names:
+            article.themes = [_theme_by_name(n) for n in names]
+            tagged += 1
+    db.session.commit()
+
+    if not tagged:
+        flash("Aucun thème ajouté — tous les articles sont déjà classés." if not failed
+              else f"Aucun thème ajouté ({failed} échec(s) côté IA).",
+              'info' if not failed else 'danger')
+    else:
+        remaining = len(pending) - tagged
+        msg = f"{tagged} article(s) classé(s) par thème"
         if remaining > 0:
             msg += f". {remaining} restant(s), relancez pour continuer"
         flash(msg + ".", 'success')

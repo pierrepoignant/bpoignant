@@ -3,6 +3,29 @@ from datetime import datetime
 from init_db import db
 
 
+# Many-to-many between articles and themes. Themes come from a fixed
+# vocabulary (see articles/ai_summary.py) rather than free-form tags: a closed
+# list keeps the archive navigable, where free tagging would drift into
+# near-duplicates nobody can browse.
+article_themes = db.Table(
+    'article_themes',
+    db.Column('article_id', db.Integer, db.ForeignKey('articles.id'), primary_key=True),
+    db.Column('theme_id', db.Integer, db.ForeignKey('themes.id'), primary_key=True),
+)
+
+
+class Theme(db.Model):
+    __tablename__ = 'themes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    slug = db.Column(db.String(80), unique=True, nullable=False, index=True)
+
+    @property
+    def published_articles(self):
+        return [a for a in self.articles if a.published]
+
+
 class Author(db.Model):
     __tablename__ = 'authors'
 
@@ -43,11 +66,18 @@ class Article(db.Model):
     x_reply_count = db.Column(db.Integer, nullable=True)
     x_retweet_count = db.Column(db.Integer, nullable=True)
     x_metrics_at = db.Column(db.DateTime, nullable=True)
+    # Illustration used for the article header and, more importantly, as the
+    # og:image / twitter:image. Without it every share — including the daily
+    # automatic tweet — falls back to the same portrait.
+    image_url = db.Column(db.String(500), nullable=True)
     # author_id used to point at users.id; it now points at the standalone
     # `authors` table — authors are not necessarily login users.
     author_id = db.Column(db.Integer, db.ForeignKey('authors.id'), nullable=True)
 
     author = db.relationship('Author', backref='articles', lazy='joined')
+    themes = db.relationship('Theme', secondary=article_themes,
+                             backref=db.backref('articles', lazy='selectin'),
+                             lazy='selectin', order_by='Theme.name')
 
     @property
     def x_post_url(self):

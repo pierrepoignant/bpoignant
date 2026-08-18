@@ -14,7 +14,7 @@
     <meta name="google-site-verification" content="{{ google_site_verification }}">
     {% endif %}
     <link rel="canonical" href="{% block canonical %}{{ request.base_url }}{% endblock %}">
-    <link rel="alternate" type="application/rss+xml" title="{{ site_name }} — Articles" href="{{ url_for('articles.public_list', _external=True) }}">
+    <link rel="alternate" type="application/rss+xml" title="{{ site_name }} — Articles" href="{{ url_for('feed_xml', _external=True) }}">
 
 
     {# ─── SEO: Open Graph (Facebook, LinkedIn, WhatsApp…) ─────── #}

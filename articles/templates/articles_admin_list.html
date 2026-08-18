@@ -32,6 +32,14 @@
                     <i class="fa-brands fa-x-twitter"></i> Accroches manquantes (IA)
                 </button>
             </form>
+            <form method="POST" action="{{ url_for('admin_articles.propose_themes') }}" style="margin: 0;"
+                  onsubmit="return confirm('Classer par thème, avec l&#39;IA, les articles qui n&#39;en ont pas ?')">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Attribuer 1 à 3 thèmes par IA aux articles non classés">
+                    <i class="fas fa-tags"></i> Thèmes manquants (IA)
+                </button>
+            </form>
             <form method="POST" action="{{ url_for('admin_articles.cleanup_all') }}" style="margin: 0;"
                   onsubmit="return confirm('Nettoyer le HTML de tous les articles ? (supprime les &lt;br&gt;, ajoute les espaces manquants, etc.)')">
                 <button type="submit" class="btn btn-sm btn-outline"

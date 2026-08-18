@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}{{ theme.name }}{% endblock %}
+{% block meta_description %}Les articles de Bernard Poignant sur le thème « {{ theme.name }} ».{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3.5rem 2rem; color: white;">
+    <div style="max-width: 800px; margin: 0 auto;">
+        <a href="{{ url_for('articles.public_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Tous les articles</a>
+        <h1 style="font-size: 2.2rem; font-weight: 800; margin: 0.5rem 0 0.6rem;">{{ theme.name }}</h1>
+        <p style="color: rgba(255,255,255,0.75); margin: 0;">
+            {{ articles|length }} article{{ 's' if articles|length != 1 else '' }} sur ce thème
+        </p>
+    </div>
+</section>
+
+<section class="section section-tight">
+    {% if articles %}
+    <div class="themes-grid">
+        {% for a in articles %}
+        <a href="{{ url_for('articles.public_show', slug=a.slug) }}" class="theme-tile">
+            <div class="tile-numero">{{ '%02d' % loop.index }}</div>
+            <div class="tile-icon"><i class="fas fa-feather-alt"></i></div>
+            <h3>{{ a.title }}</h3>
+            <p>{{ a.summary or '' }}</p>
+            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
+                <i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}
+            </div>
+            <div class="tile-cta">Lire l'article <i class="fas fa-arrow-right"></i></div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris);">
+        <p>Aucun article publié sur ce thème pour l'instant.</p>
+    </div>
+    {% endif %}
+</section>
+
+{% include '_newsletter_form.html' %}
+{% endblock %}

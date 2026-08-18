@@ -163,6 +163,56 @@ def create_app(db_name='ovh'):
         )
         return Response(body, mimetype='text/plain')
 
+    @app.route('/feed.xml')
+    def feed_xml():
+        """RSS 2.0 feed of published articles.
+
+        base.html has always advertised a feed via <link rel="alternate">, but
+        pointed it at /articles/ — an HTML page, which no reader can parse.
+        This is the document that link should have resolved to.
+        """
+        from flask import Response
+        from email.utils import format_datetime
+        from xml.sax.saxutils import escape
+        from articles.models import Article
+
+        articles = (
+            Article.query.filter_by(published=True)
+            .order_by(Article.created_at.desc())
+            .limit(30)
+            .all()
+        )
+        site = url_for('articles.public_list', _external=True)
+        built = format_datetime(datetime.utcnow())
+
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
+            '  <channel>',
+            f'    <title>{escape(app.config["SITE_NAME"])}</title>',
+            f'    <link>{site}</link>',
+            f'    <description>{escape(app.config["SITE_TAGLINE"])}</description>',
+            '    <language>fr</language>',
+            f'    <lastBuildDate>{built}</lastBuildDate>',
+            f'    <atom:link href="{url_for("feed_xml", _external=True)}" rel="self" type="application/rss+xml"/>',
+        ]
+        for a in articles:
+            link = url_for('articles.public_show', slug=a.slug, _external=True)
+            lines += [
+                '    <item>',
+                f'      <title>{escape(a.title)}</title>',
+                f'      <link>{link}</link>',
+                # Permalink doubles as the id: stable, and unique per article.
+                f'      <guid isPermaLink="true">{link}</guid>',
+                f'      <pubDate>{format_datetime(a.created_at)}</pubDate>',
+                f'      <description>{escape(a.summary or "")}</description>',
+            ]
+            for theme in a.themes:
+                lines.append(f'      <category>{escape(theme.name)}</category>')
+            lines.append('    </item>')
+        lines += ['  </channel>', '</rss>']
+        return Response('\n'.join(lines), mimetype='application/rss+xml')
+
     @app.route('/sitemap.xml')
     def sitemap_xml():
         from flask import Response
@@ -295,6 +345,9 @@ def _migrate_schema():
                 db.session.commit()
         if 'x_metrics_at' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN x_metrics_at DATETIME NULL"))
+            db.session.commit()
+        if 'image_url' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN image_url VARCHAR(500) NULL"))
             db.session.commit()
 
 
