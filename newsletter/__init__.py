@@ -264,6 +264,7 @@ def list_subscribers():
         pagination=active_pg,
         pending=pending,
         bounced=bounced,
+        recoverable_count=len([b for b in bounced if is_recoverable_bounce(b.bounce_reason)]),
         unsubscribed=unsubscribed,
         suspicious_ids=suspicious_ids,
         suspicious_count=len(suspicious_ids),
@@ -474,6 +475,69 @@ def purge_pending():
     subs = Subscriber.query.filter(Subscriber.confirmed_at.is_(None)).all()
     n = _delete_subscribers(subs)
     flash(f"{n} inscription(s) non confirmée(s) supprimée(s).", 'success' if n else 'info')
+    return redirect(url_for('admin_subscribers.list_subscribers'))
+
+
+# Bounces that say nothing about the address itself: a full mailbox, or the
+# recipient's server refusing *us* (IP reputation, tenant policy). Those rows
+# are worth un-suppressing after a fix — unlike "user unknown", where the
+# mailbox is simply gone and re-mailing it costs sender reputation.
+#
+# Matching is allow-list only: anything that doesn't match one of these stays
+# suppressed. That way an unfamiliar bounce string is never resurrected by
+# accident. Order matters less than the default — note that Orange returns
+# "552 5.1.1 ... Boite du destinataire pleine" for a full mailbox, so testing
+# for the full-mailbox wording is what keeps it out of the 5.1.1 dead pile.
+RECOVERABLE_BOUNCE_PATTERNS = (
+    r'^4\d\d',                     # 4xx is transient by definition
+    r'out of storage',
+    r'mailbox (is )?full',
+    r'bo[iî]te du destinataire pleine',
+    r'over ?quota',
+    r'5\.2\.2',                    # mailbox full (RFC 3463)
+    r'banned sender',
+    r'access denied',
+    r'5\.7\.1\b', r'5\.7\.511',   # policy / sender refused
+    r'sendgrid\.net',              # our own relay named in the refusal
+)
+
+
+def is_recoverable_bounce(reason):
+    """True when the bounce blamed the mailbox's state or our sender, not the
+    address. Unknown wording returns False — the safe direction."""
+    if not reason:
+        return False
+    text = reason.lower()
+    return any(re.search(pat, text) for pat in RECOVERABLE_BOUNCE_PATTERNS)
+
+
+def recoverable_bounces():
+    """Suppressed subscribers whose bounce looks worth retrying."""
+    return [
+        s for s in Subscriber.query.filter(Subscriber.bounced_at.isnot(None)).all()
+        if is_recoverable_bounce(s.bounce_reason)
+    ]
+
+
+@admin_subscribers_bp.route('/retry-bounced', methods=['POST'])
+@admin_required
+def retry_bounced():
+    """Clear the suppression on bounces that were not the address's fault, so
+    the next campaign tries them again. If one fails for real, the SendGrid
+    sync re-suppresses it with a fresh reason — so this is self-correcting."""
+    subs = recoverable_bounces()
+    for sub in subs:
+        sub.bounced_at = None
+        sub.bounce_reason = None
+    db.session.commit()
+    if subs:
+        flash(
+            f"{len(subs)} adresse(s) réactivée(s) — boîte pleine ou envoi refusé, "
+            "l'adresse elle-même est valide. Elles repartiront au prochain envoi.",
+            'success',
+        )
+    else:
+        flash("Aucune adresse à réactiver : les erreurs restantes sont des boîtes inexistantes.", 'info')
     return redirect(url_for('admin_subscribers.list_subscribers'))
 
 

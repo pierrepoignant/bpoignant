@@ -152,15 +152,30 @@
         <h2 style="font-size: 1.2rem; margin: 0;">
             <i class="fas fa-envelope-circle-check" style="color: var(--rouge);"></i> En erreur / bounce ({{ bounced|length }})
         </h2>
-        <form method="POST" action="{{ url_for('admin_subscribers.purge_bounced') }}" style="margin: 0;"
-              onsubmit="return confirm('Supprimer les {{ bounced|length }} adresse(s) en erreur ?')">
-            <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
-                <i class="fas fa-broom"></i> Tout supprimer
-            </button>
-        </form>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% if recoverable_count %}
+            <form method="POST" action="{{ url_for('admin_subscribers.retry_bounced') }}" style="margin: 0;"
+                  onsubmit="return confirm('Réactiver les {{ recoverable_count }} adresse(s) dont l\u2019erreur ne venait pas de l\u2019adresse (boîte pleine, envoi refusé) ?')">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Lever la suppression sur les rebonds temporaires : boîte pleine, ou serveur qui a refusé l&#39;expéditeur">
+                    <i class="fas fa-rotate-left"></i> Réactiver {{ recoverable_count }} adresse{{ 's' if recoverable_count != 1 else '' }}
+                </button>
+            </form>
+            {% endif %}
+            <form method="POST" action="{{ url_for('admin_subscribers.purge_bounced') }}" style="margin: 0;"
+                  onsubmit="return confirm('Supprimer les {{ bounced|length }} adresse(s) en erreur ?')">
+                <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
+                    <i class="fas fa-broom"></i> Tout supprimer
+                </button>
+            </form>
+        </div>
     </div>
     <p style="color: var(--gris); font-size: 0.85rem; margin: -0.4rem 0 1rem;">
         Adresses signalées par SendGrid (rebond, blocage ou plainte spam). Elles ne sont plus jamais contactées.
+        « Réactiver » ne concerne que celles dont l'erreur ne venait pas de l'adresse — boîte pleine, ou serveur
+        qui a refusé l'expéditeur : l'adresse est valide et mérite un nouvel essai. Les boîtes inexistantes
+        restent supprimées.
     </p>
     <div style="background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); overflow: hidden;">
         <div class="admin-table-wrap">
