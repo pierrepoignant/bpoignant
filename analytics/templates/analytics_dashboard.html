@@ -161,6 +161,58 @@
         </div>
     </div>
 
+    {# Recherches : ce que les lecteurs cherchent, et ce qu'ils n'ont pas trouvé. #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
+                <i class="fas fa-search" style="color: var(--vert-fonce);"></i> Recherches
+                <span style="font-weight: 400; color: var(--gris); font-size: 0.85rem;">({{ total_searches }})</span>
+            </h2>
+            {% if top_searches %}
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                {% for r in top_searches %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0; word-break: break-word;">
+                        <a href="{{ url_for('articles.public_list', q=r.term) }}" target="_blank" rel="noopener"
+                           style="color: var(--noir);">{{ r.term }}</a>
+                        {% if r.results == 0 %}
+                        <span style="color: var(--rouge); font-size: 0.78rem;">· sans résultat</span>
+                        {% else %}
+                        <span style="color: var(--gris); font-size: 0.78rem;">· {{ r.results }} résultat{{ 's' if r.results != 1 else '' }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p style="color: var(--gris); margin: 0;">Aucune recherche sur cette période.</p>
+            {% endif %}
+        </div>
+
+        <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <h2 style="font-size: 1.1rem; margin: 0 0 0.4rem;">
+                <i class="fas fa-lightbulb" style="color: var(--rouge);"></i> Sans résultat
+            </h2>
+            <p style="color: var(--gris); font-size: 0.82rem; margin: 0 0 0.8rem;">
+                Ce que des lecteurs ont cherché sans rien trouver — des sujets à écrire,
+                ou des mots absents des articles existants.
+            </p>
+            {% if empty_searches %}
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                {% for r in empty_searches %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0; word-break: break-word;">{{ r.term }}</td>
+                    <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p style="color: var(--gris); margin: 0;">Toutes les recherches ont donné des résultats.</p>
+            {% endif %}
+        </div>
+    </div>
+
     {% if countries %}
     <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
         <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-globe-europe" style="color: var(--rouge);"></i> Pays</h2>

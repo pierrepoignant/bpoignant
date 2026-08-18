@@ -7,7 +7,7 @@ from flask_login import current_user
 from sqlalchemy import func
 
 from init_db import db
-from analytics.models import PageView
+from analytics.models import PageView, SearchQuery
 from auth import admin_required
 
 
@@ -87,6 +87,24 @@ def _log_view(response):
         current_app.logger.warning(f"analytics: failed to log view: {exc}")
         db.session.rollback()
     return response
+
+
+def log_search(query, results_count):
+    """Record a public search. Applies the same bot/admin filtering as page
+    views, so the two datasets stay comparable and admin testing doesn't show
+    up as reader demand. Never raises: a failed log must not break the page."""
+    try:
+        if _should_skip():
+            return
+        normalised = re.sub(r'\s+', ' ', (query or '')).strip().lower()
+        if not normalised:
+            return
+        db.session.add(SearchQuery(term=normalised[:200],
+                                   results_count=results_count))
+        db.session.commit()
+    except Exception as exc:
+        current_app.logger.warning(f"analytics: failed to log search: {exc}")
+        db.session.rollback()
 
 
 def register_tracking(app):
@@ -248,6 +266,31 @@ def dashboard():
         func.count(PageView.id).desc()
     ).limit(10).all()
 
+    # Searches over the same window. Two lists on purpose: the popular terms
+    # say what readers come for, the empty-handed ones say what the archive is
+    # missing — which is the list worth acting on.
+    search_window = [SearchQuery.created_at >= since]
+    if until is not None:
+        search_window.append(SearchQuery.created_at < until)
+
+    top_searches = db.session.query(
+        SearchQuery.term,
+        func.count(SearchQuery.id).label('n'),
+        func.max(SearchQuery.results_count).label('results'),
+    ).filter(*search_window).group_by(SearchQuery.term).order_by(
+        func.count(SearchQuery.id).desc()
+    ).limit(15).all()
+
+    empty_searches = db.session.query(
+        SearchQuery.term, func.count(SearchQuery.id).label('n')
+    ).filter(*search_window, SearchQuery.results_count == 0).group_by(
+        SearchQuery.term
+    ).order_by(func.count(SearchQuery.id).desc()).limit(15).all()
+
+    total_searches = db.session.query(func.count(SearchQuery.id)).filter(
+        *search_window
+    ).scalar() or 0
+
     # Series: views + unique visitors per bucket (day / week / month). The "Hier"
     # shortcut keeps its single upper-bounded day; everything else is bucketed
     # over the window, with whole boundary weeks/months shown.
@@ -301,4 +344,7 @@ def dashboard():
         max_views=max_views,
         recent=recent,
         countries=country_rows,
+        top_searches=top_searches,
+        empty_searches=empty_searches,
+        total_searches=total_searches,
     )

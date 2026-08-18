@@ -75,6 +75,11 @@ def public_list():
             Article.content_html.like(like),
         ))
     articles = base.order_by(Article.created_at.desc()).all()
+    if query:
+        # Logged after the query runs so the result count is recorded with the
+        # term — a search returning nothing is the actionable kind.
+        from analytics.tracking import log_search
+        log_search(query, len(articles))
     # Reaction counts per article (emoji → n), computed in one grouped query
     # and kept in EMOJIS display order, dropping any emoji with no reactions.
     reactions_by_article = {}

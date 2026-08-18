@@ -114,7 +114,7 @@ def create_app(db_name='ovh'):
     app.register_blueprint(pages_bp)
     app.register_blueprint(admin_pages_bp)
 
-    from analytics.models import PageView  # noqa: F401
+    from analytics.models import PageView, SearchQuery  # noqa: F401
     from analytics import analytics_bp, register_tracking
     app.register_blueprint(analytics_bp)
     register_tracking(app)
