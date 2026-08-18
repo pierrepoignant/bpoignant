@@ -258,6 +258,26 @@ def _truncate(s: str, n: int) -> str:
     return cut + '…'
 
 
+def share_url(url, source='x'):
+    """Append a UTM source to a link being shared on X.
+
+    Two purposes. It attributes traffic, so X shows up distinctly in the
+    referrer stats instead of blending into direct visits. And it gives X a
+    URL it has not crawled before: X caches card metadata per exact URL, with
+    no way to force a refresh since the Card Validator was retired, so a page
+    whose tags were broken when X first saw it would otherwise keep serving a
+    broken card for about a week.
+
+    Safe for SEO: base.html emits rel="canonical" from request.base_url, which
+    drops the query string, so search engines still see one URL. Analytics logs
+    request.path, so page-view counts don't fragment either.
+    """
+    if not url:
+        return url
+    separator = '&' if '?' in url else '?'
+    return f"{url}{separator}utm_source={source}"
+
+
 def compose_article_tweet(title: str, summary: str, url: str, limit: int = TWEET_LIMIT) -> str:
     """Build a tweet for an article: title, then the summary (trimmed to fit),
     then the link on its own line. Always <= `limit` counted characters, where

@@ -222,14 +222,15 @@ def list_articles():
         .all()
     )
 
-    from x import is_configured as x_is_configured, compose_article_tweet
+    from x import (is_configured as x_is_configured, compose_article_tweet,
+                   share_url as x_share_url)
     x_configured = x_is_configured()
     # Proposed (editable) tweet text per published article, for the share modal.
     x_proposed_by_article = {}
     if x_configured:
         for a in articles:
             if a.published:
-                url = url_for('articles.public_show', slug=a.slug, _external=True)
+                url = x_share_url(url_for('articles.public_show', slug=a.slug, _external=True))
                 x_proposed_by_article[a.id] = compose_article_tweet(a.title, a.tweet_summary, url)
 
     return render_template(
@@ -277,7 +278,7 @@ def post_to_x(article_id):
     """Post the article to X using the text edited in the share modal. Falls
     back to the auto-composed text if the field came through empty. Stamps
     ``x_posted_at`` on success."""
-    from x import is_configured, compose_article_tweet, post_tweet
+    from x import is_configured, compose_article_tweet, post_tweet, share_url
 
     article = db.session.get(Article, article_id) or abort(404)
     if not article.published:
@@ -297,7 +298,7 @@ def post_to_x(article_id):
 
     text = (request.form.get('text') or '').strip()
     if not text:
-        url = url_for('articles.public_show', slug=article.slug, _external=True)
+        url = share_url(url_for('articles.public_show', slug=article.slug, _external=True))
         text = compose_article_tweet(article.title, article.tweet_summary, url)
 
     ok, detail = post_tweet(text)

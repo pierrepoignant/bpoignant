@@ -192,7 +192,7 @@ def auto_post():
         return {'status': 'nothing_to_post'}
 
     with _external_urls():
-        url = url_for('articles.public_show', slug=article.slug, _external=True)
+        url = x.share_url(url_for('articles.public_show', slug=article.slug, _external=True))
     text = x.compose_article_tweet(article.title, article.tweet_summary, url)
 
     ok, detail = x.post_tweet(text)
