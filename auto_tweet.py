@@ -1,13 +1,14 @@
 """Daily automatic share: post the oldest article that has never been on X.
 
 Runs at 09:30 Europe/Paris and posts at most one article, and only when nothing
-has gone out in the last 23 hours — so a share done by hand during the evening
-suppresses the automatic one, and the backlog drips out rather than arriving as
-a burst. When every published article has been shared, the run is a no-op.
+has already gone out that day — so a share done by hand suppresses the
+automatic one, and the backlog drips out rather than arriving as a burst. When
+every published article has been shared, the run is a no-op.
 
-The 23h (rather than 24h) window is deliberate: a run at 09:30 following
-yesterday's post at 09:30:05 would otherwise measure 23h59m55s and skip,
-drifting the automation into posting every other day.
+The test is a Paris calendar day rather than a rolling window. A window is
+measured from the last post, not from the schedule, so any post later in the
+day than the 09:30 slot pushes the next run under the threshold and silently
+costs a day.
 
 Wired to the `bpoignant-x-autopost` k8s CronJob.
 
@@ -34,13 +35,12 @@ def main():
     app = create_app(args.db)
     with app.app_context():
         from tweets import (
-            auto_post, last_post_at, next_article_to_post, AUTO_POST_MIN_GAP,
+            auto_post, last_post_at, next_article_to_post, already_posted_today,
         )
-        from datetime import datetime
 
         if args.dry_run:
             last = last_post_at()
-            if last is not None and datetime.utcnow() - last < AUTO_POST_MIN_GAP:
+            if already_posted_today():
                 print(f"Rien à faire — dernier partage le {last:%d/%m/%Y à %H:%M} UTC.")
                 return
             article = next_article_to_post()

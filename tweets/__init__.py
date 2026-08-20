@@ -21,7 +21,8 @@ New replies are e-mailed once, to the same admins that get comment alerts.
 import logging
 import os
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint, current_app, flash, has_request_context, redirect,
@@ -142,12 +143,32 @@ def follower_trend():
     return latest, deltas
 
 
-# A run at 09:30 that follows yesterday's post at 09:30:05 has only 23h59m55s
-# of elapsed time, so a strict 24h test would skip it and the automation would
-# drift into posting every *other* day. 23h absorbs that jitter while still
-# suppressing the automatic post when anything went out during the evening —
-# including a share done by hand, which stamps the same column.
-AUTO_POST_MIN_GAP = timedelta(hours=23)
+# The schedule is expressed in Paris time, so "already posted today" has to be
+# judged in Paris time too.
+PARIS = ZoneInfo('Europe/Paris')
+
+
+def _paris_day(dt_utc):
+    """Calendar date in Paris for a naive-UTC timestamp."""
+    return dt_utc.replace(tzinfo=timezone.utc).astimezone(PARIS).date()
+
+
+def already_posted_today():
+    """True when something already went out today, Paris time.
+
+    This replaced a "≥ 23h since the last post" window, which looked
+    equivalent and wasn't. The window is measured from the *last post*, not
+    from the schedule, so any post later in the day than the 09:30 slot pushed
+    the next day's run under the threshold: a manual share at 11:56 left the
+    following 09:30 run measuring 21h33 and skipping the day entirely. No
+    threshold fixes that — lower it enough to survive a late-morning share and
+    it stops suppressing an evening one.
+
+    A calendar day is what "one article per day" actually means, and it can't
+    drift no matter when a manual share happens.
+    """
+    last = last_post_at()
+    return last is not None and _paris_day(last) == _paris_day(datetime.utcnow())
 
 
 def next_article_to_post():
@@ -169,8 +190,8 @@ def last_post_at():
 
 
 def auto_post():
-    """Share the oldest never-posted article, unless something went out in the
-    last 23 hours. Returns a dict describing what happened — `status` is one of
+    """Share the oldest never-posted article, unless something already went
+    out today (Paris time). Returns a dict describing what happened — `status` is one of
     posted / too_soon / nothing_to_post / not_configured / failed.
 
     Deliberately posts at most one article per run: the point is a steady drip
@@ -181,11 +202,10 @@ def auto_post():
     if not x.is_configured():
         return {'status': 'not_configured'}
 
-    last = last_post_at()
-    if last is not None:
-        elapsed = datetime.utcnow() - last
-        if elapsed < AUTO_POST_MIN_GAP:
-            return {'status': 'too_soon', 'last': last, 'elapsed': elapsed}
+    if already_posted_today():
+        last = last_post_at()
+        return {'status': 'too_soon', 'last': last,
+                'elapsed': datetime.utcnow() - last}
 
     article = next_article_to_post()
     if article is None:
