@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}La lettre de Bernard Poignant{% endblock %}
+{% block meta_description %}Chaque article de Bernard Poignant par e-mail : République, laïcité, décentralisation, Bretagne, et la gauche telle qu'elle est. Un article, un message, rien d'autre.{% endblock %}
+{% block og_title %}La lettre de Bernard Poignant{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 4.5rem 2rem 4rem; color: white;">
+    <div style="max-width: 720px; margin: 0 auto; text-align: center;">
+        <div style="font-size: 2.6rem; margin-bottom: 0.8rem;"><i class="far fa-envelope-open" style="color: var(--vert);"></i></div>
+        <h1 style="font-size: 2.4rem; font-weight: 800; margin: 0 0 1rem; line-height: 1.15;">
+            La lettre de <span style="color: var(--vert);">Bernard Poignant</span>
+        </h1>
+        <p style="font-size: 1.15rem; color: rgba(255,255,255,0.88); margin: 0 0 0.6rem; line-height: 1.6;">
+            J'écris sur la politique française sans passer par les commentateurs.
+            Quand un article paraît, vous le recevez. C'est tout.
+        </p>
+        <p style="color: rgba(255,255,255,0.6); font-size: 0.95rem; margin: 0;">
+            Un article, un e-mail — ni lettre quotidienne, ni relance, ni publicité.
+        </p>
+    </div>
+</section>
+
+{# ── Ce dont je parle : les thèmes réels de l'archive ── #}
+{% if themes %}
+<section class="section section-tight" style="padding-bottom: 1rem;">
+    <div style="max-width: 760px; margin: 0 auto; text-align: center;">
+        <h2 style="font-size: 1.4rem; margin: 0 0 0.4rem;">Ce dont je parle</h2>
+        <p style="color: var(--gris); margin: 0 0 1.4rem;">
+            {{ total_articles }} articles publiés à ce jour. Les sujets qui reviennent :
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;">
+            {% for t in themes %}
+            <a href="{{ url_for('articles.public_theme', slug=t.slug) }}"
+               style="background: var(--gris-clair); color: var(--noir); padding: 6px 16px; border-radius: 50px; font-size: 0.9rem; text-decoration: none;">
+                {{ t.name }}
+                <span style="color: var(--gris);">{{ t.published_articles | length }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Les derniers textes, tirés en direct ── #}
+{% if recent %}
+<section class="section section-tight">
+    <div class="section-title">
+        <h2>Les derniers <span>textes</span></h2>
+        <div class="bar"></div>
+    </div>
+    <div class="themes-grid">
+        {% for a in recent %}
+        <a href="{{ url_for('articles.public_show', slug=a.slug) }}" class="theme-tile">
+            <div class="tile-icon"><i class="fas fa-feather-alt"></i></div>
+            <h3>{{ a.title }}</h3>
+            <p>{{ a.summary or '' }}</p>
+            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
+                <i class="far fa-calendar"></i> {{ a.display_date.strftime('%d/%m/%Y') }}
+            </div>
+            <div class="tile-cta">Lire l'article <i class="fas fa-arrow-right"></i></div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{# ── Ce qu'en disent les lecteurs ──
+   Commentaires réels laissés sur les articles (ids 2, 4 et 5 de la table
+   `comments`), repris mot pour mot et seulement raccourcis. Ils portent sur
+   les articles, pas sur la lettre : d'où le titre de la section. Ne pas
+   inventer de témoignage ici. #}
+<section class="section section-tight" style="background: var(--gris-clair);">
+    <div style="max-width: 900px; margin: 0 auto;">
+        <div class="section-title">
+            <h2>Ce qu'en disent les <span>lecteurs</span></h2>
+            <div class="bar"></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+            {% for quote, author in [
+                ("Excellent papier. Les dérives d'aujourd'hui viennent de cette captation du pouvoir par ces « fonctionnaires » de la politique.", "Olivier Lafaye"),
+                ("Très bien Bernard, c'est exactement cela qu'il faut expliquer !", "Gérard Gouzes"),
+                ("Merci Bernard pour cette mise en perspective historique du régionalisme en France.", "Bernard Dufour")] %}
+            <figure style="background: white; border-radius: 12px; padding: 1.4rem; margin: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <blockquote style="margin: 0 0 0.8rem; font-size: 0.98rem; line-height: 1.6; color: var(--noir);">
+                    « {{ quote }} »
+                </blockquote>
+                <figcaption style="color: var(--gris); font-size: 0.85rem;">— {{ author }}</figcaption>
+            </figure>
+            {% endfor %}
+        </div>
+        <p style="text-align: center; color: var(--gris); font-size: 0.82rem; margin: 1.2rem 0 0;">
+            Commentaires laissés sur le site, publiés avec leur nom.
+        </p>
+    </div>
+</section>
+
+{% include '_newsletter_form.html' %}
+
+{# ── Ce que je ne fais pas : l'argument de conversion, pas une mention légale ── #}
+<section class="section section-tight">
+    <div style="max-width: 640px; margin: 0 auto;">
+        <h2 style="font-size: 1.3rem; text-align: center; margin: 0 0 1.2rem;">Ce que je ne fais pas</h2>
+        <ul style="list-style: none; padding: 0; margin: 0; display: grid; gap: 0.7rem;">
+            {% for line in [
+                "Votre adresse n'est ni vendue, ni prêtée, ni transmise à un parti.",
+                "Un seul message par article publié. Jamais de relance, jamais de sollicitation.",
+                "Désinscription en un clic, depuis n'importe quel message.",
+                "Une inscription doit être confirmée par e-mail : personne ne peut vous inscrire à votre place."] %}
+            <li style="display: flex; gap: 0.7rem; align-items: flex-start; font-size: 0.95rem;">
+                <i class="fas fa-check" style="color: var(--vert); margin-top: 0.25rem;"></i>
+                <span>{{ line }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <p style="text-align: center; margin: 1.4rem 0 0;">
+            <a href="{{ url_for('pages.show', slug='confidentialite') }}" style="color: var(--gris); font-size: 0.85rem;">
+                Politique de confidentialité
+            </a>
+        </p>
+    </div>
+</section>
+{% endblock %}

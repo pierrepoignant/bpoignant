@@ -25,6 +25,10 @@ newsletter_bp = Blueprint('newsletter', __name__, url_prefix='/newsletter', temp
 admin_subscribers_bp = Blueprint(
     'admin_subscribers', __name__, url_prefix='/admin/subscribers', template_folder='templates'
 )
+# No url_prefix: the landing page lives at /lettre, a URL short enough to say
+# out loud and to put in a promoted tweet.
+lettre_bp = Blueprint('lettre', __name__, template_folder='templates')
+
 admin_sends_bp = Blueprint(
     'admin_sends', __name__, url_prefix='/admin/sends', template_folder='templates'
 )
@@ -32,6 +36,33 @@ admin_sends_bp = Blueprint(
 
 # RFC-ish — good enough for sanity-checking input before storage.
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+@lettre_bp.route('/lettre')
+def landing():
+    """Public landing page for the newsletter.
+
+    Everything factual on it is pulled live — themes, recent articles — so the
+    page can't drift out of date the way hand-written marketing copy does. The
+    reader quotes are the exception and are real comments, see the template.
+    """
+    from articles.models import Article, Theme
+
+    recent = (
+        Article.query.filter_by(published=True)
+        .order_by(Article.created_at.desc())
+        .limit(3)
+        .all()
+    )
+    # Themes that actually have published articles behind them, most-used
+    # first — a promise the archive can keep.
+    themes = sorted(
+        (t for t in Theme.query.all() if t.published_articles),
+        key=lambda t: len(t.published_articles), reverse=True,
+    )[:8]
+    total_articles = Article.query.filter_by(published=True).count()
+    return render_template('lettre.html', recent=recent, themes=themes,
+                           total_articles=total_articles)
 
 
 @newsletter_bp.route('/subscribe', methods=['POST'])

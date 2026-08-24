@@ -99,8 +99,10 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_authors_bp)
 
     from newsletter.models import Subscriber  # noqa: F401
-    from newsletter import newsletter_bp, admin_subscribers_bp, admin_sends_bp
+    from newsletter import (newsletter_bp, lettre_bp, admin_subscribers_bp,
+                            admin_sends_bp)
     app.register_blueprint(newsletter_bp)
+    app.register_blueprint(lettre_bp)
     app.register_blueprint(admin_subscribers_bp)
     app.register_blueprint(admin_sends_bp)
 
@@ -236,6 +238,12 @@ def create_app(db_name='ovh'):
                 'changefreq': 'monthly',
                 'priority': '0.8',
             })
+        urls.append({
+            'loc': url_for('lettre.landing', _external=True),
+            'lastmod': datetime.utcnow().date().isoformat(),
+            'changefreq': 'monthly',
+            'priority': '0.7',
+        })
         for p in Page.query.filter_by(published=True).all():
             urls.append({
                 'loc': url_for('pages.show', slug=p.slug, _external=True),
