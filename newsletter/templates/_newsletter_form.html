@@ -1,8 +1,14 @@
-<section id="newsletter" class="newsletter-block">
+{# Included more than once on /lettre, so the id is overridable: two elements
+   sharing an id is invalid HTML and breaks any anchor pointing at it. Set
+   `newsletter_form_compact` to drop the heading when the surrounding page has
+   just made the same promise. #}
+<section id="{{ newsletter_form_id | default('newsletter') }}" class="newsletter-block">
     <div class="newsletter-inner">
+        {% if not newsletter_form_compact %}
         <div class="newsletter-icon"><i class="far fa-envelope"></i></div>
         <h2>Newsletter</h2>
         <p>Soyez informés lors de la publication de nouveaux articles.</p>
+        {% endif %}
         <form method="POST" action="{{ url_for('newsletter.subscribe') }}" class="newsletter-form">
             <input type="hidden" name="next" value="{{ request.path }}">
             {# Honeypot — hidden from humans, tempting to bots. A filled value

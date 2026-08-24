@@ -45,9 +45,18 @@
            class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-envelope"></i> Newsletter
         </a>
+        {# Envois is /admin/sends/ and the stats page is /admin/sends/stats, so
+           a bare startswith would light both tabs at once on the stats page. #}
         <a href="{{ url_for('admin_sends.list_sends') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/sends') %}btn-primary{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-paper-plane"></i> Envois
+        </a>
+        {# An envelope rather than a chart: the tab after next is already
+           `fa-chart-line`, and that one is the site's analytics, not the
+           newsletter's. Same icon as this page's own heading. #}
+        <a href="{{ url_for('admin_sends.newsletter_stats') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="far fa-envelope-open"></i> Stats newsletter
         </a>
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">

@@ -20,6 +20,13 @@
     </div>
 </section>
 
+{# Le formulaire une première fois, tout de suite : un visiteur convaincu par
+   la promesse ne doit pas avoir à faire défiler la page pour s'inscrire.
+   Version compacte — le hero vient de dire ce que le bloc répète d'habitude. #}
+{% with newsletter_form_id = 'inscription-haut', newsletter_form_compact = True %}
+    {% include '_newsletter_form.html' %}
+{% endwith %}
+
 {# ── Ce dont je parle : les thèmes réels de l'archive ── #}
 {% if themes %}
 <section class="section section-tight" style="padding-bottom: 1rem;">

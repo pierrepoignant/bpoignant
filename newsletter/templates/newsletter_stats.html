@@ -1,7 +1,7 @@
 {% extends 'admin_base.html' %}
-{% block title %}Statistiques newsletter{% endblock %}
+{% block title %}Stats newsletter{% endblock %}
 
-{% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Statistiques newsletter{% endblock %}
+{% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Stats newsletter{% endblock %}
 {% block admin_subtitle %}<p>Envois, ouvertures et clics — par semaine, par article, par lecteur.</p>{% endblock %}
 
 {% macro pct(v) %}{% if v is none %}<span style="color: var(--gris);">—</span>{% else %}{{ '%.0f' % (v * 100) }} %{% endif %}{% endmacro %}
