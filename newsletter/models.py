@@ -99,3 +99,35 @@ class Delivery(db.Model):
 
     article = db.relationship('Article')
     subscriber = db.relationship('Subscriber')
+
+
+class EmailEvent(db.Model):
+    """One row per open/click reported by SendGrid's Event Webhook.
+
+    The webhook previously discarded everything except hard bounces, so no
+    per-person engagement existed — SendGrid's Stats API gives totals only.
+    This table is what makes "who actually reads the newsletter" answerable,
+    and it necessarily starts from the day it was switched on: SendGrid does
+    not replay past events.
+
+    `sg_event_id` is SendGrid's own identifier and is unique here, because the
+    webhook retries on any non-2xx and would otherwise double-count.
+    """
+
+    __tablename__ = 'newsletter_email_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    sg_event_id = db.Column(db.String(100), unique=True, nullable=True, index=True)
+    # Kept even when no subscriber matches (address since deleted, or mail we
+    # sent outside the newsletter), so totals stay honest.
+    email = db.Column(db.String(255), nullable=False, index=True)
+    subscriber_id = db.Column(db.Integer, db.ForeignKey('subscribers.id'),
+                              nullable=True, index=True)
+    article_id = db.Column(db.Integer, db.ForeignKey('articles.id'),
+                           nullable=True, index=True)
+    event = db.Column(db.String(20), nullable=False, index=True)   # open | click
+    url = db.Column(db.String(500), nullable=True)                 # clicks only
+    occurred_at = db.Column(db.DateTime, nullable=False, index=True)
+
+    subscriber = db.relationship('Subscriber')
+    article = db.relationship('Article')

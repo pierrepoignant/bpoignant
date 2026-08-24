@@ -164,6 +164,7 @@ def fetch_suppressions(kinds=None, start_time=None):
     return out
 
 
+MAX_STATS_CATEGORIES = 10   # hard limit of /v3/categories/stats
 CATEGORY_STATS_URL = 'https://api.sendgrid.com/v3/categories/stats'
 
 
@@ -234,6 +235,112 @@ def fetch_category_stats(category, start_date, end_date=None):
     totals['click_rate'] = (totals['unique_clicks'] / delivered) if delivered else 0.0
     totals['series'] = series
     return totals
+
+
+def fetch_known_categories(prefix=None):
+    """Names of the categories SendGrid actually knows about.
+
+    Worth one call because the stats endpoint 404s the *entire* request when a
+    single unknown category is included — and every article mailed before the
+    category tags existed is unknown. Filtering up front avoids both the error
+    and the retry-splitting that used to work around it.
+    """
+    cfg = _config()
+    if not cfg['api_key']:
+        return None
+    params = {'limit': 500}
+    if prefix:
+        params['category'] = prefix
+    try:
+        resp = requests.get(
+            'https://api.sendgrid.com/v3/categories',
+            headers={'Authorization': f"Bearer {cfg['api_key']}"},
+            params=params, timeout=20,
+        )
+    except requests.RequestException as exc:
+        log.error("fetch_known_categories network error: %s", exc)
+        return None
+    if resp.status_code != 200:
+        log.error("fetch_known_categories failed: status=%s", resp.status_code)
+        return None
+    return {c.get('category') for c in (resp.json() or []) if c.get('category')}
+
+
+def fetch_multi_category_stats(categories, start_date, end_date=None,
+                               aggregated_by='day'):
+    """Stats for several categories in one request.
+
+    `/v3/categories/stats` accepts a repeated `categories` parameter and
+    returns, per period, one entry per category — so the whole per-article
+    table costs one call instead of one call per article.
+
+    Returns {category: {'delivered', 'unique_opens', 'unique_clicks', 'opens',
+    'clicks', 'series': [{'date', ...}]}} or None when SendGrid is off or the
+    call fails, so callers can degrade rather than break.
+    """
+    cfg = _config()
+    if not cfg['api_key'] or not categories:
+        return None
+
+    # The endpoint rejects more than 10 categories per request, so split and
+    # merge. Still far cheaper than one call per article.
+    categories = list(categories)
+    if len(categories) > MAX_STATS_CATEGORIES:
+        merged = {}
+        for i in range(0, len(categories), MAX_STATS_CATEGORIES):
+            chunk = fetch_multi_category_stats(
+                categories[i:i + MAX_STATS_CATEGORIES],
+                start_date, end_date, aggregated_by)
+            if chunk is None:
+                return None
+            merged.update(chunk)
+        return merged
+
+    def _fmt(d):
+        return d if isinstance(d, str) else d.strftime('%Y-%m-%d')
+
+    params = [('start_date', _fmt(start_date)), ('aggregated_by', aggregated_by)]
+    if end_date is not None:
+        params.append(('end_date', _fmt(end_date)))
+    params += [('categories', c) for c in categories]
+
+    try:
+        resp = requests.get(
+            CATEGORY_STATS_URL,
+            headers={'Authorization': f"Bearer {cfg['api_key']}"},
+            params=params,
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        log.error("fetch_multi_category_stats network error: %s", exc)
+        return None
+    if resp.status_code != 200:
+        log.error("fetch_multi_category_stats failed: status=%s body=%s",
+                  resp.status_code, resp.text[:300])
+        return None
+
+    keys = ('delivered', 'opens', 'unique_opens', 'clicks', 'unique_clicks',
+            'requests', 'bounces', 'spam_reports', 'unsubscribes')
+    out = {c: {k: 0 for k in keys} | {'series': []} for c in categories}
+    for period in resp.json() or []:
+        for stat in period.get('stats', []):
+            name = stat.get('name')
+            if name not in out:
+                continue
+            m = stat.get('metrics', {}) or {}
+            for k in keys:
+                out[name][k] += int(m.get(k, 0) or 0)
+            out[name]['series'].append({
+                'date': period.get('date'),
+                'delivered': int(m.get('delivered', 0) or 0),
+                'unique_opens': int(m.get('unique_opens', 0) or 0),
+                'unique_clicks': int(m.get('unique_clicks', 0) or 0),
+            })
+    for c, t in out.items():
+        d = t['delivered'] or 0
+        t['open_rate'] = (t['unique_opens'] / d) if d else 0.0
+        t['click_rate'] = (t['unique_clicks'] / d) if d else 0.0
+    return out
 
 
 def _html_to_text(html: str) -> str:

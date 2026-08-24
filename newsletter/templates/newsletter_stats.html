@@ -1,0 +1,173 @@
+{% extends 'admin_base.html' %}
+{% block title %}Statistiques newsletter{% endblock %}
+
+{% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Statistiques newsletter{% endblock %}
+{% block admin_subtitle %}<p>Envois, ouvertures et clics — par semaine, par article, par lecteur.</p>{% endblock %}
+
+{% macro pct(v) %}{% if v is none %}<span style="color: var(--gris);">—</span>{% else %}{{ '%.0f' % (v * 100) }} %{% endif %}{% endmacro %}
+
+{% block admin_content %}
+{% if not campaigns %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris); background: white; border-radius: 12px;">
+        <i class="far fa-envelope" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <p>Aucune campagne envoyée pour le moment.</p>
+    </div>
+{% else %}
+
+    {# ── Chiffres clés ── #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        {% for label, value, icon in [
+            ('Campagnes', totals.campaigns, 'fa-paper-plane'),
+            ('E-mails envoyés', totals.delivered, 'fa-envelope'),
+            ('Ouvertures', totals.opens, 'fa-envelope-open'),
+            ('Clics', totals.clicks, 'fa-mouse-pointer')] %}
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="font-size: 1.8rem; font-weight: 800; line-height: 1;">{{ value }}</div>
+            <div style="font-size: 0.85rem; color: var(--gris);"><i class="fas {{ icon }}"></i> {{ label }}</div>
+        </div>
+        {% endfor %}
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="font-size: 1.8rem; font-weight: 800; line-height: 1;">{{ pct(totals.open_rate) }}</div>
+            <div style="font-size: 0.85rem; color: var(--gris);">taux d'ouverture</div>
+        </div>
+    </div>
+
+    {% if not sendgrid_ok %}
+    <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Ouvertures et clics indisponibles — SendGrid n'a pas répondu. Les envois ci-dessous restent exacts.
+    </div>
+    {% endif %}
+
+    {# ── 1. Par semaine ── #}
+    <h2 style="font-size: 1.2rem; margin: 0 0 0.3rem;"><i class="fas fa-calendar-week" style="color: var(--rouge);"></i> Par semaine</h2>
+    <p style="color: var(--gris); font-size: 0.82rem; margin: 0 0 0.8rem;">
+        Trois séries d'activité, pas un taux : une ouverture est datée du jour où le lecteur
+        a ouvert, pas du jour de l'envoi. Les taux figurent dans le tableau par article,
+        où ouvertures et campagne sont rattachées l'une à l'autre.
+    </p>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2rem;">
+        <div class="admin-table-wrap">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+                <tr style="background: var(--gris-clair); text-align: left;">
+                    <th style="padding: 0.6rem 1rem;">Semaine du</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Envois</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Ouvertures</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Clics</th>
+                    <th style="padding: 0.6rem 1rem; width: 34%;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set maxsent = weeks | map(attribute='sent') | max %}
+                {% for w in weeks %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.55rem 1rem;">{{ w.week }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">{{ w.sent or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ w.opens or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ w.clicks or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem;">
+                        {% if w.sent and maxsent %}
+                        <div style="background: var(--gris-clair); border-radius: 4px; height: 8px; position: relative;">
+                            <div style="background: var(--vert); height: 8px; border-radius: 4px; width: {{ (w.sent / maxsent * 100) | round }}%;"></div>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {# ── 2. Par article ── #}
+    <h2 style="font-size: 1.2rem; margin: 0 0 0.8rem;"><i class="fas fa-table" style="color: var(--rouge);"></i> Par article</h2>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2rem;">
+        <div class="admin-table-wrap">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+                <tr style="background: var(--gris-clair); text-align: left;">
+                    <th style="padding: 0.6rem 1rem;">Article</th>
+                    <th style="padding: 0.6rem 1rem;">Dernier envoi</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Envois</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Ouvertures</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Taux</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Clics</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Taux</th>
+                    <th style="padding: 0.6rem 1rem; text-align: right;">Vues site</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in per_article %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.55rem 1rem;">
+                        <a href="{{ url_for('admin_articles.article_stats', article_id=r.article.id) }}"
+                           style="color: var(--noir); font-weight: 600;">{{ r.article.title }}</a>
+                        {% if r.campaigns > 1 %}
+                        <span style="color: var(--gris); font-size: 0.78rem;">· {{ r.campaigns }} envois</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.55rem 1rem; color: var(--gris);">{{ r.last_sent.strftime('%d/%m/%Y') }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">{{ r.sent }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ r.opens or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ pct(r.open_rate) }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ r.clicks or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ pct(r.click_rate) }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right; color: var(--gris);">{{ r.site_views }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    {# ── 3. Lecteurs les plus engagés ── #}
+    <h2 style="font-size: 1.2rem; margin: 0 0 0.4rem;"><i class="fas fa-user-check" style="color: var(--rouge);"></i> Lecteurs les plus engagés</h2>
+    {% if not events_total %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem; color: var(--gris); font-size: 0.9rem;">
+        <p style="margin: 0 0 0.5rem;">Aucune donnée pour l'instant — et c'est normal.</p>
+        <p style="margin: 0;">
+            SendGrid ne fournit que des totaux ; savoir <em>qui</em> ouvre demande de recevoir
+            chaque événement individuellement. La collecte vient d'être activée : dans les
+            réglages SendGrid (Settings → Mail Settings → Event Webhook), cochez
+            <strong>Opened</strong> et <strong>Clicked</strong> en plus des rebonds. Les
+            événements passés ne sont pas rejouables : la liste se remplira à partir du
+            prochain envoi.
+        </p>
+    </div>
+    {% else %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem;">
+        {% for title, rows, unit in [('Ouvrent le plus', top_openers, 'ouvertures'),
+                                     ('Cliquent le plus', top_clickers, 'clics')] %}
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem;">
+            <h3 style="font-size: 1rem; margin: 0 0 0.8rem;">{{ title }}</h3>
+            {% if rows %}
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                {% for r in rows %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.45rem 0;">
+                        <strong>{{ r.name or r.email }}</strong>
+                        {% if r.name %}<div style="color: var(--gris); font-size: 0.78rem;">{{ r.email }}</div>{% endif %}
+                    </td>
+                    <td style="padding: 0.45rem 0; text-align: right; white-space: nowrap;">
+                        <strong>{{ r.n }}</strong> {{ unit }}
+                        <div style="color: var(--gris); font-size: 0.78rem;">{{ r.articles }} article{{ 's' if r.articles != 1 else '' }}</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <p style="color: var(--gris); margin: 0;">Rien encore.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <p style="color: var(--gris); font-size: 0.82rem; margin-top: 1.5rem;">
+        Les envois proviennent de nos propres enregistrements et sont complets depuis
+        le {{ first_send.strftime('%d/%m/%Y') }}. Les ouvertures et clics viennent de SendGrid
+        et ne couvrent que les envois étiquetés : les campagnes antérieures apparaissent donc
+        avec des envois mais sans engagement.
+    </p>
+{% endif %}
+{% endblock %}

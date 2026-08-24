@@ -5,6 +5,12 @@
 {% block admin_subtitle %}<p>{{ total }} e-mail{{ 's' if total != 1 else '' }} envoyé{{ 's' if total != 1 else '' }} aux abonnés.</p>{% endblock %}
 
 {% block admin_content %}
+    <div style="margin-bottom: 1.5rem;">
+        <a href="{{ url_for('admin_sends.newsletter_stats') }}" class="btn btn-sm btn-outline"
+           style="color: var(--noir); border-color: #e0e0e0; background: white;">
+            <i class="fas fa-chart-line"></i> Statistiques newsletter
+        </a>
+    </div>
     <h2 style="font-size: 1.2rem; margin: 0 0 1rem;">
         <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Par article
     </h2>

@@ -11,7 +11,7 @@ from flask import (
 )
 
 from init_db import db
-from newsletter.models import Subscriber, Campaign, Delivery
+from newsletter.models import Subscriber, Campaign, Delivery, EmailEvent
 from newsletter.antispam import score_signup, is_suspicious, CONFIRM_THRESHOLD
 from auth import admin_required
 from flask import current_app, render_template, url_for
@@ -146,6 +146,51 @@ def confirm(token):
     return render_template('subscribe_confirmed.html', email=sub.email, prenom=sub.prenom, newly=newly)
 
 
+def _record_engagement(ev, etype):
+    """Store one open/click from the Event Webhook. Returns 1 when a row was
+    added, 0 otherwise.
+
+    Idempotent on SendGrid's `sg_event_id`: the webhook retries on any non-2xx,
+    and without the guard a single retry would inflate every reader's count.
+    """
+    addr = (ev.get('email') or '').strip().lower()
+    if not addr:
+        return 0
+
+    sg_id = (ev.get('sg_event_id') or '').strip()[:100] or None
+    if sg_id and EmailEvent.query.filter_by(sg_event_id=sg_id).first():
+        return 0
+
+    # Which article, if any: newsletter sends carry an `article-<id>` category
+    # alongside `newsletter`.
+    article_id = None
+    cats = ev.get('category') or []
+    if isinstance(cats, str):
+        cats = [cats]
+    for c in cats:
+        if isinstance(c, str) and c.startswith('article-'):
+            try:
+                article_id = int(c.split('-', 1)[1])
+            except ValueError:
+                pass
+            break
+
+    sub = Subscriber.query.filter_by(email=addr).first()
+    ts = ev.get('timestamp')
+    occurred = datetime.utcfromtimestamp(int(ts)) if ts else datetime.utcnow()
+
+    db.session.add(EmailEvent(
+        sg_event_id=sg_id,
+        email=addr[:255],
+        subscriber_id=(sub.id if sub else None),
+        article_id=article_id,
+        event=etype,
+        url=(ev.get('url') or None) and str(ev.get('url'))[:500],
+        occurred_at=occurred,
+    ))
+    return 1
+
+
 @newsletter_bp.route('/sendgrid/events', methods=['POST'])
 def sendgrid_events():
     """SendGrid Event Webhook receiver. Marks hard bounces / blocks / spam
@@ -164,11 +209,15 @@ def sendgrid_events():
         return ('', 204)
 
     HARD = {'bounce', 'dropped', 'blocked', 'spamreport'}
+    ENGAGEMENT = {'open', 'click'}
     changed = 0
     for ev in events:
         if not isinstance(ev, dict):
             continue
         etype = (ev.get('event') or '').lower()
+        if etype in ENGAGEMENT:
+            changed += _record_engagement(ev, etype)
+            continue
         if etype not in HARD:
             continue
         addr = (ev.get('email') or '').strip().lower()
@@ -611,6 +660,202 @@ def purge_suspicious():
 
 
 # ─── SEND NEWSLETTER FOR AN ARTICLE ─────────────────────────
+
+# SendGrid's category stats are slow (several calls once categories exceed the
+# per-request limit of 10) and rate-limited, so the dashboard reads through a
+# short-lived cache instead of querying on every page load.
+_STATS_TTL = 1800   # 30 minutes
+
+
+def _cached_known_categories():
+    """Category names SendGrid knows, cached for a day — the set only grows
+    when a new article is mailed."""
+    from init_cache import cache
+    from mail import fetch_known_categories, is_configured as mail_is_configured
+
+    if not mail_is_configured():
+        return None
+    hit = cache.get('sg-known-categories')
+    if hit is not None:
+        return hit
+    known = fetch_known_categories()
+    if known is not None:
+        cache.set('sg-known-categories', known, timeout=86400)
+    return known
+
+
+def _cached_stats(key, categories, start_date, aggregated_by):
+    """Fetch category stats through the app cache. Returns None when SendGrid
+    is unavailable, so the page can say so rather than showing false zeros."""
+    from datetime import date
+    from init_cache import cache
+    from mail import fetch_multi_category_stats, is_configured as mail_is_configured
+
+    if not mail_is_configured():
+        return None
+    cache_key = f'sg-stats:{key}:{start_date}:{date.today()}:{len(categories)}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    stats = fetch_multi_category_stats(
+        categories, start_date=start_date, end_date=date.today(),
+        aggregated_by=aggregated_by)
+    if stats is not None:
+        cache.set(cache_key, stats, timeout=_STATS_TTL)
+    return stats
+
+
+@admin_sends_bp.route('/stats')
+@admin_required
+def newsletter_stats():
+    """Comprehensive newsletter dashboard: weekly activity, a per-article
+    table, and the readers who engage most.
+
+    Sends come from our own Campaign/Delivery rows, so that half is complete
+    back to the first campaign. Opens and clicks come from SendGrid, which only
+    knows about mail tagged with our categories — anything sent before those
+    tags existed shows sends without engagement, and that gap is labelled in
+    the page rather than hidden.
+    """
+    from datetime import date, timedelta
+    from sqlalchemy import func
+    from articles.models import Article
+    from analytics.models import PageView
+    from mail import fetch_multi_category_stats, is_configured as mail_is_configured
+
+    campaigns = Campaign.query.order_by(Campaign.sent_at.asc()).all()
+    if not campaigns:
+        return render_template('newsletter_stats.html', campaigns=[], weeks=[],
+                               per_article=[], top_openers=[], top_clickers=[],
+                               totals={}, events_total=0, sendgrid_ok=False,
+                               first_send=None)
+
+    first_send = campaigns[0].sent_at.date()
+    article_ids = sorted({c.article_id for c in campaigns})
+
+    # ── 1. Weekly activity ────────────────────────────────────
+    # Sends are counted from Delivery (one row per person actually mailed),
+    # which is the honest denominator for an open rate.
+    sends_by_week = {}
+    for d, n in (db.session.query(
+            func.date(func.subdate(Delivery.sent_at,
+                                   func.weekday(Delivery.sent_at))),
+            func.count(Delivery.id))
+            .group_by(func.date(func.subdate(Delivery.sent_at,
+                                             func.weekday(Delivery.sent_at))))
+            .all()):
+        sends_by_week[str(d)] = n
+
+    # Fetched daily and bucketed here rather than asking SendGrid for
+    # aggregated_by=week: its weekly rollup omits the current, incomplete week,
+    # which silently dropped the most recent campaign (156 delivered showing as
+    # 2). Bucketing locally also guarantees the same Monday boundaries as the
+    # SQL above, so the two columns line up.
+    sg_weekly = _cached_stats('weekly', ['newsletter'],
+                              first_send - timedelta(days=7), 'day')
+    opens_by_week, clicks_by_week = {}, {}
+    if sg_weekly and 'newsletter' in sg_weekly:
+        for row in sg_weekly['newsletter']['series']:
+            try:
+                day = date.fromisoformat(row['date'])
+            except (TypeError, ValueError):
+                continue
+            monday = str(day - timedelta(days=day.weekday()))
+            opens_by_week[monday] = opens_by_week.get(monday, 0) + row['unique_opens']
+            clicks_by_week[monday] = clicks_by_week.get(monday, 0) + row['unique_clicks']
+
+    weeks = []
+    for wk in sorted(set(sends_by_week) | set(opens_by_week) | set(clicks_by_week)):
+        sent = sends_by_week.get(wk, 0)
+        opened = opens_by_week.get(wk, 0)
+        clicked = clicks_by_week.get(wk, 0)
+        # Deliberately no per-week rate. Opens are bucketed by the date the
+        # reader opened, not the date we sent — someone opening on Wednesday a
+        # mail sent the previous Sunday lands in a different week — and
+        # SendGrid stamps its days in the account's timezone, so a send just
+        # after midnight UTC can even fall on its previous day. Dividing one
+        # column by the other would produce a confident-looking but meaningless
+        # number. Rates live in the per-article table, where opens are tied to
+        # the campaign by category rather than by date.
+        weeks.append({'week': wk, 'sent': sent, 'opens': opened, 'clicks': clicked})
+
+    # ── 2. Per-article table ─────────────────────────────────
+    # One multi-category call rather than one per article.
+    # Only ask for categories SendGrid has actually seen: one unknown name
+    # would 404 the whole request. Articles mailed before tagging existed
+    # simply show sends without engagement.
+    wanted = [article_category(i) for i in article_ids]
+    known = _cached_known_categories()
+    if known is not None:
+        wanted = [c for c in wanted if c in known]
+    sg_articles = _cached_stats('articles', wanted,
+                                first_send - timedelta(days=1), 'day') if wanted else {}
+
+    delivered_by_article = dict(
+        db.session.query(Delivery.article_id, func.count(Delivery.id))
+        .group_by(Delivery.article_id).all())
+    views_by_path = dict(
+        db.session.query(PageView.path, func.count(PageView.id))
+        .group_by(PageView.path).all())
+
+    per_article = []
+    for aid in article_ids:
+        art = db.session.get(Article, aid)
+        if art is None:
+            continue
+        sent = delivered_by_article.get(aid, 0)
+        sg = (sg_articles or {}).get(article_category(aid)) or {}
+        opens = sg.get('unique_opens', 0)
+        clicks = sg.get('unique_clicks', 0)
+        cs = [c for c in campaigns if c.article_id == aid]
+        per_article.append({
+            'article': art,
+            'last_sent': max(c.sent_at for c in cs),
+            'campaigns': len(cs),
+            'sent': sent,
+            'opens': opens,
+            'clicks': clicks,
+            'open_rate': (opens / sent) if sent else None,
+            'click_rate': (clicks / sent) if sent else None,
+            'site_views': views_by_path.get(f'/articles/{art.slug}', 0),
+        })
+    per_article.sort(key=lambda r: r['last_sent'], reverse=True)
+
+    # ── 3. Most engaged readers ──────────────────────────────
+    def _top(event_type):
+        rows = (db.session.query(EmailEvent.email,
+                                 func.count(func.distinct(EmailEvent.article_id)).label('articles'),
+                                 func.count(EmailEvent.id).label('n'))
+                .filter(EmailEvent.event == event_type)
+                .group_by(EmailEvent.email)
+                .order_by(func.count(EmailEvent.id).desc())
+                .limit(15).all())
+        out = []
+        for email, articles, n in rows:
+            sub = Subscriber.query.filter_by(email=email).first()
+            out.append({'email': email, 'name': (sub.display_name if sub else None),
+                        'articles': articles, 'n': n,
+                        'subscriber': sub})
+        return out
+
+    events_total = EmailEvent.query.count()
+    totals = {
+        'campaigns': len(campaigns),
+        'delivered': sum(delivered_by_article.values()),
+        'opens': sum(w['opens'] for w in weeks),
+        'clicks': sum(w['clicks'] for w in weeks),
+    }
+    totals['open_rate'] = (totals['opens'] / totals['delivered']) if totals['delivered'] else None
+    totals['click_rate'] = (totals['clicks'] / totals['delivered']) if totals['delivered'] else None
+
+    return render_template(
+        'newsletter_stats.html',
+        campaigns=campaigns, weeks=weeks, per_article=per_article,
+        top_openers=_top('open'), top_clickers=_top('click'),
+        totals=totals, events_total=events_total,
+        sendgrid_ok=bool(sg_weekly), first_send=first_send,
+    )
+
 
 def article_category(article_id):
     """SendGrid category tag for an article's newsletter, used to pull its
