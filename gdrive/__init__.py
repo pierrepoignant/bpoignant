@@ -43,6 +43,12 @@ KEY_CLIENT_ID = 'google_client_id'
 KEY_CLIENT_SECRET = 'google_client_secret'
 KEY_REFRESH_TOKEN = 'google_refresh_token'
 
+# Connection health, so an expired token is announced rather than discovered
+# the next time someone tries to import a document.
+KEY_ERROR = 'gdrive_error'
+KEY_ERROR_AT = 'gdrive_error_at'
+KEY_NOTIFIED_AT = 'gdrive_error_notified_at'
+
 _TIMEOUT = 20
 
 
@@ -151,6 +157,96 @@ def exchange_code(code, redirect_uri):
     set_config(KEY_REFRESH_TOKEN, refresh_token.strip())
 
 
+def connection_error():
+    """The stored failure message while the connection is broken, else None.
+    Read on every admin page, so it must stay a plain config lookup."""
+    return (get_config(KEY_ERROR) or '').strip() or None
+
+
+def record_success():
+    """Clear a previously recorded failure. A no-op when nothing was wrong, so
+    the happy path doesn't write to the database on every Drive call."""
+    if not connection_error():
+        return
+    for key in (KEY_ERROR, KEY_ERROR_AT, KEY_NOTIFIED_AT):
+        delete_config(key)
+
+
+def record_auth_failure(message):
+    """Remember that the connection is broken and e-mail the admins — once per
+    outage, not once per attempt: a failure surfaces on every page that touches
+    Drive, and Bernard should not get twenty identical messages."""
+    from datetime import datetime
+
+    first_time = not connection_error()
+    set_config(KEY_ERROR, str(message)[:500])
+    if first_time:
+        set_config(KEY_ERROR_AT, datetime.utcnow().isoformat(timespec='seconds'))
+        _notify_admins(message)
+
+
+def _notify_admins(message):
+    from datetime import datetime
+    from flask import current_app, has_request_context, render_template, url_for
+
+    try:
+        from auth.models import User
+        from mail import is_configured as mail_is_configured, send_email
+        if not mail_is_configured():
+            return
+        recipients = User.query.filter(User.is_admin == True,  # noqa: E712
+                                       User.email.isnot(None)).all()
+        if not recipients:
+            return
+
+        # The cron health check has no request context; url_for needs one.
+        if has_request_context():
+            ctx = None
+        else:
+            base = os.environ.get('SITE_BASE_URL', 'https://bernardpoignant.fr')
+            ctx = current_app.test_request_context(base_url=base)
+            ctx.push()
+        try:
+            settings_url = url_for('admin_settings.index', _external=True)
+            site_url = url_for('articles.public_list', _external=True)
+            for admin in recipients:
+                html = render_template(
+                    'email/gdrive_alert.html',
+                    message=message, settings_url=settings_url, site_url=site_url,
+                    site_name=current_app.config['SITE_NAME'],
+                    site_tagline=current_app.config['SITE_TAGLINE'],
+                )
+                send_email(to_email=admin.email, to_name=admin.username,
+                           subject="Google Drive déconnecté — reconnexion nécessaire",
+                           html=html, categories=['gdrive-alert'])
+        finally:
+            if ctx is not None:
+                ctx.pop()
+        set_config(KEY_NOTIFIED_AT, datetime.utcnow().isoformat(timespec='seconds'))
+    except Exception as exc:
+        current_app.logger.warning(f"gdrive alert failed: {exc}")
+
+
+def health_check():
+    """Verify the stored refresh token still works. Returns (ok, message).
+
+    Records the outcome, so a scheduled run both detects the problem and
+    triggers the alert.
+    """
+    if not has_client_credentials():
+        return False, "Identifiants OAuth Google absents."
+    if not is_connected():
+        return False, "Google Drive n'est pas connecté."
+    try:
+        _access_token()
+    except GoogleDriveAuthError as exc:
+        return False, str(exc)
+    except GoogleDriveError as exc:
+        # A network blip is not an expired token — don't cry wolf.
+        return True, f"Vérification impossible ({exc})"
+    return True, "Connexion valide."
+
+
 def _access_token():
     client_id, client_secret, refresh_token = _client_id(), _client_secret(), _refresh_token()
     if not (client_id and client_secret and refresh_token):
@@ -171,10 +267,13 @@ def _access_token():
     if resp.status_code != 200:
         # A revoked/expired refresh token comes back as invalid_grant here —
         # surface it so the admin knows to reconnect.
-        raise GoogleDriveAuthError(_oauth_error(resp) + " Reconnectez Google Drive.")
+        message = _oauth_error(resp) + " Reconnectez Google Drive."
+        record_auth_failure(message)
+        raise GoogleDriveAuthError(message)
     token = resp.json().get('access_token')
     if not token:
         raise GoogleDriveError("Réponse Google sans jeton d'accès.")
+    record_success()
     return token
 
 

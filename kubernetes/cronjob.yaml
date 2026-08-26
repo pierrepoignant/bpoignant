@@ -135,3 +135,51 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Daily check that the Google Drive refresh token still works.
+#
+# Google revokes refresh tokens on password change, on withdrawn access, and
+# after seven days while the OAuth consent screen is in "Testing" publishing
+# status. Checking here means the admin is told the morning it breaks instead
+# of discovering it mid-article, and the alert e-mail goes out once per outage.
+#
+# Schedule: every day at 07:00 Europe/Paris — before the working day, and
+# before the X jobs so an alert is not buried under other mail.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-gdrive-check
+  namespace: default
+spec:
+  schedule: "0 7 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # No retry: the alert is already sent on the first failure, and a retry
+      # would only re-test a token that is not going to fix itself.
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: gdrive-check
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "check_gdrive.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

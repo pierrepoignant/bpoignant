@@ -147,6 +147,9 @@ def create_app(db_name='ovh'):
             'site_tagline': app.config['SITE_TAGLINE'],
             'google_site_verification': app.config.get('GOOGLE_SITE_VERIFICATION') or '',
             'now': datetime.utcnow(),
+            # Surfaced in the admin banner. One cheap config lookup, and only
+            # for signed-in admins — visitors never trigger it.
+            'gdrive_error': _gdrive_error_for_banner(),
         }
 
     @app.route('/')
@@ -290,6 +293,20 @@ def create_app(db_name='ovh'):
         return render_template('404.html'), 404
 
     return app
+
+
+def _gdrive_error_for_banner():
+    """Stored Drive connection error, or None. Swallows failures: a broken
+    banner must never take a page down with it."""
+    try:
+        if not getattr(current_user, 'is_authenticated', False):
+            return None
+        if not getattr(current_user, 'is_admin', False):
+            return None
+        import gdrive
+        return gdrive.connection_error()
+    except Exception:
+        return None
 
 
 def _migrate_schema():

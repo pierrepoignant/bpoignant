@@ -1,0 +1,38 @@
+{% extends 'email/_base.html' %}
+{% block subject %}Google Drive déconnecté{% endblock %}
+
+{% block content %}
+    <h1 style="font-size:20px;line-height:1.3;margin:0 0 8px;color:#1A1A2E;">
+        Google Drive est déconnecté
+    </h1>
+    <p style="color:#6C757D;margin:0 0 20px;font-size:14px;">
+        L'import de Google Docs dans l'éditeur d'articles ne fonctionne plus
+        tant que la connexion n'est pas rétablie. Le reste du site n'est pas affecté.
+    </p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background:#F4F5F7;border-left:3px solid #E6003E;border-radius:0 8px 8px 0;margin-bottom:20px;">
+        <tr>
+            <td style="padding:14px 16px;font-size:13px;color:#1A1A2E;line-height:1.6;">
+                {{ message }}
+            </td>
+        </tr>
+    </table>
+
+    <p style="font-size:14px;color:#1A1A2E;line-height:1.6;margin:0 0 20px;">
+        La reconnexion prend quelques secondes : ouvrez les réglages, cliquez sur
+        « Connecter », et acceptez avec le compte Google de Bernard.
+    </p>
+
+    <div style="text-align:center;margin:24px 0 8px;">
+        <a href="{{ settings_url }}"
+           style="display:inline-block;background:#C6D002;color:#1A1A2E;padding:12px 28px;border-radius:50px;text-decoration:none;font-weight:700;font-size:14px;">
+            Reconnecter Google Drive
+        </a>
+    </div>
+{% endblock %}
+
+{% block footer %}
+    Vous recevez cet e-mail parce que vous êtes administrateur de
+    <a href="{{ site_url }}" style="color:#E6003E;text-decoration:none;">bernardpoignant.fr</a>.
+{% endblock %}
