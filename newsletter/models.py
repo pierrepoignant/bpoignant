@@ -68,6 +68,10 @@ class Campaign(db.Model):
     error_count = db.Column(db.Integer, default=0, nullable=False)
     # Recipients skipped because they already received this article.
     skipped_count = db.Column(db.Integer, default=0, nullable=False)
+    # The "petit mot" that went out with *this* send. Article.newsletter_intro
+    # holds only the latest one, so re-sending an article with a different note
+    # would otherwise erase what the first mailing actually said.
+    intro = db.Column(db.Text, nullable=True)
 
     article = db.relationship('Article')
     sent_by = db.relationship('User')

@@ -105,6 +105,12 @@
                         {% if r.campaigns > 1 %}
                         <span style="color: var(--gris); font-size: 0.78rem;">· {{ r.campaigns }} envois</span>
                         {% endif %}
+                        {% if r.intro %}
+                        {# Le petit mot qui accompagnait l'envoi, tel que les abonnés l'ont lu. #}
+                        <div style="color: var(--gris); font-size: 0.8rem; font-style: italic; margin-top: 0.25rem; max-width: 46ch;">
+                            « {{ r.intro }} »
+                        </div>
+                        {% endif %}
                     </td>
                     <td style="padding: 0.55rem 1rem; color: var(--gris);">{{ r.last_sent.strftime('%d/%m/%Y') }}</td>
                     <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">{{ r.sent }}</td>

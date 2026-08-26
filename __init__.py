@@ -324,6 +324,21 @@ def _migrate_schema():
 
     if 'newsletter_campaigns' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('newsletter_campaigns')}
+        if 'intro' not in cols:
+            db.session.execute(text("ALTER TABLE newsletter_campaigns ADD COLUMN intro TEXT NULL"))
+            # Backfill from the article's stored note. Accurate today because
+            # every article carrying a note has been sent exactly once; where
+            # that isn't true the note simply stays NULL rather than being
+            # attributed to a send it may not have accompanied.
+            db.session.execute(text(
+                "UPDATE newsletter_campaigns c "
+                "JOIN articles a ON a.id = c.article_id "
+                "SET c.intro = a.newsletter_intro "
+                "WHERE a.newsletter_intro IS NOT NULL "
+                "  AND (SELECT COUNT(*) FROM (SELECT * FROM newsletter_campaigns) x "
+                "       WHERE x.article_id = c.article_id) = 1"
+            ))
+            db.session.commit()
         if 'skipped_count' not in cols:
             db.session.execute(text(
                 "ALTER TABLE newsletter_campaigns "

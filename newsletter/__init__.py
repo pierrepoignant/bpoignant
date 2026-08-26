@@ -839,9 +839,11 @@ def newsletter_stats():
         opens = sg.get('unique_opens', 0)
         clicks = sg.get('unique_clicks', 0)
         cs = [c for c in campaigns if c.article_id == aid]
+        latest = max(cs, key=lambda c: c.sent_at)
         per_article.append({
             'article': art,
-            'last_sent': max(c.sent_at for c in cs),
+            'intro': latest.intro,
+            'last_sent': latest.sent_at,
             'campaigns': len(cs),
             'sent': sent,
             'opens': opens,
@@ -949,6 +951,9 @@ def _create_campaign(article, recipients, skipped, sent_by):
         sent_by_id=getattr(sent_by, 'id', None),
         recipient_count=len(recipients),
         skipped_count=skipped,
+        # Snapshot rather than a reference: the article's note can be edited or
+        # replaced later, and this records what subscribers actually read.
+        intro=(article.newsletter_intro or None),
     )
     db.session.add(campaign)
     db.session.commit()
