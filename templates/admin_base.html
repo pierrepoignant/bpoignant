@@ -20,6 +20,22 @@
 </section>
 
 <section class="section admin-shell">
+    {% if gdrive_error %}
+    {# Alimentée par gdrive.connection_error() : l'e-mail d'alerte part une fois
+       par panne, ce bandeau reste tant que la connexion n'est pas rétablie. #}
+    <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; margin-bottom: 1.2rem; font-size: 0.9rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+        <i class="fab fa-google-drive" style="font-size: 1.1rem;"></i>
+        <span style="flex: 1; min-width: 220px;">
+            <strong>Google Drive est déconnecté.</strong>
+            L'import de documents ne fonctionne plus tant que la connexion n'est pas rétablie.
+        </span>
+        <a href="{{ url_for('admin_settings.gdrive_connect', next=request.path) }}"
+           class="btn btn-sm btn-primary" style="white-space: nowrap;">
+            <i class="fab fa-google-drive"></i> Reconnecter
+        </a>
+    </div>
+    {% endif %}
+
     <nav class="admin-tabs" aria-label="Administration">
         <a href="{{ url_for('admin_articles.list_articles') }}"
            class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
@@ -37,27 +53,26 @@
            class="btn btn-sm {% if _p.startswith('/admin/comments') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-comments"></i> Commentaires
         </a>
+        {# Une seule entrée pour la newsletter : abonnés, envois et statistiques
+           sont trois vues d'un même sujet et occupaient trois onglets. #}
+        <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers') or _p.startswith('/admin/sends') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="far fa-envelope"></i> Newsletter
+        </a>
         <a href="{{ url_for('admin_tweets.list_tweets') }}"
            class="btn btn-sm {% if _p.startswith('/admin/tweets') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fa-brands fa-x-twitter"></i> Twitter
         </a>
-        <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="far fa-envelope"></i> Newsletter
+        <a href="{{ url_for('admin_tiktok.list_posts') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fa-brands fa-tiktok"></i> TikTok
         </a>
-        {# Envois is /admin/sends/ and the stats page is /admin/sends/stats, so
-           a bare startswith would light both tabs at once on the stats page. #}
-        <a href="{{ url_for('admin_sends.list_sends') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-paper-plane"></i> Envois
+        {% if video_tools %}
+        <a href="{{ url_for('admin_video.index') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/video') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-scissors"></i> Montage
         </a>
-        {# An envelope rather than a chart: the tab after next is already
-           `fa-chart-line`, and that one is the site's analytics, not the
-           newsletter's. Same icon as this page's own heading. #}
-        <a href="{{ url_for('admin_sends.newsletter_stats') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="far fa-envelope-open"></i> Stats newsletter
-        </a>
+        {% endif %}
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-chart-line"></i> Statistiques
@@ -72,9 +87,28 @@
         </a>
         <a href="{{ url_for('admin_settings.index') }}"
            class="btn btn-sm {% if _p.startswith('/admin/settings') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-cog"></i> Réglages
+            <i class="fas fa-sliders"></i> Réglages
         </a>
     </nav>
+
+    {# Sous-navigation de la section Newsletter : les trois vues qui occupaient
+       auparavant trois onglets de premier niveau. #}
+    {% if _p.startswith('/admin/subscribers') or _p.startswith('/admin/sends') %}
+    <nav class="admin-tabs" aria-label="Newsletter" style="margin-top: -0.4rem;">
+        <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-vert{% else %}btn-outline{% endif %}">
+            Abonnés
+        </a>
+        <a href="{{ url_for('admin_sends.list_sends') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Envois
+        </a>
+        <a href="{{ url_for('admin_sends.newsletter_stats') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Statistiques
+        </a>
+    </nav>
+    {% endif %}
 
     <div class="admin-content">
         {% block admin_content %}{% endblock %}
