@@ -34,8 +34,11 @@ from datetime import datetime
 
 # Silence quieter than this, lasting at least MIN_SILENCE seconds, is cut.
 # -30 dB keeps room tone and breathing; going lower starts cutting soft speech.
-NOISE_FLOOR_DB = -30
-MIN_SILENCE = 0.35
+# -25 dB rather than -30: on two of Bernard's own recordings, -30 found almost
+# nothing — 1s of 44.7 and 1.9s of 56.8 — because the room tone sits above that
+# floor. At -25 the same clips lose 7s and the delivery still sounds natural.
+NOISE_FLOOR_DB = -25
+MIN_SILENCE = 0.30
 # Left on either side of kept audio so consonants are not clipped.
 PAD = 0.08
 # Gaps shorter than this are not worth a cut — stitching them makes speech
@@ -670,14 +673,18 @@ def start_job(src_path, original_name, vertical=False, title=None):
             tr = transcribe(cut)
             _set(job_id, transcript=tr['text'], segments_text=tr['segments'])
 
-            if not title:
+            # A separate name on purpose: assigning to `title` here would make
+            # it local to this closure, and the `if not title` above it would
+            # raise UnboundLocalError before ever reading the argument.
+            banner = title
+            if not banner:
                 _set(job_id, step='Titre du bandeau…')
-                title = generate_banner_title(tr['text'])
-                _set(job_id, title=title)
+                banner = generate_banner_title(tr['text'])
+                _set(job_id, title=banner)
 
             _set(job_id, step='Égalisation du son et de l’image…')
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
-            polish(cut, dest, loudness=loudness, gamma=gamma, title=title)
+            polish(cut, dest, loudness=loudness, gamma=gamma, title=banner)
             _set(job_id, output=dest)
             # The intermediate is only useful if the polish pass failed.
             try:
