@@ -32,6 +32,15 @@ TWEETS_URL = 'https://api.twitter.com/2/tweets'
 VERIFY_URL = 'https://api.twitter.com/1.1/account/verify_credentials.json'
 ME_URL = 'https://api.twitter.com/2/users/me'
 MENTIONS_URL = 'https://api.twitter.com/2/users/{user_id}/mentions'
+# Chunked media upload. Still the v1.1 host: the v2 endpoint exists but takes
+# its command parameters in the query string rather than the form body, and
+# rejects the v1.1 shape outright — v1.1 is what actually works with these
+# credentials today.
+UPLOAD_URL = 'https://upload.twitter.com/1.1/media/upload.json'
+UPLOAD_CHUNK = 4 * 1024 * 1024
+# A minute of polling is generous: X transcodes a 40-second clip in seconds,
+# but the wait is asynchronous and occasionally slow under load.
+UPLOAD_POLL_SECONDS = 60
 
 # `GET /2/tweets` takes up to 100 ids per call, so metrics for the whole blog
 # cost a single request.
@@ -344,6 +353,76 @@ def verify_credentials():
     return False, {'error': f"{resp.status_code} — {detail}", 'access_level': access_level}
 
 
+def upload_video(path, on_progress=None):
+    """Upload a video and return its media_id, ready to attach to a tweet.
+
+    Four steps, as X requires: INIT declares the size, APPEND sends the bytes
+    in chunks, FINALIZE closes the upload, then STATUS is polled because
+    transcoding is asynchronous — attaching a media_id that is still
+    processing gets the tweet rejected.
+    """
+    import time
+
+    if not is_configured():
+        return None, "X n'est pas configuré"
+    if not os.path.isfile(path):
+        return None, "Fichier introuvable."
+
+    auth = _auth()
+    size = os.path.getsize(path)
+
+    try:
+        init = requests.post(UPLOAD_URL, auth=auth, timeout=30, data={
+            'command': 'INIT', 'total_bytes': size,
+            'media_type': 'video/mp4', 'media_category': 'tweet_video'})
+        if init.status_code >= 300:
+            return None, f"INIT refusé ({init.status_code}) : {init.text[:150]}"
+        media_id = init.json()['media_id_string']
+
+        with open(path, 'rb') as fh:
+            index = 0
+            while True:
+                chunk = fh.read(UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                app = requests.post(UPLOAD_URL, auth=auth, timeout=120,
+                                    data={'command': 'APPEND', 'media_id': media_id,
+                                          'segment_index': index},
+                                    files={'media': chunk})
+                if app.status_code >= 300:
+                    return None, f"Envoi interrompu au bloc {index} ({app.status_code})."
+                index += 1
+                if on_progress:
+                    on_progress(min(index * UPLOAD_CHUNK, size), size)
+
+        fin = requests.post(UPLOAD_URL, auth=auth, timeout=60,
+                            data={'command': 'FINALIZE', 'media_id': media_id})
+        if fin.status_code >= 300:
+            return None, f"FINALIZE refusé ({fin.status_code}) : {fin.text[:150]}"
+
+        info = (fin.json() or {}).get('processing_info') or {}
+        waited = 0
+        while info.get('state') in ('pending', 'in_progress'):
+            delay = min(int(info.get('check_after_secs') or 3), 10)
+            if waited + delay > UPLOAD_POLL_SECONDS:
+                return None, "X met trop de temps à traiter la vidéo — réessayez."
+            time.sleep(delay)
+            waited += delay
+            st = requests.get(UPLOAD_URL, auth=auth, timeout=30,
+                              params={'command': 'STATUS', 'media_id': media_id})
+            if st.status_code >= 300:
+                return None, f"Statut illisible ({st.status_code})."
+            info = (st.json() or {}).get('processing_info') or {}
+
+        if info.get('state') == 'failed':
+            reason = (info.get('error') or {}).get('message') or 'raison inconnue'
+            return None, f"X a rejeté la vidéo : {reason}"
+        return media_id, None
+    except requests.RequestException as exc:
+        log.error("upload_video network error: %s", exc)
+        return None, f"Erreur réseau : {exc}"
+
+
 def delete_tweet(tweet_id):
     """Delete a tweet we posted. Returns (True, None) on success or
     (False, reason) — same best-effort contract as post_tweet."""
@@ -375,7 +454,7 @@ def delete_tweet(tweet_id):
     return False, f"{resp.status_code} — {detail}"
 
 
-def post_tweet(text: str):
+def post_tweet(text: str, media_ids=None):
     """Post `text` as a tweet. Returns (True, tweet_id) on success or
     (False, reason) otherwise — never raises, so callers can treat X as
     best-effort."""
@@ -389,8 +468,11 @@ def post_tweet(text: str):
         cfg['api_key'], cfg['api_secret'],
         cfg['access_token'], cfg['access_secret'],
     )
+    payload = {'text': text}
+    if media_ids:
+        payload['media'] = {'media_ids': [str(m) for m in media_ids]}
     try:
-        resp = requests.post(TWEETS_URL, json={'text': text}, auth=auth, timeout=15)
+        resp = requests.post(TWEETS_URL, json=payload, auth=auth, timeout=30)
     except requests.RequestException as exc:
         log.error("post_tweet network error: %s", exc)
         return False, f"Erreur réseau : {exc}"

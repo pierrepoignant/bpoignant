@@ -153,6 +153,70 @@ def attach_video(post_id):
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
+@admin_tiktok_bp.route('/<int:post_id>/post-x', methods=['POST'])
+@admin_required
+def post_to_x(post_id):
+    """Re-post the attached clip to X, video and all.
+
+    Works from anywhere, not just the dev machine: the video is fetched from
+    the bucket rather than the local disk, so production can do this too. X
+    needs the bytes — there is no way to hand it a URL.
+    """
+    import tempfile
+    import requests as http
+    import x as xapi
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    if not post.has_video:
+        flash("Rattachez d'abord une vidéo à ce post.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+    if post.x_post_id:
+        flash("Ce clip a déjà été publié sur X.", 'info')
+        return redirect(url_for('admin_tiktok.list_posts'))
+    if not xapi.is_configured():
+        flash("X n'est pas configuré (clés API manquantes).", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    text = (post.caption or post.title or '').strip()[:280]
+    if not text:
+        flash("Ce post n'a pas de texte à publier.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    tmp = None
+    try:
+        with http.get(post.video_url, stream=True, timeout=120) as resp:
+            if resp.status_code != 200:
+                flash(f"Vidéo illisible dans le stockage ({resp.status_code}).", 'danger')
+                return redirect(url_for('admin_tiktok.list_posts'))
+            fd, tmp = tempfile.mkstemp(suffix='.mp4')
+            with os.fdopen(fd, 'wb') as fh:
+                for chunk in resp.iter_content(1024 * 256):
+                    fh.write(chunk)
+
+        media_id, err = xapi.upload_video(tmp)
+        if err:
+            flash(f"Envoi de la vidéo à X impossible : {err}", 'danger')
+            return redirect(url_for('admin_tiktok.list_posts'))
+
+        ok, detail = xapi.post_tweet(text, media_ids=[media_id])
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    if not ok:
+        flash(f"Échec de la publication sur X : {detail}", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    post.x_post_id = str(detail) if detail else None
+    post.x_posted_at = datetime.utcnow()
+    db.session.commit()
+    flash("Clip publié sur X.", 'success')
+    return redirect(url_for('admin_tiktok.list_posts'))
+
+
 @admin_tiktok_bp.route('/<int:post_id>/update', methods=['POST'])
 @admin_required
 def update(post_id):

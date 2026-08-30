@@ -98,6 +98,24 @@
                         <i class="fa-brands fa-tiktok"></i> Voir sur TikTok
                     </a>
                     {% endif %}
+                    {% if p.has_video %}
+                    {% if p.x_post_id %}
+                    <a href="{{ p.x_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">
+                        <i class="fa-brands fa-x-twitter"></i> Publié sur X
+                    </a>
+                    {% else %}
+                    {# Publication immédiate : pas de fenêtre de rédaction, d'où
+                       la confirmation — c'est le seul garde-fou avant la mise en ligne. #}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_x', post_id=p.id) }}"
+                          style="margin: 0;"
+                          onsubmit="return confirm('Publier cette vidéo sur X maintenant, avec le texte ci-dessus ?')">
+                        <button type="submit" class="btn btn-sm"
+                                style="padding: 4px 12px; background: #000; color: #fff; border: none; border-radius: 50px;">
+                            <i class="fa-brands fa-x-twitter"></i> Publier sur X
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
                     <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}"
                           style="margin: 0 0 0 auto;"
                           onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">

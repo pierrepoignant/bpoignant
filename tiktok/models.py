@@ -33,6 +33,10 @@ class TikTokPost(db.Model):
     posted_url = db.Column(db.String(500), nullable=True)
     posted_at = db.Column(db.DateTime, nullable=True)
 
+    # Set once the clip has been re-posted to X, so the button can't fire twice.
+    x_post_id = db.Column(db.String(40), nullable=True)
+    x_posted_at = db.Column(db.DateTime, nullable=True)
+
     # Figures from the last Apify scrape.
     views = db.Column(db.Integer, nullable=True)
     likes = db.Column(db.Integer, nullable=True)
@@ -56,3 +60,7 @@ class TikTokPost(db.Model):
     @property
     def has_video(self):
         return bool(self.video_url)
+
+    @property
+    def x_url(self):
+        return f"https://x.com/i/web/status/{self.x_post_id}" if self.x_post_id else None
