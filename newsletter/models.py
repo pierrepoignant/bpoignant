@@ -135,3 +135,61 @@ class EmailEvent(db.Model):
 
     subscriber = db.relationship('Subscriber')
     article = db.relationship('Article')
+
+
+class Announcement(db.Model):
+    """A message sent to the subscribers that is not an article.
+
+    Campaign/Delivery both key on a non-null article_id, so an announcement
+    cannot borrow them without making that column nullable across two live
+    tables. A separate pair of tables is purely additive — create_all() makes
+    them and nothing existing is altered.
+
+    A row starts as a draft, is edited freely, and becomes read-only once
+    sent: the subscribers' copy cannot be recalled, so the record of what
+    they received must not change afterwards.
+    """
+
+    __tablename__ = 'newsletter_announcements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    subject = db.Column(db.String(255), nullable=False)
+    # Plain text, rendered with line breaks preserved. Bernard writes these
+    # himself and an editor here would be one more thing to explain.
+    body = db.Column(db.Text, nullable=False, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=True)
+    sent_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    recipient_count = db.Column(db.Integer, default=0, nullable=False)
+    success_count = db.Column(db.Integer, default=0, nullable=False)
+    error_count = db.Column(db.Integer, default=0, nullable=False)
+
+    sent_by = db.relationship('User')
+
+    @property
+    def is_sent(self):
+        return self.sent_at is not None
+
+
+class AnnouncementDelivery(db.Model):
+    """One row per (announcement, subscriber) successfully emailed — the same
+    record Delivery keeps for articles, so "who received the announcement of
+    the 12th" stays answerable after the fact."""
+
+    __tablename__ = 'newsletter_announcement_deliveries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    announcement_id = db.Column(db.Integer, db.ForeignKey('newsletter_announcements.id'),
+                                nullable=False, index=True)
+    subscriber_id = db.Column(db.Integer, db.ForeignKey('subscribers.id'),
+                              nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('announcement_id', 'subscriber_id',
+                            name='uq_ann_delivery_announcement_subscriber'),
+    )
+
+    announcement = db.relationship('Announcement')
+    subscriber = db.relationship('Subscriber')

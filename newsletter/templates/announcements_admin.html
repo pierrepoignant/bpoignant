@@ -1,0 +1,153 @@
+{% extends 'admin_base.html' %}
+{% block title %}Message aux abonnés{% endblock %}
+
+{% block admin_title %}<i class="fas fa-bullhorn" style="color: var(--vert);"></i> Message aux abonnés{% endblock %}
+{% block admin_subtitle %}<p>Un message libre — une annonce, une information — envoyé aux {{ mailable }} abonné{{ 's' if mailable != 1 else '' }} de la lettre. Ce n'est pas un article : rien n'est publié sur le site.</p>{% endblock %}
+
+{% block admin_content %}
+    {% if not mail_ok %}
+    <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        SendGrid n'est pas configuré — les envois sont impossibles pour le moment.
+    </div>
+    {% endif %}
+
+    {# Rédaction : le même formulaire crée un brouillon ou modifie celui qu'on
+       a ouvert. Un message envoyé n'arrive jamais ici, il n'est plus modifiable. #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.6rem; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.15rem; margin: 0 0 1rem;">
+            <i class="fas fa-pen-nib" style="color: var(--rouge);"></i>
+            {% if editing and editing.is_sent %}Message envoyé
+            {% elif editing %}Modifier le brouillon
+            {% else %}Nouveau message{% endif %}
+        </h2>
+
+        {% if editing and editing.is_sent %}
+        {# Lecture seule : la copie est partie, ce qui est affiché ici doit
+           rester ce que les abonnés ont reçu. #}
+        <p style="font-size: 0.85rem; color: var(--gris); margin: 0 0 1rem;">
+            Envoyé le {{ editing.sent_at.strftime('%d/%m/%Y à %H:%M') }}
+            à {{ editing.success_count }} abonné(s){% if editing.error_count %},
+            {{ editing.error_count }} échec(s){% endif %}.
+        </p>
+        <div style="font-weight: 700; margin-bottom: 0.6rem;">{{ editing.subject }}</div>
+        <div style="font-size: 0.95rem; line-height: 1.7; white-space: pre-line; background: var(--gris-clair); border-radius: 8px; padding: 12px 14px;">{{ editing.body }}</div>
+        <a href="{{ url_for('admin_sends.list_announcements') }}" class="btn btn-sm btn-primary" style="margin-top: 1rem;">
+            <i class="fas fa-plus"></i> Nouveau message
+        </a>
+
+        {% else %}
+        <form method="POST" action="{{ url_for('admin_sends.save_announcement') }}">
+            {% if editing %}<input type="hidden" name="announcement_id" value="{{ editing.id }}">{% endif %}
+
+            <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem;">Objet</label>
+            <input type="text" name="subject" required maxlength="255"
+                   value="{{ editing.subject if editing else '' }}"
+                   placeholder="L'objet que verront les abonnés dans leur boîte"
+                   style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.95rem; margin-bottom: 1rem;">
+
+            <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem;">Message</label>
+            <textarea name="body" rows="12" required
+                      placeholder="Écrivez ici. Les retours à la ligne sont conservés tels quels dans l'e-mail."
+                      style="width: 100%; padding: 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.95rem; line-height: 1.7;">{{ editing.body if editing else '' }}</textarea>
+
+            <div style="display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap; align-items: center;">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-save"></i> Enregistrer le brouillon
+                </button>
+                {% if editing %}
+                <a href="{{ url_for('admin_sends.list_announcements') }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    Nouveau message
+                </a>
+                {% endif %}
+            </div>
+        </form>
+
+        {% if editing and not editing.is_sent %}
+        <div style="border-top: 1px solid var(--gris-clair); margin-top: 1.4rem; padding-top: 1.2rem;">
+            {# L'envoi de test d'abord : c'est la seule façon de voir l'e-mail
+               tel qu'il arrivera avant de le mettre dans 1 200 boîtes. #}
+            <form method="POST" action="{{ url_for('admin_sends.test_announcement', announcement_id=editing.id) }}"
+                  style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+                <input type="email" name="email" value="{{ current_user.email or '' }}"
+                       placeholder="votre adresse"
+                       style="flex: 1; min-width: 220px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    <i class="far fa-paper-plane"></i> M'envoyer un test
+                </button>
+            </form>
+
+            <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+                <form method="POST" action="{{ url_for('admin_sends.send_announcement', announcement_id=editing.id) }}"
+                      onsubmit="return confirm('Envoyer ce message aux {{ mailable }} abonnés ? C\'est définitif.')"
+                      style="margin: 0;">
+                    <button type="submit" class="btn btn-sm btn-vert" {{ 'disabled' if not mail_ok }}>
+                        <i class="fas fa-paper-plane"></i> Envoyer aux {{ mailable }} abonnés
+                    </button>
+                </form>
+                <span style="font-size: 0.82rem; color: var(--gris);">
+                    Un envoi ne peut pas être annulé.
+                </span>
+                <form method="POST" action="{{ url_for('admin_sends.delete_announcement', announcement_id=editing.id) }}"
+                      onsubmit="return confirm('Supprimer ce brouillon ?')" style="margin: 0 0 0 auto;">
+                    <button type="submit" class="btn btn-sm"
+                            style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    {% if announcements %}
+    <h2 style="font-size: 1.15rem; margin: 0 0 1rem;">
+        <i class="fas fa-list" style="color: var(--gris);"></i> Messages ({{ announcements|length }})
+    </h2>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--gris-clair);">
+                <tr style="font-size: 0.85rem;">
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Objet</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem;">État</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Destinataires</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in announcements %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td data-label="Objet" style="padding: 0.8rem 1rem;">
+                        <span style="font-weight: 600;">{{ a.subject }}</span>
+                    </td>
+                    <td data-label="État" style="padding: 0.8rem 1rem; white-space: nowrap;">
+                        {% if a.is_sent %}
+                        <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+                        Envoyé le {{ a.sent_at.strftime('%d/%m/%Y') }}
+                        {% else %}
+                        <i class="far fa-pen-to-square" style="color: var(--gris);"></i> Brouillon
+                        {% endif %}
+                    </td>
+                    <td data-label="Destinataires" style="padding: 0.8rem 1rem;">
+                        {% if a.is_sent %}
+                        <strong>{{ a.success_count }}</strong> / {{ a.recipient_count }}
+                        {% if a.error_count %}
+                        <span style="color: var(--rouge);"> · {{ a.error_count }} échec(s)</span>
+                        {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td style="padding: 0.8rem 1rem; text-align: right;">
+                        <a href="{{ url_for('admin_sends.edit_announcement', announcement_id=a.id) }}"
+                           class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                            {{ 'Voir' if a.is_sent else 'Modifier' }}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}

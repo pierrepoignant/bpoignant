@@ -100,12 +100,16 @@
             Abonnés
         </a>
         <a href="{{ url_for('admin_sends.list_sends') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') and not _p.startswith('/admin/sends/messages') %}btn-vert{% else %}btn-outline{% endif %}">
             Envois
         </a>
         <a href="{{ url_for('admin_sends.newsletter_stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             Statistiques
+        </a>
+        <a href="{{ url_for('admin_sends.list_announcements') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/sends/messages') %}btn-vert{% else %}btn-outline{% endif %}">
+            Message
         </a>
     </nav>
     {% endif %}

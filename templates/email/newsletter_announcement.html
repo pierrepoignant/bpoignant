@@ -1,0 +1,24 @@
+{% extends 'email/_base.html' %}
+{% block subject %}{{ announcement.subject }}{% endblock %}
+
+{% block content %}
+    <h1 style="font-size:22px;line-height:1.3;margin:0 0 20px;color:#1A1A2E;">
+        {{ announcement.subject }}
+    </h1>
+
+    {# Écrit en texte simple : les retours à la ligne sont ceux de la saisie. #}
+    <div style="font-size:15px;line-height:1.7;color:#1A1A2E;white-space:pre-line;">{{ announcement.body }}</div>
+
+    <div style="margin:32px 0 8px;text-align:center;">
+        <a href="{{ site_url }}"
+           style="display:inline-block;background:#E6003E;color:#ffffff;padding:12px 28px;border-radius:50px;text-decoration:none;font-weight:600;font-size:14px;">
+            Aller sur le site →
+        </a>
+    </div>
+{% endblock %}
+
+{% block footer %}
+    Vous recevez cet e-mail car vous êtes inscrit à la newsletter de
+    <a href="{{ site_url }}" style="color:#E6003E;text-decoration:none;">bernardpoignant.fr</a>.<br>
+    <a href="{{ unsubscribe_url }}" style="color:#6C757D;">Se désinscrire en un clic</a>.
+{% endblock %}

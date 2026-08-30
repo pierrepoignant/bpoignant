@@ -11,7 +11,9 @@ from flask import (
 )
 
 from init_db import db
-from newsletter.models import Subscriber, Campaign, Delivery, EmailEvent
+from newsletter.models import (
+    Subscriber, Campaign, Delivery, EmailEvent, Announcement, AnnouncementDelivery,
+)
 from newsletter.antispam import score_signup, is_suspicious, CONFIRM_THRESHOLD
 from auth import admin_required
 from flask import current_app, render_template, url_for
@@ -1084,3 +1086,241 @@ def send_article_to_subscribers(article, sent_by=None):
         payload = _suppress_before_send(payload)
         _send_payload(article.id, campaign.id, payload)
     return campaign
+
+
+# --------------------------------------------------------------------------
+# Annonces : un message aux abonnés qui n'est pas un article.
+# --------------------------------------------------------------------------
+
+def announcement_category(announcement_id):
+    """SendGrid category tag for an announcement, so its opens and clicks can
+    be pulled the same way an article's are."""
+    return f'annonce-{announcement_id}'
+
+
+def _announcement_recipients(announcement):
+    """Mailable subscribers who have not already received this announcement,
+    plus the number skipped because they have."""
+    subscribers = _mailable_query().all()
+    already = {
+        d.subscriber_id
+        for d in AnnouncementDelivery.query.filter_by(announcement_id=announcement.id).all()
+    }
+    recipients = [s for s in subscribers if s.id not in already]
+    return recipients, len(subscribers) - len(recipients)
+
+
+def _build_announcement_payload(announcement, recipients):
+    """Render one e-mail per recipient inside the request context, so the
+    background worker only does network I/O."""
+    site_url = url_for('articles.public_list', _external=True)
+    payload = []
+    for sub in recipients:
+        html = render_template(
+            'email/newsletter_announcement.html',
+            announcement=announcement,
+            site_url=site_url,
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+            unsubscribe_url=url_for('newsletter.unsubscribe', token=sub.token, _external=True),
+        )
+        payload.append({
+            'subscriber_id': sub.id,
+            'email': sub.email,
+            'name': ' '.join(p for p in (sub.prenom, sub.nom) if p) or None,
+            'subject': announcement.subject,
+            'html': html,
+        })
+    return payload
+
+
+def _send_announcement_payload(announcement_id, payload):
+    categories = ['newsletter', 'annonce', announcement_category(announcement_id)]
+    successes, errors = 0, 0
+    for item in payload:
+        ok = send_email(
+            to_email=item['email'],
+            to_name=item['name'],
+            subject=item['subject'],
+            html=item['html'],
+            categories=categories,
+        )
+        if ok:
+            successes += 1
+            db.session.add(AnnouncementDelivery(
+                announcement_id=announcement_id,
+                subscriber_id=item['subscriber_id'],
+                email=item['email'],
+            ))
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        else:
+            errors += 1
+
+    ann = db.session.get(Announcement, announcement_id)
+    if ann is not None:
+        ann.success_count = successes
+        ann.error_count = errors
+        db.session.commit()
+    return successes, errors
+
+
+def enqueue_announcement_send(announcement, sent_by=None):
+    """Mark the announcement sent and hand the e-mailing to a background
+    thread, exactly as an article send does."""
+    recipients, _skipped = _announcement_recipients(announcement)
+    # Rendre avant de marquer l'envoi : marquer d'abord rendrait le message
+    # définitivement « envoyé » — donc non modifiable et non supprimable — si
+    # le rendu échouait, alors que personne ne l'aurait reçu.
+    payload = _build_announcement_payload(announcement, recipients) if recipients else []
+
+    announcement.sent_at = datetime.utcnow()
+    announcement.sent_by_id = getattr(sent_by, 'id', None)
+    announcement.recipient_count = len(recipients)
+    db.session.commit()
+
+    if not recipients:
+        return announcement
+
+    app = current_app._get_current_object()
+    announcement_id = announcement.id
+
+    def _worker():
+        with app.app_context():
+            try:
+                to_send = _suppress_before_send(payload)
+                _send_announcement_payload(announcement_id, to_send)
+            except Exception:
+                log.exception("background announcement send failed (id %s)", announcement_id)
+            finally:
+                db.session.remove()
+
+    threading.Thread(target=_worker, name=f"announcement-send-{announcement_id}",
+                     daemon=True).start()
+    return announcement
+
+
+@admin_sends_bp.route('/messages')
+@admin_required
+def list_announcements():
+    announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
+    return render_template(
+        'announcements_admin.html',
+        announcements=announcements,
+        mailable=_mailable_query().count(),
+        mail_ok=mail_is_configured(),
+        editing=None,
+    )
+
+
+@admin_sends_bp.route('/messages/<int:announcement_id>')
+@admin_required
+def edit_announcement(announcement_id):
+    editing = db.session.get(Announcement, announcement_id)
+    if editing is None:
+        abort(404)
+    announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
+    return render_template(
+        'announcements_admin.html',
+        announcements=announcements,
+        mailable=_mailable_query().count(),
+        mail_ok=mail_is_configured(),
+        editing=editing,
+    )
+
+
+@admin_sends_bp.route('/messages/save', methods=['POST'])
+@admin_required
+def save_announcement():
+    """Create or update a draft. A sent announcement is never modified — its
+    copy is already in people's mailboxes."""
+    announcement_id = request.form.get('announcement_id', type=int)
+    subject = (request.form.get('subject') or '').strip()
+    body = (request.form.get('body') or '').strip()
+
+    if not subject or not body:
+        flash("Il faut un objet et un message.", 'error')
+        return redirect(url_for('admin_sends.list_announcements'))
+
+    if announcement_id:
+        ann = db.session.get(Announcement, announcement_id)
+        if ann is None:
+            abort(404)
+        if ann.is_sent:
+            flash("Ce message a déjà été envoyé : il ne peut plus être modifié.", 'error')
+            return redirect(url_for('admin_sends.list_announcements'))
+        ann.subject, ann.body = subject, body
+    else:
+        ann = Announcement(subject=subject, body=body)
+        db.session.add(ann)
+    db.session.commit()
+
+    flash("Brouillon enregistré.", 'success')
+    return redirect(url_for('admin_sends.edit_announcement', announcement_id=ann.id))
+
+
+@admin_sends_bp.route('/messages/<int:announcement_id>/test', methods=['POST'])
+@admin_required
+def test_announcement(announcement_id):
+    """Send the message to one address only — the way to see the real e-mail
+    before it goes to everyone."""
+    ann = db.session.get(Announcement, announcement_id)
+    if ann is None:
+        abort(404)
+
+    to = (request.form.get('email') or getattr(current_user, 'email', '') or '').strip()
+    if not _EMAIL_RE.match(to):
+        flash("Adresse de test invalide.", 'error')
+        return redirect(url_for('admin_sends.edit_announcement', announcement_id=ann.id))
+
+    html = render_template(
+        'email/newsletter_announcement.html',
+        announcement=ann,
+        site_url=url_for('articles.public_list', _external=True),
+        site_name=current_app.config['SITE_NAME'],
+        site_tagline=current_app.config['SITE_TAGLINE'],
+        # Un lien de désinscription est obligatoire dans l'e-mail réel ; pour
+        # le test il pointe vers le site, faute d'abonné à désinscrire.
+        unsubscribe_url=url_for('articles.public_list', _external=True),
+    )
+    ok = send_email(to_email=to, subject=f'[Test] {ann.subject}', html=html,
+                    categories=['newsletter', 'annonce-test'])
+    flash(f"E-mail de test envoyé à {to}." if ok
+          else "L'envoi du test a échoué — voir les journaux.", 'success' if ok else 'error')
+    return redirect(url_for('admin_sends.edit_announcement', announcement_id=ann.id))
+
+
+@admin_sends_bp.route('/messages/<int:announcement_id>/send', methods=['POST'])
+@admin_required
+def send_announcement(announcement_id):
+    ann = db.session.get(Announcement, announcement_id)
+    if ann is None:
+        abort(404)
+    if ann.is_sent:
+        flash("Ce message a déjà été envoyé.", 'error')
+        return redirect(url_for('admin_sends.list_announcements'))
+    if not mail_is_configured():
+        flash("SendGrid n'est pas configuré — envoi impossible.", 'error')
+        return redirect(url_for('admin_sends.edit_announcement', announcement_id=ann.id))
+
+    enqueue_announcement_send(ann, sent_by=current_user)
+    flash(f"Envoi en cours à {ann.recipient_count} abonné(s). "
+          "Les compteurs se remplissent au fur et à mesure.", 'success')
+    return redirect(url_for('admin_sends.list_announcements'))
+
+
+@admin_sends_bp.route('/messages/<int:announcement_id>/delete', methods=['POST'])
+@admin_required
+def delete_announcement(announcement_id):
+    ann = db.session.get(Announcement, announcement_id)
+    if ann is None:
+        abort(404)
+    if ann.is_sent:
+        flash("Un message envoyé ne peut pas être supprimé.", 'error')
+        return redirect(url_for('admin_sends.list_announcements'))
+    db.session.delete(ann)
+    db.session.commit()
+    flash("Brouillon supprimé.", 'success')
+    return redirect(url_for('admin_sends.list_announcements'))
