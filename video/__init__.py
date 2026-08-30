@@ -550,20 +550,84 @@ def write_caption(transcript_text):
 WORKDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'instance', 'video')
 JOBS = {}
 _jobs_lock = threading.Lock()
+_loaded = False
+
+
+def _job_file(job_id):
+    return os.path.join(WORKDIR, f'{job_id}.json')
+
+
+def _persist(job):
+    """Write the job beside its video.
+
+    Jobs used to live only in memory, so every restart of the dev server threw
+    away the transcript, the caption and the link to the file — leaving a
+    finished render on disk that the download route answered 404 for. The
+    server restarts on every deploy, so this was a matter of when, not if.
+    """
+    try:
+        os.makedirs(WORKDIR, exist_ok=True)
+        with open(_job_file(job['id']), 'w', encoding='utf-8') as fh:
+            json.dump(job, fh, ensure_ascii=False)
+    except (OSError, TypeError) as exc:
+        log.warning('could not persist job %s: %s', job.get('id'), exc)
+
+
+def _load_jobs():
+    """Restore jobs from disk once per process.
+
+    Also adopts any render that has no job file — videos produced before jobs
+    were persisted would otherwise stay invisible and undownloadable.
+    """
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    if not os.path.isdir(WORKDIR):
+        return
+    for name in os.listdir(WORKDIR):
+        if not name.endswith('.json'):
+            continue
+        try:
+            with open(os.path.join(WORKDIR, name), encoding='utf-8') as fh:
+                job = json.load(fh)
+            if job.get('id'):
+                JOBS.setdefault(job['id'], job)
+        except (OSError, ValueError):
+            continue
+    for name in sorted(os.listdir(WORKDIR)):
+        if not name.endswith('.mp4') or name.startswith('src-'):
+            continue
+        job_id = os.path.splitext(name)[0]
+        if job_id in JOBS:
+            continue
+        path = os.path.join(WORKDIR, name)
+        JOBS[job_id] = {
+            'id': job_id, 'name': name, 'status': 'done',
+            'step': 'Terminé (repris depuis le disque)', 'output': path,
+            'created_at': datetime.utcfromtimestamp(
+                os.path.getmtime(path)).isoformat(timespec='seconds'),
+        }
 
 
 def _set(job_id, **fields):
     with _jobs_lock:
-        JOBS.setdefault(job_id, {}).update(fields)
+        _load_jobs()
+        job = JOBS.setdefault(job_id, {})
+        job.update(fields)
+        snapshot = dict(job)
+    _persist(snapshot)
 
 
 def get_job(job_id):
     with _jobs_lock:
+        _load_jobs()
         return dict(JOBS.get(job_id) or {})
 
 
 def all_jobs():
     with _jobs_lock:
+        _load_jobs()
         return sorted(JOBS.values(), key=lambda j: j.get('created_at', ''), reverse=True)
 
 
