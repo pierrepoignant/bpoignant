@@ -26,8 +26,10 @@
                 <i class="fas fa-wand-magic-sparkles"></i> Traiter la vidéo
             </button>
             <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.6rem;">
-                Les silences de plus de {{ '%.2f'|format(0.35) }} s sont retirés, la vidéo démarre
-                sur la parole, puis elle est transcrite et un texte de publication est proposé.
+                Les silences de plus de 0,35 s sont retirés et la vidéo démarre sur la parole.
+                Le son est ramené à −14 LUFS (le niveau que les plateformes attendent) et
+                l'image n'est éclaircie que si elle est trop sombre. Puis transcription et
+                proposition de texte.
             </div>
         </form>
     </div>

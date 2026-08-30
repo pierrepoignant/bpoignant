@@ -54,6 +54,9 @@
                 if (j.kept) bits.push(j.kept + ' s conservées');
                 if (j.removed) bits.push(j.removed + ' s de blancs retirés');
                 if (j.cuts) bits.push(j.cuts + ' segment(s)');
+                if (j.lufs_before != null) bits.push('son ' + j.lufs_before + ' → -14 LUFS');
+                if (j.luma != null) bits.push(j.gamma ? ('image éclaircie (γ ' + j.gamma + ')')
+                                                      : 'exposition correcte, image inchangée');
                 document.getElementById('stats').textContent = bits.join(' · ');
 
                 if (j.status === 'error') {

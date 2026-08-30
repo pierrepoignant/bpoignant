@@ -19,6 +19,8 @@ The pipeline, in order:
                           voice adapted to the format.
 """
 
+import json
+import math
 import os
 import re
 import shutil
@@ -41,6 +43,20 @@ PAD = 0.08
 MIN_GAP_TO_CUT = 0.25
 
 WHISPER_MODEL = os.environ.get('VIDEO_WHISPER_MODEL', 'small')
+
+# Loudness target. TikTok, Instagram and YouTube all normalise playback to
+# roughly -14 LUFS; delivering at that level means the platform leaves the
+# audio alone instead of pulling it down and flattening the dynamics.
+TARGET_LUFS = -14.0
+TARGET_PEAK_DB = -1.5
+TARGET_LRA = 11.0
+
+# Average luma (0–255) a well-exposed talking head sits around. Below
+# DARK_THRESHOLD the picture is lifted; above it, left alone — "if needed"
+# is the point, and gratuitously regrading good footage makes it worse.
+TARGET_LUMA = 120.0
+DARK_THRESHOLD = 100.0
+MAX_GAMMA = 1.6
 
 
 def is_enabled():
@@ -178,6 +194,107 @@ def render(src, segments, dest, vertical=False):
     return dest
 
 
+# ── Mesure et correction ─────────────────────────────────────
+
+def measure_loudness(path):
+    """Run loudnorm's analysis pass and return its measurements.
+
+    Measured on the *cut* file rather than the original: removing silence
+    raises integrated loudness appreciably, so figures taken beforehand would
+    push the result too loud.
+    """
+    code, _, err = _run([
+        _bin('ffmpeg'), '-hide_banner', '-nostats', '-i', path,
+        '-af', (f'loudnorm=I={TARGET_LUFS}:TP={TARGET_PEAK_DB}:LRA={TARGET_LRA}'
+                ':print_format=json'),
+        '-f', 'null', '-',
+    ])
+    if code != 0:
+        return None
+    # The JSON block is the last thing loudnorm writes to stderr.
+    start = err.rfind('{')
+    end = err.rfind('}')
+    if start == -1 or end == -1:
+        return None
+    try:
+        return json.loads(err[start:end + 1])
+    except ValueError:
+        return None
+
+
+_YAVG = re.compile(r'lavfi\.signalstats\.YAVG=([\d.]+)')
+
+
+def measure_brightness(path, sample_fps=1):
+    """Mean luma across the clip, 0–255, or None if it can't be read.
+
+    Sampled at one frame per second: brightness is a property of the lighting,
+    not of individual frames, and reading every frame of a long clip is slow
+    for an answer that doesn't change.
+    """
+    code, _, err = _run([
+        _bin('ffmpeg'), '-hide_banner', '-nostats', '-i', path,
+        '-vf', f'fps={sample_fps},signalstats,metadata=print:key=lavfi.signalstats.YAVG',
+        '-f', 'null', '-',
+    ])
+    if code != 0:
+        return None
+    values = [float(v) for v in _YAVG.findall(err)]
+    return round(sum(values) / len(values), 1) if values else None
+
+
+def gamma_for(luma):
+    """Gamma that would lift `luma` towards TARGET_LUMA, or None when the
+    picture is already bright enough.
+
+    Gamma rather than a brightness offset: it lifts the midtones and shadows
+    while leaving white where it is, so a dim clip gets usable without the
+    washed-out look a flat offset gives.
+    """
+    if luma is None or luma >= DARK_THRESHOLD or luma <= 1:
+        return None
+    # eq applies out = in^(1/gamma), so lifting the picture needs gamma > 1.
+    # Written the other way round this always produced a value below 1, was
+    # clamped to 1.0, and silently lightened nothing.
+    g = math.log(luma / 255.0) / math.log(TARGET_LUMA / 255.0)
+    return round(min(max(g, 1.0), MAX_GAMMA), 3)
+
+
+def polish(src, dest, loudness=None, gamma=None):
+    """Second pass: normalise loudness, and lift the picture when it is dark.
+
+    Video is stream-copied when no regrade is needed, so the common case costs
+    an audio re-encode and little else.
+    """
+    audio = (f'highpass=f=80,'   # room rumble and handling noise, below speech
+             f'loudnorm=I={TARGET_LUFS}:TP={TARGET_PEAK_DB}:LRA={TARGET_LRA}')
+    if loudness:
+        # Feeding the measurements back turns loudnorm's adaptive one-pass mode
+        # into the accurate two-pass one.
+        try:
+            audio += (f":measured_I={loudness['input_i']}"
+                      f":measured_TP={loudness['input_tp']}"
+                      f":measured_LRA={loudness['input_lra']}"
+                      f":measured_thresh={loudness['input_thresh']}"
+                      f":offset={loudness['target_offset']}:linear=true")
+        except KeyError:
+            pass
+
+    args = [_bin('ffmpeg'), '-hide_banner', '-nostats', '-y', '-i', src,
+            '-af', audio]
+    if gamma:
+        args += ['-vf', f'eq=gamma={gamma}', '-c:v', 'libx264',
+                 '-preset', 'veryfast', '-crf', '20']
+    else:
+        args += ['-c:v', 'copy']
+    args += ['-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dest]
+
+    code, _, err = _run(args)
+    if code != 0:
+        raise VideoError(f"Égalisation impossible : {err.strip()[-300:]}")
+    return dest
+
+
 # ── Transcription ────────────────────────────────────────────
 
 _model = None
@@ -292,9 +409,27 @@ def start_job(src_path, original_name, vertical=False):
                  removed=round(duration - kept, 1), cuts=len(segments))
 
             _set(job_id, step='Montage…')
+            cut = os.path.join(WORKDIR, f'{job_id}-cut.mp4')
+            render(src_path, segments, cut, vertical=vertical)
+
+            _set(job_id, step='Mesure du son et de l’image…')
+            loudness = measure_loudness(cut)
+            luma = measure_brightness(cut)
+            gamma = gamma_for(luma)
+            _set(job_id, luma=luma, gamma=gamma,
+                 lufs_before=(round(float(loudness['input_i']), 1)
+                              if loudness and loudness.get('input_i') not in (None, '-inf')
+                              else None))
+
+            _set(job_id, step='Égalisation du son et de l’image…')
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
-            render(src_path, segments, dest, vertical=vertical)
+            polish(cut, dest, loudness=loudness, gamma=gamma)
             _set(job_id, output=dest)
+            # The intermediate is only useful if the polish pass failed.
+            try:
+                os.remove(cut)
+            except OSError:
+                pass
 
             _set(job_id, step='Transcription…')
             tr = transcribe(dest)
