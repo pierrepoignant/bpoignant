@@ -90,4 +90,77 @@
         </p>
     </details>
 </div>
+
+    {# ── Apify : récupération des données TikTok ── #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 1.6rem; margin-top: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.4rem;">
+            <h2 style="font-size: 1.15rem; margin: 0;">
+                <i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> Apify — données TikTok
+            </h2>
+            {% if apify_configured %}
+            <span style="background: rgba(198,208,2,0.2); color: var(--vert-fonce); padding: 3px 12px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;">CONFIGURÉ</span>
+            {% else %}
+            <span style="background: rgba(108,117,125,0.15); color: var(--gris); padding: 3px 12px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;">NON CONFIGURÉ</span>
+            {% endif %}
+        </div>
+        <p style="color: var(--gris); font-size: 0.87rem; margin: 0 0 1.2rem;">
+            TikTok ne publie pas d'API pour lire les chiffres d'un compte personnel ;
+            les vues, mentions J'aime et commentaires sont donc récupérés via un acteur Apify.
+            Le jeton se trouve dans votre compte Apify, section « Integrations → API tokens ».
+        </p>
+
+        <form method="POST" action="{{ url_for('admin_settings.apify_credentials') }}">
+            <div class="form-group">
+                <label for="apify_token">Jeton d'API</label>
+                <input type="password" id="apify_token" name="apify_token" autocomplete="off"
+                       placeholder="{% if apify_configured %}•••••••• (laisser vide pour conserver){% else %}apify_api_…{% endif %}"
+                       style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit;">
+            </div>
+            <div class="form-group">
+                <label for="apify_actor">Acteur TikTok</label>
+                <input type="text" id="apify_actor" name="apify_actor" value="{{ apify_actor }}"
+                       style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit;">
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                    Identifiant de l'acteur Apify à exécuter. Par défaut
+                    <code>{{ apify_default_actor }}</code>.
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="apify_profile">Profil TikTok</label>
+                <input type="text" id="apify_profile" name="apify_profile" value="{{ apify_profile }}"
+                       placeholder="bpoignant"
+                       style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit;">
+                <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.3rem;">
+                    Sans l'arobase. Utilisé pour récupérer les dernières vidéos du compte.
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.4rem;">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+            </div>
+        </form>
+
+        {% if apify_configured %}
+        <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem;">
+            <form method="POST" action="{{ url_for('admin_settings.apify_test') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        title="Vérifie le jeton sans lancer d'exécution facturée">
+                    <i class="fas fa-plug"></i> Tester le jeton
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_settings.apify_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Supprimer le jeton Apify ?')">
+                <button type="submit" class="btn btn-sm" style="color: var(--rouge); border: 1px solid var(--rouge); background: none;">
+                    <i class="fas fa-unlink"></i> Supprimer le jeton
+                </button>
+            </form>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--gris); margin: 0.8rem 0 0;">
+            « Tester » interroge seulement votre compte Apify : aucune exécution d'acteur
+            n'est déclenchée, donc aucun crédit consommé.
+        </p>
+        {% endif %}
+    </div>
+
 {% endblock %}

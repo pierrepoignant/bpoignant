@@ -49,13 +49,54 @@ def _callback_url():
 @admin_required
 def index():
     import gdrive
+    import apify
     return render_template(
         'settings_index.html',
+        apify_configured=apify.is_configured(),
+        apify_actor=apify.actor(),
+        apify_profile=apify.profile(),
+        apify_default_actor=apify.DEFAULT_ACTOR,
         gdrive_client_id=gdrive._client_id(),
         gdrive_has_secret=bool(gdrive._client_secret()),
         gdrive_connected=gdrive.is_connected(),
         gdrive_redirect_uri=_callback_url(),
     )
+
+
+@admin_settings_bp.route('/apify/credentials', methods=['POST'])
+@admin_required
+def apify_credentials():
+    import apify
+    apify.save_settings(request.form.get('apify_token'),
+                        request.form.get('apify_actor'),
+                        request.form.get('apify_profile'))
+    flash("Réglages Apify enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index'))
+
+
+@admin_settings_bp.route('/apify/test', methods=['POST'])
+@admin_required
+def apify_test():
+    """Check the token against Apify's own account endpoint — no actor run, so
+    no credits are spent proving the configuration works."""
+    import apify
+    try:
+        info = apify.account_info()
+    except apify.ApifyError as exc:
+        flash(f"Apify : {exc}", 'danger')
+        return redirect(url_for('admin_settings.index'))
+    plan = info.get('plan') or 'inconnu'
+    flash(f"Apify OK — compte « {info.get('username') or '?'} », formule {plan}.", 'success')
+    return redirect(url_for('admin_settings.index'))
+
+
+@admin_settings_bp.route('/apify/disconnect', methods=['POST'])
+@admin_required
+def apify_disconnect():
+    import apify
+    apify.disconnect()
+    flash("Jeton Apify supprimé.", 'info')
+    return redirect(url_for('admin_settings.index'))
 
 
 @admin_settings_bp.route('/gdrive/credentials', methods=['POST'])
