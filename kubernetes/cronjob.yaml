@@ -183,3 +183,53 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Nightly TikTok refresh.
+#
+# The admin's "Récupérer les posts" button only refreshes posts published in
+# the last week, so publishing a clip and clicking refresh does not rewrite the
+# figures of the whole back catalogue. This job is the other half: once a day
+# it refreshes every post, so the older ones stay current without being pulled
+# on every click.
+#
+# Schedule: every day at 00:00 Europe/Paris — TikTok's own counters settle
+# overnight, and nothing else runs at that hour.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-tiktok-scrape
+  namespace: default
+spec:
+  schedule: "0 0 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # One retry: an Apify run can fail on a transient timeout, and unlike the
+      # alert jobs a second attempt here is harmless — the upsert is idempotent.
+      backoffLimit: 1
+      # An actor run over the profile takes minutes, not seconds.
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: tiktok-scrape
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "tiktok_scrape.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

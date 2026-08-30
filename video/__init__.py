@@ -701,3 +701,76 @@ def start_job(src_path, original_name, vertical=False, title=None):
 
     threading.Thread(target=_work, name=f'video-{job_id}', daemon=True).start()
     return job_id
+
+
+THUMB_DIR = os.path.join(WORKDIR, 'thumbs')
+
+
+def thumbnail(filename, at=1.0, width=320):
+    """Return the path to a JPEG still for a render, generating it on first
+    ask and caching it beside the video.
+
+    The picker shows a dozen of these at once, so extracting a frame per page
+    load would be a dozen ffmpeg runs per refresh. The cache is keyed on the
+    render's mtime: a file replaced under the same name gets a new still
+    rather than the stale one.
+    """
+    src = os.path.join(WORKDIR, filename)
+    if not os.path.exists(src):
+        return None
+
+    os.makedirs(THUMB_DIR, exist_ok=True)
+    stamp = int(os.path.getmtime(src))
+    dest = os.path.join(THUMB_DIR, f'{os.path.splitext(filename)[0]}-{stamp}.jpg')
+    if os.path.exists(dest):
+        return dest
+
+    # A clip shorter than the seek point would yield no frame at all; fall
+    # back to the very first one.
+    seek = at if (probe_duration(src) or 0) > at + 0.2 else 0
+    try:
+        _run([_bin('ffmpeg'), '-y', '-ss', str(seek), '-i', src,
+              '-frames:v', '1', '-vf', f'scale={width}:-2', '-q:v', '4', dest],
+             timeout=60)
+    except Exception:
+        log.exception('thumbnail failed for %s', filename)
+        return None
+    return dest if os.path.exists(dest) else None
+
+
+def local_renders():
+    """The finished renders on this machine, newest first, each with what the
+    picker needs to tell them apart: when it was made, how long it runs, and
+    the banner title if the job that produced it is still on record."""
+    if not is_enabled() or not os.path.isdir(WORKDIR):
+        return []
+
+    by_output = {}
+    for job in all_jobs():
+        out = job.get('output')
+        if out:
+            by_output[os.path.basename(out)] = job
+
+    renders = []
+    for name in os.listdir(WORKDIR):
+        if not name.endswith('.mp4') or name.startswith('src-') or name.endswith('-cut.mp4'):
+            continue
+        path = os.path.join(WORKDIR, name)
+        job = by_output.get(name, {})
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        renders.append({
+            'filename': name,
+            'created_at': datetime.fromtimestamp(stat.st_mtime),
+            'size_mb': round(stat.st_size / (1024 * 1024), 1),
+            # Prefer the duration the job measured; probing every file on
+            # every page load would be one ffprobe per render.
+            'duration': job.get('kept') or job.get('duration'),
+            'title': job.get('title'),
+            'source_name': job.get('name'),
+            'job_id': job.get('id'),
+        })
+    renders.sort(key=lambda r: r['created_at'], reverse=True)
+    return renders

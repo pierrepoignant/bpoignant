@@ -5,7 +5,7 @@ are ordinary content Bernard manages from production, even though the editing
 that produces them only runs on the development machine.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import os
 
@@ -30,14 +30,10 @@ def list_posts():
         TikTokPost.posted_at.desc(), TikTokPost.created_at.desc()).all()
     import storage, video, apify
 
-    # Renders available to attach — only meaningful on the dev machine.
-    local_videos = []
-    if video.is_enabled() and os.path.isdir(video.WORKDIR):
-        local_videos = sorted(
-            (f for f in os.listdir(video.WORKDIR)
-             if f.endswith('.mp4') and not f.startswith('src-')),
-            key=lambda f: os.path.getmtime(os.path.join(video.WORKDIR, f)),
-            reverse=True)
+    # Renders available to attach — only meaningful on the dev machine. Each
+    # carries its date, duration and title so the picker can show something
+    # more identifiable than a hex filename.
+    local_videos = video.local_renders()
 
     return render_template('tiktok_admin_list.html', posts=posts,
                            storage_ok=storage.is_configured(),
@@ -62,13 +58,43 @@ def sync():
         return redirect(url_for('admin_tiktok.list_posts'))
 
     try:
-        items = apify.scrape_profile()
+        result = sync_posts(full=False)
     except apify.ApifyError as exc:
         flash(f"Récupération impossible : {exc}", 'danger')
         return redirect(url_for('admin_tiktok.list_posts'))
 
-    created = updated = 0
+    message = f"{result['created']} nouveau(x) post(s), {result['updated']} mis à jour."
+    if result['skipped']:
+        message += (f" {result['skipped']} post(s) de plus de {RECENT_DAYS} jours"
+                    " laissés de côté — ils seront actualisés cette nuit.")
+    flash(message, 'success')
+    return redirect(url_for('admin_tiktok.list_posts'))
+
+
+# Au-delà de ce délai, les chiffres d'un post ne bougent plus guère : c'est la
+# nuit qu'on les rafraîchit, pas à chaque clic sur « Récupérer les posts ».
+RECENT_DAYS = 7
+
+
+def sync_posts(full=False):
+    """Pull the profile from Apify and upsert the posts.
+
+    A manual refresh is nearly always about a clip just published, so it
+    creates every new post it finds but only re-reads the figures of those
+    published in the last RECENT_DAYS. The rest keep the numbers they already
+    have until the nightly run, which passes full=True and refreshes
+    everything — an old post's counters barely move, and re-writing them on
+    every click buys nothing.
+
+    Returns a dict of created / updated / skipped counts.
+    """
+    import apify
+
+    items = apify.scrape_profile()
+    created = updated = skipped = 0
     now = datetime.utcnow()
+    cutoff = now - timedelta(days=RECENT_DAYS)
+
     for raw in items:
         item = apify.normalise(raw)
         if not item.get('id') and not item.get('url'):
@@ -79,11 +105,18 @@ def sync():
         if post is None and item.get('url'):
             post = TikTokPost.query.filter_by(posted_url=item['url']).first()
 
-        if post is None:
+        is_new = post is None
+        if is_new:
             post = TikTokPost(title=(item.get('text') or 'Clip TikTok')[:200])
             db.session.add(post)
             created += 1
         else:
+            # Trust the date already on the row; fall back to the scraped one
+            # for posts recorded before posted_at was populated.
+            published = post.posted_at or _parse_time(item.get('created_at'))
+            if not full and published is not None and published < cutoff:
+                skipped += 1
+                continue
             updated += 1
 
         post.tiktok_id = str(item['id']) if item.get('id') else post.tiktok_id
@@ -102,8 +135,8 @@ def sync():
             post.posted_at = _parse_time(item.get('created_at')) or now
 
     db.session.commit()
-    flash(f"{created} nouveau(x) post(s), {updated} mis à jour.", 'success')
-    return redirect(url_for('admin_tiktok.list_posts'))
+    return {'created': created, 'updated': updated, 'skipped': skipped,
+            'seen': len(items)}
 
 
 def _parse_time(value):

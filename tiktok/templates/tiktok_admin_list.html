@@ -127,15 +127,17 @@
                 </div>
 
                 {% if video_enabled and local_videos %}
+                {# Le nom de fichier est un identifiant hexadécimal : il ne dit
+                   rien de la vidéo. Le choix se fait donc dans une planche
+                   contact — vignette, date, durée — et non dans une liste. #}
                 <form method="POST" action="{{ url_for('admin_tiktok.attach_video', post_id=p.id) }}"
-                      style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap;">
-                    <select name="filename" required
-                            style="flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.82rem;">
-                        <option value="">{{ 'Remplacer la vidéo…' if p.has_video else 'Rattacher une vidéo du serveur…' }}</option>
-                        {% for f in local_videos %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
-                        <i class="fas fa-paperclip"></i> Rattacher
+                      id="attach-{{ p.id }}" style="margin-top: 0.6rem;">
+                    <input type="hidden" name="filename" value="">
+                    <button type="button" class="btn btn-sm btn-outline"
+                            style="color: var(--noir); border-color: #e0e0e0;"
+                            onclick="ouvrirSelecteur({{ p.id }})">
+                        <i class="fas fa-paperclip"></i>
+                        {{ 'Remplacer la vidéo…' if p.has_video else 'Rattacher une vidéo du serveur…' }}
                     </button>
                 </form>
                 {% endif %}
@@ -156,4 +158,78 @@
         <p>Aucun clip pour l'instant.</p>
     </div>
     {% endif %}
+
+{% if video_enabled and local_videos %}
+<div id="selecteur-video" role="dialog" aria-modal="true" aria-labelledby="selecteur-titre"
+     style="display: none; position: fixed; inset: 0; z-index: 100; background: rgba(26,26,46,0.55); padding: 4vh 1rem; overflow-y: auto;">
+    <div style="max-width: 980px; margin: 0 auto; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); padding: 1.4rem 1.6rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem;">
+            <h2 id="selecteur-titre" style="font-size: 1.15rem; margin: 0; flex: 1;">
+                <i class="fas fa-film" style="color: var(--rouge);"></i>
+                Vidéos montées sur ce serveur
+                <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">· {{ local_videos|length }}</span>
+            </h2>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="fermerSelecteur()">Fermer</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem;">
+            {% for v in local_videos %}
+            <button type="button" class="selecteur-carte" onclick="choisirVideo('{{ v.filename }}')"
+                    style="text-align: left; background: #fff; border: 1px solid #e6e6e6; border-radius: 10px; padding: 0; overflow: hidden; cursor: pointer; font-family: inherit;">
+                <img src="{{ url_for('admin_video.render_thumb', filename=v.filename) }}"
+                     alt="" loading="lazy"
+                     style="width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #000; display: block;">
+                <div style="padding: 0.6rem 0.7rem;">
+                    <div style="font-size: 0.85rem; font-weight: 600; color: var(--noir); line-height: 1.35; margin-bottom: 0.3rem;">
+                        {{ v.title or v.source_name or v.filename }}
+                    </div>
+                    <div style="font-size: 0.76rem; color: var(--gris);">
+                        {{ v.created_at.strftime('%d/%m/%Y à %H:%M') }}
+                        {% if v.duration %} · {{ '%.0f'|format(v.duration) }} s{% endif %}
+                        · {{ v.size_mb }} Mo
+                    </div>
+                </div>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .selecteur-carte:hover { border-color: var(--rouge); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+</style>
+
+<script>
+    let posteVise = null;
+
+    function ouvrirSelecteur(postId) {
+        posteVise = postId;
+        document.getElementById('selecteur-video').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function fermerSelecteur() {
+        document.getElementById('selecteur-video').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    function choisirVideo(nom) {
+        if (posteVise === null) return;
+        const form = document.getElementById('attach-' + posteVise);
+        form.querySelector('input[name=filename]').value = nom;
+        fermerSelecteur();
+        form.submit();
+    }
+
+    // Fermer au clic sur le fond et à la touche Échap : sans cela l'overlay
+    // n'a qu'une seule sortie, ce qu'on ne devine pas.
+    document.getElementById('selecteur-video').addEventListener('click', function (e) {
+        if (e.target === this) fermerSelecteur();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') fermerSelecteur();
+    });
+</script>
+{% endif %}
 {% endblock %}

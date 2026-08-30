@@ -96,3 +96,30 @@ def download(job_id):
     name = re.sub(r'[^\w.-]+', '-', job.get('name') or 'clip')
     return send_file(out, as_attachment=True,
                      download_name=f"tiktok-{os.path.splitext(name)[0]}.mp4")
+
+
+def _render_path(filename):
+    """Resolve a render by name, refusing anything that escapes WORKDIR."""
+    safe = os.path.basename(filename)
+    path = os.path.join(video.WORKDIR, safe)
+    if not safe.endswith('.mp4') or safe.startswith('src-') or not os.path.exists(path):
+        abort(404)
+    return path
+
+
+@admin_video_bp.route('/render/<path:filename>/thumb')
+@admin_required
+def render_thumb(filename):
+    """Still frame for the attach picker."""
+    path = video.thumbnail(os.path.basename(filename))
+    if not path:
+        abort(404)
+    return send_file(path, mimetype='image/jpeg', max_age=86400)
+
+
+@admin_video_bp.route('/render/<path:filename>/preview')
+@admin_required
+def render_preview(filename):
+    """The render itself, played inline in the picker."""
+    return send_file(_render_path(filename), mimetype='video/mp4',
+                     conditional=True)
