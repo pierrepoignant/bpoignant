@@ -62,7 +62,8 @@ def upload():
         return redirect(url_for('admin_video.index'))
 
     job_id = video.start_job(src, f.filename,
-                             vertical=bool(request.form.get('vertical')))
+                             vertical=bool(request.form.get('vertical')),
+                             title=(request.form.get('title') or '').strip() or None)
     return redirect(url_for('admin_video.job_page', job_id=job_id))
 
 

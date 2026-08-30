@@ -474,6 +474,56 @@ def _strip_labels(text):
     return '\n'.join(out).strip()
 
 
+BANNER_PROMPT = """Tu titres une vidéo courte de Bernard Poignant, homme \
+politique français, pour un bandeau affiché à l'écran.
+
+À partir de la transcription, écris UN titre très court qui dit de quoi parle \
+la vidéo.
+
+Règles :
+- 30 caractères maximum, espaces compris. C'est une contrainte stricte : \
+au-delà, le texte ne tient pas dans le bandeau.
+- Un groupe nominal, pas une phrase : « DÉBAT HOLLANDE – PHILIPPE », \
+« LA DETTE FRANÇAISE », « DÉCENTRALISATION ».
+- Le sujet concret de la vidéo, pas une accroche ni une opinion.
+- Pas de ponctuation finale, pas de guillemets, pas d'emoji.
+Réponds uniquement par le titre."""
+
+BANNER_MAX_CHARS = 30
+
+
+def generate_banner_title(transcript_text):
+    """A short on-screen title derived from what is actually said.
+
+    Separate from the caption: the caption is a paragraph to paste, this has to
+    fit one line inside a band. Returns None when no API key is set, so the
+    video is simply rendered without a band rather than failing.
+    """
+    from articles.ai_summary import _api_key, MODEL
+
+    key = _api_key()
+    if not key or not (transcript_text or '').strip():
+        return None
+
+    import anthropic
+    client = anthropic.Anthropic(api_key=key, timeout=45.0, max_retries=1)
+    resp = client.messages.create(
+        model=MODEL, max_tokens=100,
+        system=[{'type': 'text', 'text': BANNER_PROMPT,
+                 'cache_control': {'type': 'ephemeral'}}],
+        messages=[{'role': 'user',
+                   'content': f"Transcription :\n{transcript_text[:4000]}"}],
+    )
+    text = ''.join(b.text for b in resp.content if b.type == 'text')
+    # Keep the first non-empty line, drop any quoting, and enforce the limit
+    # here rather than trusting the model to have counted.
+    for line in (text or '').splitlines():
+        line = line.strip().strip('«»"“”\'').strip()
+        if line:
+            return line[:BANNER_MAX_CHARS].strip()
+    return None
+
+
 def write_caption(transcript_text):
     """Ask Claude for a TikTok caption. Returns the raw text, or None when no
     API key is configured."""
@@ -548,6 +598,19 @@ def start_job(src_path, original_name, vertical=False, title=None):
                               if loudness and loudness.get('input_i') not in (None, '-inf')
                               else None))
 
+            # Transcribe before drawing the band, not after: the band text is
+            # derived from what is actually said, so the words have to exist
+            # first. Transcribing the cut is also cheaper than the original —
+            # the silence is already gone.
+            _set(job_id, step='Transcription…')
+            tr = transcribe(cut)
+            _set(job_id, transcript=tr['text'], segments_text=tr['segments'])
+
+            if not title:
+                _set(job_id, step='Titre du bandeau…')
+                title = generate_banner_title(tr['text'])
+                _set(job_id, title=title)
+
             _set(job_id, step='Égalisation du son et de l’image…')
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
             polish(cut, dest, loudness=loudness, gamma=gamma, title=title)
@@ -557,10 +620,6 @@ def start_job(src_path, original_name, vertical=False, title=None):
                 os.remove(cut)
             except OSError:
                 pass
-
-            _set(job_id, step='Transcription…')
-            tr = transcribe(dest)
-            _set(job_id, transcript=tr['text'], segments_text=tr['segments'])
 
             _set(job_id, step='Rédaction du texte…')
             _set(job_id, caption=write_caption(tr['text']))

@@ -153,6 +153,27 @@ def attach_video(post_id):
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
+def _tweet_text(post, limit=280):
+    """The caption, made to fit X without being hacked off mid-sentence.
+
+    TikTok allows 2200 characters and Bernard uses them — the first clip's
+    caption was 465. Slicing at 280 cut it mid-word, so an over-long caption is
+    rewritten in his voice instead, falling back to a word-boundary trim with
+    an ellipsis when the AI is unavailable.
+    """
+    import x as xapi
+    from articles.ai_summary import condense_for_tweet
+
+    text = (post.caption or post.title or '').strip()
+    if not text or len(text) <= limit:
+        return text
+    try:
+        shorter = condense_for_tweet(text, limit=limit - 5)
+    except Exception:
+        shorter = None
+    return shorter or xapi._truncate(text, limit)
+
+
 @admin_tiktok_bp.route('/<int:post_id>/post-x', methods=['POST'])
 @admin_required
 def post_to_x(post_id):
@@ -177,7 +198,7 @@ def post_to_x(post_id):
         flash("X n'est pas configuré (clés API manquantes).", 'danger')
         return redirect(url_for('admin_tiktok.list_posts'))
 
-    text = (post.caption or post.title or '').strip()[:280]
+    text = _tweet_text(post)
     if not text:
         flash("Ce post n'a pas de texte à publier.", 'danger')
         return redirect(url_for('admin_tiktok.list_posts'))

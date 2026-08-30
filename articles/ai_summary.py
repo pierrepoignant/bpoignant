@@ -185,6 +185,45 @@ def generate_summary(title, content_html):
     )
 
 
+TWEET_CONDENSE_PROMPT = """Tu réécris, à la place de Bernard Poignant, un texte \
+trop long pour X (280 caractères maximum).
+
+Sa voix : un français clair et soigné, un propos engagé à gauche mais mesuré et \
+républicain, à la première personne.
+
+Règles :
+- 275 caractères maximum, espaces compris. Contrainte stricte.
+- Garde l'essentiel du propos et le ton : ce n'est pas un résumé neutre, c'est \
+le même homme qui parle plus brièvement.
+- N'invente rien, ne durcis pas le propos.
+- Pas de hashtag, pas d'emoji, pas de lien.
+Réponds uniquement par le texte réécrit."""
+
+
+def condense_for_tweet(text, limit=275):
+    """Rewrite an over-long text to fit a tweet, in the same voice.
+
+    Returns None when the AI is unavailable, so the caller can fall back to
+    trimming on a word boundary — a clean cut is worse than a rewrite but far
+    better than slicing mid-sentence.
+    """
+    key = _api_key()
+    if not key or not (text or '').strip():
+        return None
+
+    import anthropic
+    client = anthropic.Anthropic(api_key=key, timeout=45.0, max_retries=1)
+    resp = client.messages.create(
+        model=MODEL, max_tokens=400,
+        system=[{'type': 'text', 'text': TWEET_CONDENSE_PROMPT,
+                 'cache_control': {'type': 'ephemeral'}}],
+        messages=[{'role': 'user', 'content': f"Texte à raccourcir :\n{text[:4000]}"}],
+    )
+    out = _clean(''.join(b.text for b in resp.content if b.type == 'text'))
+    # The limit is enforced here rather than trusted to the model.
+    return out if out and len(out) <= limit else (out[:limit].rsplit(' ', 1)[0] if out else None)
+
+
 def generate_themes(title, content_html):
     """Return 1–3 themes from the fixed vocabulary, or None when the API key is
     missing. Anything the model returns that isn't in THEMES is dropped — the

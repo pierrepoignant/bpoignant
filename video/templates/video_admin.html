@@ -18,6 +18,9 @@
         <form method="POST" action="{{ url_for('admin_video.upload') }}" enctype="multipart/form-data">
             <input type="file" name="video" accept="video/*" required
                    style="width: 100%; padding: 12px; border: 2px dashed #e0e0e0; border-radius: 10px; font-family: inherit; background: white; margin-bottom: 0.9rem;">
+            <input type="text" name="title" maxlength="30"
+                   placeholder="Texte du bandeau (laisser vide : généré depuis la transcription)"
+                   style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit; margin-bottom: 0.7rem;">
             <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; margin-bottom: 1rem;">
                 <input type="checkbox" name="vertical" value="1" checked style="width: auto;">
                 Recadrer en 9:16 (format TikTok, 1080×1920)
@@ -28,8 +31,9 @@
             <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.6rem;">
                 Les silences de plus de 0,35 s sont retirés et la vidéo démarre sur la parole.
                 Le son est ramené à −14 LUFS (le niveau que les plateformes attendent) et
-                l'image n'est éclaircie que si elle est trop sombre. Puis transcription et
-                proposition de texte.
+                l'image n'est éclaircie que si elle est trop sombre. La vidéo est transcrite,
+                un bandeau bleu est incrusté dans le quart bas, et un texte de publication
+                est proposé.
             </div>
         </form>
     </div>
