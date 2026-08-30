@@ -16,9 +16,13 @@ class TikTokPost(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
-    # Public URL in the OVH bucket. Public because TikTok is downloaded from a
-    # phone, often not the machine that produced it.
-    video_url = db.Column(db.String(500), nullable=False)
+    # TikTok's own id for the post, from the scrape. Unique so re-scraping
+    # updates a row instead of duplicating it.
+    tiktok_id = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    # The edited render, attached afterwards from the dev machine — nullable
+    # because a post exists as soon as it is scraped, long before anyone links
+    # the file that produced it.
+    video_url = db.Column(db.String(500), nullable=True)
     caption = db.Column(db.Text, nullable=True)
     transcript = db.Column(db.Text, nullable=True)
     duration_seconds = db.Column(db.Float, nullable=True)
@@ -28,6 +32,13 @@ class TikTokPost(db.Model):
     # apart in the list.
     posted_url = db.Column(db.String(500), nullable=True)
     posted_at = db.Column(db.DateTime, nullable=True)
+
+    # Figures from the last Apify scrape.
+    views = db.Column(db.Integer, nullable=True)
+    likes = db.Column(db.Integer, nullable=True)
+    comments_count = db.Column(db.Integer, nullable=True)
+    shares = db.Column(db.Integer, nullable=True)
+    scraped_at = db.Column(db.DateTime, nullable=True)
 
     # Optional: the article the clip came from, when there is one.
     article_id = db.Column(db.Integer, db.ForeignKey('articles.id'), nullable=True)
@@ -41,3 +52,7 @@ class TikTokPost(db.Model):
     @property
     def is_posted(self):
         return bool(self.posted_url)
+
+    @property
+    def has_video(self):
+        return bool(self.video_url)

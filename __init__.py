@@ -378,6 +378,21 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
             db.session.commit()
 
+    if 'tiktok_posts' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('tiktok_posts')}
+        # video_url started out NOT NULL, when a post was created by uploading a
+        # file. Posts now arrive from the scrape and the render is attached
+        # later, so the column has to accept NULL.
+        if 'tiktok_id' not in cols:
+            db.session.execute(text("ALTER TABLE tiktok_posts MODIFY video_url VARCHAR(500) NULL"))
+            db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN tiktok_id VARCHAR(64) NULL"))
+            db.session.execute(text("CREATE UNIQUE INDEX ix_tiktok_posts_tiktok_id ON tiktok_posts (tiktok_id)"))
+            for col, typ in (('views', 'INTEGER'), ('likes', 'INTEGER'),
+                             ('comments_count', 'INTEGER'), ('shares', 'INTEGER'),
+                             ('scraped_at', 'DATETIME')):
+                db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {col} {typ} NULL"))
+            db.session.commit()
+
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}
         if 'newsletter_intro' not in cols:

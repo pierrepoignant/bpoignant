@@ -54,6 +54,19 @@ TARGET_LRA = 11.0
 # Average luma (0–255) a well-exposed talking head sits around. Below
 # DARK_THRESHOLD the picture is lifted; above it, left alone — "if needed"
 # is the point, and gratuitously regrading good footage makes it worse.
+# Bandeau de titre. Le bleu vient du dégradé du site (#1A1A2E → #16213E →
+# #0F3460) : c'est la teinte médiane, celle qui lit le mieux sous du blanc.
+TITLE_BG = '0x16213E'
+TITLE_FG = 'white'
+TITLE_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+# Placement : le bandeau est dans le quart bas, mais son bord inférieur reste
+# à 19 % de la hauteur du bas de l'image. TikTok superpose légende, pseudo,
+# bandeau musical et colonne de boutons sur les ~300 px du bas d'un cadre de
+# 1920 : un bandeau collé au bord y disparaîtrait.
+TITLE_BAND_TOP = 0.72        # bord supérieur, en fraction de la hauteur
+TITLE_BAND_HEIGHT = 0.09
+TITLE_SIDE_PADDING = 48      # marge gauche/droite, en pixels sur 1080
+
 TARGET_LUMA = 120.0
 DARK_THRESHOLD = 100.0
 MAX_GAMMA = 1.6
@@ -87,6 +100,19 @@ def _bin(name):
 def _run(args, timeout=1800):
     proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def probe_width(path):
+    """Frame width in pixels, or 1080 when it can't be read."""
+    code, out, _ = _run([
+        _bin('ffprobe'), '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=width', '-of',
+        'default=noprint_wrappers=1:nokey=1', path,
+    ])
+    try:
+        return int(out.strip().splitlines()[0]) if code == 0 else 1080
+    except (ValueError, IndexError):
+        return 1080
 
 
 def probe_duration(path):
@@ -260,7 +286,64 @@ def gamma_for(luma):
     return round(min(max(g, 1.0), MAX_GAMMA), 3)
 
 
-def polish(src, dest, loudness=None, gamma=None):
+def _fit_font_size(text, usable_px, ceiling, floor):
+    """Largest point size whose rendered width fits `usable_px`.
+
+    Measured with the real font rather than estimated from a per-character
+    average: capital-heavy French titles run about 0.66–0.72 em per character
+    against the 0.58 an estimate suggested, which pushed text off both edges.
+    Falls back to a conservative constant if Pillow isn't installed, since the
+    band is worth having even when it can't be measured exactly.
+    """
+    try:
+        from PIL import ImageFont
+        ref = ImageFont.truetype(TITLE_FONT, 100)
+        per_px = ref.getlength(text) / 100.0        # width scales linearly
+    except Exception:
+        per_px = 0.72 * max(len(text), 1)
+    if per_px <= 0:
+        return ceiling
+    return int(min(ceiling, max(floor, usable_px / per_px)))
+
+
+def title_filter(text, width=1080, workdir=None):
+    """Filter chain drawing a title band across the lower part of the frame.
+
+    The text goes through a file rather than inline: drawtext treats colons,
+    apostrophes, backslashes and percent signs as syntax, and French titles are
+    full of apostrophes. A textfile sidesteps the entire escaping problem.
+    """
+    text = (text or '').strip().upper()
+    if not text:
+        return None, None
+
+    fd, path = tempfile.mkstemp(suffix='.txt', dir=workdir or None)
+    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+        fh.write(text)
+
+    # Fit to width rather than using a fixed size: DejaVu Bold averages about
+    # 0.58 em per character, so a long title shrinks instead of running off the
+    # frame. Floored so it never becomes unreadable.
+    # Sized from the actual frame width, not a fixed 1080: the same title on a
+    # 576-wide source would otherwise run off both edges.
+    padding = max(16, int(TITLE_SIDE_PADDING * width / 1080))
+    usable = width - 2 * padding
+    size = _fit_font_size(text, usable, ceiling=int(width * 0.082),
+                          floor=int(width * 0.032))
+
+    chain = (
+        f"drawbox=x=0:y=ih*{TITLE_BAND_TOP}:w=iw:h=ih*{TITLE_BAND_HEIGHT}"
+        f":color={TITLE_BG}@1.0:t=fill,"
+        f"drawtext=fontfile={TITLE_FONT}:textfile={path}"
+        f":fontcolor={TITLE_FG}:fontsize={size}"
+        # drawtext uses `h` for the frame height; `ih` is drawbox vocabulary and
+        # makes drawtext fail to initialise with a bare "Invalid argument".
+        f":x=(w-text_w)/2:y=h*{TITLE_BAND_TOP}+(h*{TITLE_BAND_HEIGHT}-text_h)/2"
+    )
+    return chain, path
+
+
+def polish(src, dest, loudness=None, gamma=None, title=None):
     """Second pass: normalise loudness, and lift the picture when it is dark.
 
     Video is stream-copied when no regrade is needed, so the common case costs
@@ -282,14 +365,33 @@ def polish(src, dest, loudness=None, gamma=None):
 
     args = [_bin('ffmpeg'), '-hide_banner', '-nostats', '-y', '-i', src,
             '-af', audio]
+
+    video_chain, textfile = [], None
     if gamma:
-        args += ['-vf', f'eq=gamma={gamma}', '-c:v', 'libx264',
+        video_chain.append(f'eq=gamma={gamma}')
+    if title:
+        chain, textfile = title_filter(title, width=probe_width(src),
+                                       workdir=os.path.dirname(dest))
+        if chain:
+            video_chain.append(chain)
+
+    if video_chain:
+        args += ['-vf', ','.join(video_chain), '-c:v', 'libx264',
                  '-preset', 'veryfast', '-crf', '20']
     else:
+        # Nothing to draw and nothing to regrade: copying the video stream
+        # keeps this pass to an audio re-encode.
         args += ['-c:v', 'copy']
     args += ['-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', dest]
 
-    code, _, err = _run(args)
+    try:
+        code, _, err = _run(args)
+    finally:
+        if textfile:
+            try:
+                os.remove(textfile)
+            except OSError:
+                pass
     if code != 0:
         raise VideoError(f"Égalisation impossible : {err.strip()[-300:]}")
     return dest
@@ -390,13 +492,13 @@ def all_jobs():
         return sorted(JOBS.values(), key=lambda j: j.get('created_at', ''), reverse=True)
 
 
-def start_job(src_path, original_name, vertical=False):
+def start_job(src_path, original_name, vertical=False, title=None):
     """Kick off processing in a thread and return the job id. Everything slow
     happens here; the page polls for progress."""
     job_id = uuid.uuid4().hex[:12]
     _set(job_id, id=job_id, name=original_name, status='queued', step='En attente…',
          created_at=datetime.utcnow().isoformat(timespec='seconds'),
-         vertical=vertical, src=src_path)
+         vertical=vertical, title=title, src=src_path)
 
     def _work():
         try:
@@ -423,7 +525,7 @@ def start_job(src_path, original_name, vertical=False):
 
             _set(job_id, step='Égalisation du son et de l’image…')
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
-            polish(cut, dest, loudness=loudness, gamma=gamma)
+            polish(cut, dest, loudness=loudness, gamma=gamma, title=title)
             _set(job_id, output=dest)
             # The intermediate is only useful if the polish pass failed.
             try:

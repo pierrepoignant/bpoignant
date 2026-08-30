@@ -5,31 +5,33 @@
 {% block admin_subtitle %}<p>Les clips prêts à publier, leur texte, et l'URL une fois postés.</p>{% endblock %}
 
 {% block admin_content %}
-    {% if not storage_ok %}
+    {# Sous-navigation : une seule vue pour l'instant, mais l'onglet marque la
+       section et laisse la place aux suivantes (statistiques, brouillons…). #}
+    <nav class="admin-tabs" aria-label="TikTok" style="margin-bottom: 1.4rem;">
+        <a href="{{ url_for('admin_tiktok.list_posts') }}" class="btn btn-sm btn-vert">Posts</a>
+    </nav>
+
+    {% if not apify_ok %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
-        Le stockage n'est pas configuré (variables <code>OVH__…</code>) — l'envoi de vidéos échouera.
+        Apify n'est pas configuré — renseignez le jeton dans
+        <a href="{{ url_for('admin_settings.index') }}" style="color: inherit; text-decoration: underline;">Réglages</a>
+        pour récupérer les posts.
     </div>
     {% endif %}
 
-    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 1.5rem; margin-bottom: 2rem;">
-        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
-            <i class="fas fa-upload" style="color: var(--rouge);"></i> Nouvelle vidéo
-        </h2>
-        <form method="POST" action="{{ url_for('admin_tiktok.upload') }}" enctype="multipart/form-data">
-            <input type="text" name="title" placeholder="Titre interne (facultatif)"
-                   style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit; margin-bottom: 0.7rem;">
-            <textarea name="caption" rows="3" placeholder="Texte du post (facultatif — modifiable ensuite)"
-                      style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit; margin-bottom: 0.7rem;"></textarea>
-            <input type="file" name="video" accept="video/*" required
-                   style="width: 100%; padding: 10px; border: 2px dashed #e0e0e0; border-radius: 10px; font-family: inherit; background: white; margin-bottom: 0.9rem;">
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-cloud-arrow-up"></i> Enregistrer la vidéo
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+        <p style="color: var(--gris); font-size: 0.88rem; margin: 0; max-width: 60ch;">
+            Les posts sont récupérés depuis TikTok : publiez depuis l'application,
+            puis synchronisez ici. La vidéo montée peut ensuite être rattachée à
+            son post{% if not video_enabled %} (depuis le serveur de développement){% endif %}.
+        </p>
+        {% if apify_ok %}
+        <form method="POST" action="{{ url_for('admin_tiktok.sync') }}" style="margin: 0;">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fas fa-rotate"></i> Récupérer les posts
             </button>
-            <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.6rem;">
-                La vidéo est stockée sur le serveur de fichiers. Publiez-la ensuite depuis
-                l'application TikTok, puis collez ici l'URL du post.
-            </div>
         </form>
+        {% endif %}
     </div>
 
     {% if posts %}
@@ -44,8 +46,14 @@
     {% for p in posts %}
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem; margin-bottom: 0.9rem;">
         <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start;">
+            {% if p.has_video %}
             <video src="{{ p.video_url }}" controls preload="metadata"
                    style="width: 150px; max-height: 260px; border-radius: 10px; background: #000; flex: none;"></video>
+            {% else %}
+            <div style="width: 150px; height: 200px; border-radius: 10px; background: var(--gris-clair); display: flex; align-items: center; justify-content: center; color: var(--gris); font-size: 0.78rem; text-align: center; padding: 0.5rem; flex: none;">
+                {% if video_enabled %}Aucune vidéo rattachée{% else %}Vidéo sur le serveur de dev{% endif %}
+            </div>
+            {% endif %}
 
             <div style="flex: 1; min-width: 260px;">
                 <form method="POST" action="{{ url_for('admin_tiktok.update', post_id=p.id) }}">
@@ -73,10 +81,18 @@
                         <i class="far fa-clock"></i> Pas encore publié
                         {% endif %}
                     </span>
+                    {% if p.views is not none %}
+                    <span title="Vues"><i class="far fa-eye"></i> {{ p.views }}</span>
+                    <span title="J'aime"><i class="far fa-heart"></i> {{ p.likes }}</span>
+                    <span title="Commentaires"><i class="far fa-comment"></i> {{ p.comments_count }}</span>
+                    <span title="Partages"><i class="fas fa-share"></i> {{ p.shares }}</span>
+                    {% endif %}
                     {% if p.duration_seconds %}<span>{{ '%.0f'|format(p.duration_seconds) }} s</span>{% endif %}
+                    {% if p.has_video %}
                     <a href="{{ p.video_url }}" download style="color: var(--rouge);">
                         <i class="fas fa-download"></i> Télécharger
                     </a>
+                    {% endif %}
                     {% if p.is_posted %}
                     <a href="{{ p.posted_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">
                         <i class="fa-brands fa-tiktok"></i> Voir sur TikTok
@@ -91,6 +107,20 @@
                         </button>
                     </form>
                 </div>
+
+                {% if video_enabled and local_videos %}
+                <form method="POST" action="{{ url_for('admin_tiktok.attach_video', post_id=p.id) }}"
+                      style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap;">
+                    <select name="filename" required
+                            style="flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.82rem;">
+                        <option value="">{{ 'Remplacer la vidéo…' if p.has_video else 'Rattacher une vidéo du serveur…' }}</option>
+                        {% for f in local_videos %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fas fa-paperclip"></i> Rattacher
+                    </button>
+                </form>
+                {% endif %}
 
                 {% if p.transcript %}
                 <details style="margin-top: 0.6rem;">

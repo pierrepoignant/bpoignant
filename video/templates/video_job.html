@@ -22,17 +22,13 @@
     <div id="result" style="display: none;">
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
             <h2 style="font-size: 1.05rem; margin: 0 0 0.8rem;"><i class="fas fa-download" style="color: var(--vert);"></i> Vidéo montée</h2>
-            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-                <form method="POST" action="{{ url_for('admin_video.publish', job_id=job.id) }}" style="margin: 0;">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa-brands fa-tiktok"></i> Enregistrer comme clip TikTok
-                    </button>
-                </form>
-                <a href="{{ url_for('admin_video.download', job_id=job.id) }}" class="btn btn-sm btn-outline"
-                   style="color: var(--noir); border-color: #e0e0e0; background: white;">
-                    <i class="fas fa-download"></i> Télécharger le MP4
-                </a>
-            </div>
+            <a href="{{ url_for('admin_video.download', job_id=job.id) }}" class="btn btn-primary">
+                <i class="fas fa-download"></i> Télécharger le MP4
+            </a>
+            <p style="font-size: 0.82rem; color: var(--gris); margin: 0.7rem 0 0;">
+                Publiez la vidéo depuis TikTok, puis synchronisez les posts et
+                rattachez-lui ce fichier depuis la page TikTok.
+            </p>
         </div>
 
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">

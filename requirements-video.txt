@@ -10,3 +10,4 @@
 
 static-ffmpeg==2.13
 faster-whisper==1.2.1
+pillow==11.3.0

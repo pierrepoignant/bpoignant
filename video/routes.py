@@ -85,26 +85,6 @@ def job_status(job_id):
     return jsonify({k: v for k, v in job.items() if k not in ('src', 'output')})
 
 
-@admin_video_bp.route('/job/<job_id>/publish', methods=['POST'])
-@admin_required
-def publish(job_id):
-    """Send the finished render to the bucket and open a TikTok post for it,
-    carrying over the caption and transcript the job produced."""
-    import storage
-    from tiktok import create_from_video_job
-
-    job = video.get_job(job_id)
-    if not job or job.get('status') != 'done':
-        abort(404)
-    try:
-        post = create_from_video_job(job, title=job.get('name'))
-    except storage.StorageError as exc:
-        flash(f"Enregistrement impossible : {exc}", 'danger')
-        return redirect(url_for('admin_video.job_page', job_id=job_id))
-    flash("Clip enregistré. Publiez-le sur TikTok puis collez l'URL ici.", 'success')
-    return redirect(url_for('admin_tiktok.list_posts', _anchor=f'post-{post.id}'))
-
-
 @admin_video_bp.route('/job/<job_id>/download')
 @admin_required
 def download(job_id):
