@@ -20,6 +20,13 @@
             </span>
             {% endif %}
             {% if x_configured %}
+            <form method="POST" action="{{ url_for('admin_tweets.x_test') }}" style="margin: 0;"
+                  title="Vérifier la connexion à X sans rien publier">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;">
+                    <i class="fa-brands fa-x-twitter"></i> Tester la connexion
+                </button>
+            </form>
             <form method="POST" action="{{ url_for('admin_tweets.refresh') }}" style="margin: 0;">
                 <button type="submit" class="btn btn-sm btn-outline"
                         style="color: var(--noir); border-color: #e0e0e0; background: white;"

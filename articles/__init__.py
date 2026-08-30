@@ -245,33 +245,6 @@ def list_articles():
     )
 
 
-@admin_articles_bp.route('/x-test', methods=['POST'])
-@admin_required
-def x_test():
-    """Non-destructive check that the X credentials are wired and can post."""
-    from x import is_configured, verify_credentials
-
-    if not is_configured():
-        flash("X n'est pas configuré — les 4 clés BPOIGNANT_X__… sont absentes de l'environnement.", 'danger')
-        return redirect(url_for('admin_articles.list_articles'))
-
-    ok, info = verify_credentials()
-    if not ok:
-        flash(f"Échec de la connexion à X : {info.get('error')}", 'danger')
-    else:
-        level = info.get('access_level') or 'inconnu'
-        handle = info.get('screen_name') or '?'
-        if 'write' in level:
-            flash(f"Connexion X OK — @{handle} (accès : {level}). Prêt à publier.", 'success')
-        else:
-            flash(
-                f"Connexion X OK pour @{handle}, mais l'accès est « {level} » (lecture seule). "
-                "Passez l'app en « Lecture et écriture » puis régénérez le jeton d'accès.",
-                'warning',
-            )
-    return redirect(url_for('admin_articles.list_articles'))
-
-
 @admin_articles_bp.route('/<int:article_id>/post-x', methods=['POST'])
 @admin_required
 def post_to_x(article_id):
@@ -754,163 +727,84 @@ def cleanup_all():
     return redirect(url_for('admin_articles.list_articles'))
 
 
-@admin_articles_bp.route('/propose-summaries', methods=['POST'])
+@admin_articles_bp.route('/propose-missing', methods=['POST'])
 @admin_required
-def propose_summaries():
-    """Fill in a proposed one-line summary for every article that doesn't
-    have one yet. Summaries are written by Claude in Bernard's tone of voice;
-    if the AI is unavailable (no API key) or errors, we fall back to a plain
-    text extraction. Existing summaries are left untouched, and the proposals
-    can be edited afterwards on each article.
+def propose_missing():
+    """Fill in whatever an article is missing — résumé, accroche X, thèmes —
+    in one pass, with the AI, leaving anything already written untouched.
 
-    AI calls are sequential, so we cap how many we generate per click to stay
-    within the request timeout — click again to process the rest."""
+    Bounded by *articles* rather than by field: each one costs up to three
+    sequential API calls, and capping the field count instead would make the
+    run time depend on which fields happen to be blank. Re-run to continue.
+    """
     from flask import current_app
-    from articles.ai_summary import generate_summary, is_configured
+    from articles.ai_summary import (
+        generate_summary, generate_social_summary, generate_themes, is_configured,
+    )
 
-    MAX_AI_PER_RUN = 12
-
-    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
-               if not (a.summary or '').strip()]
-
-    ai_enabled = is_configured()
-    # When the AI is on we process a bounded number per click (sequential calls
-    # are slow); the rest wait for the next run so they too get an AI summary.
-    # When the AI is off, extraction is cheap, so process everything at once.
-    budget = MAX_AI_PER_RUN if ai_enabled else len(pending)
-
-    filled = 0
-    ai_used = 0
-
-    for article in pending[:budget]:
-        proposed = None
-        if ai_enabled:
-            try:
-                proposed = generate_summary(article.title, article.content_html or '')
-                if proposed:
-                    ai_used += 1
-            except Exception as exc:
-                current_app.logger.warning(
-                    f"AI summary failed for article {article.id}: {exc}"
-                )
-                proposed = None
-        if not proposed:
-            proposed = summarize_html(article.content_html or '')
-        if proposed:
-            article.summary = proposed
-            filled += 1
-
-    db.session.commit()
-
-    if not filled:
-        flash("Tous les articles ont déjà un résumé.", 'info')
-    else:
-        remaining = len(pending) - filled
-        msg = f"{filled} résumé(s) proposé(s)"
-        if ai_used:
-            msg += f" — dont {ai_used} rédigé(s) par l'IA"
-        if not ai_enabled:
-            msg += " (IA non configurée : extraits du texte — définissez ANTHROPIC__API_KEY)"
-        elif remaining > 0:
-            msg += f". {remaining} restant(s), relancez pour continuer"
-        flash(msg + ".", 'success')
-    return redirect(url_for('admin_articles.list_articles'))
-
-
-@admin_articles_bp.route('/propose-social-summaries', methods=['POST'])
-@admin_required
-def propose_social_summaries():
-    """Same idea as `propose_summaries`, for the X accroche: a first-person,
-    livelier line written by Claude in Bernard's voice. There is no text
-    extraction fallback here — an article without an accroche simply keeps
-    using its editorial summary in the tweet — so this is a no-op when the AI
-    isn't configured.
-
-    Bounded per click like the summary backfill; relaunch to process the rest."""
-    from flask import current_app
-    from articles.ai_summary import generate_social_summary, is_configured
-
-    MAX_AI_PER_RUN = 12
+    MAX_ARTICLES_PER_RUN = 8
 
     if not is_configured():
-        flash("IA non configurée — définissez ANTHROPIC__API_KEY pour générer les accroches X.", 'danger')
+        flash("IA non configurée — définissez ANTHROPIC__API_KEY.", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
-    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
-               if not (a.social_summary or '').strip() and (a.content_html or '').strip()]
+    def missing(a):
+        return {
+            'summary': not (a.summary or '').strip(),
+            'social': not (a.social_summary or '').strip(),
+            'themes': not a.themes,
+        }
 
-    filled = 0
+    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
+               if (a.content_html or '').strip() and any(missing(a).values())]
+
+    filled = {'summary': 0, 'social': 0, 'themes': 0}
     failed = 0
-    for article in pending[:MAX_AI_PER_RUN]:
+
+    for article in pending[:MAX_ARTICLES_PER_RUN]:
+        gaps = missing(article)
+        body = article.content_html or ''
         try:
-            proposed = generate_social_summary(article.title, article.content_html or '')
+            if gaps['summary']:
+                value = generate_summary(article.title, body)
+                # Extraction is a usable fallback for the résumé; the accroche
+                # and the themes are only worth having if the AI produced them.
+                article.summary = value or summarize_html(body)
+                filled['summary'] += 1
+            if gaps['social']:
+                value = generate_social_summary(article.title, body)
+                if value:
+                    article.social_summary = value
+                    filled['social'] += 1
+            if gaps['themes']:
+                names = generate_themes(article.title, body)
+                if names:
+                    article.themes = [_theme_by_name(n) for n in names]
+                    filled['themes'] += 1
         except Exception as exc:
             current_app.logger.warning(
-                f"AI social summary failed for article {article.id}: {exc}"
-            )
+                f"AI backfill failed for article {article.id}: {exc}")
             failed += 1
             continue
-        if proposed:
-            article.social_summary = proposed
-            filled += 1
 
     db.session.commit()
 
-    if not filled:
-        if failed:
-            flash(f"Aucune accroche générée — {failed} échec(s) côté IA, réessayez.", 'danger')
-        else:
-            flash("Tous les articles ont déjà une accroche X.", 'info')
+    done = [f"{n} {label}" for label, n in (
+        ("résumé(s)", filled['summary']),
+        ("accroche(s) X", filled['social']),
+        ("classement(s) par thème", filled['themes'])) if n]
+
+    if not done:
+        flash("Rien à compléter — tous les articles sont à jour." if not failed
+              else f"Rien complété ({failed} échec(s) côté IA).",
+              'info' if not failed else 'danger')
     else:
-        remaining = len(pending) - filled
-        msg = f"{filled} accroche(s) X rédigée(s) par l'IA"
+        remaining = len(pending) - min(len(pending), MAX_ARTICLES_PER_RUN)
+        msg = "Complété : " + ", ".join(done)
         if failed:
             msg += f" — {failed} échec(s)"
         if remaining > 0:
-            msg += f". {remaining} restant(s), relancez pour continuer"
-        flash(msg + ".", 'success')
-    return redirect(url_for('admin_articles.list_articles'))
-
-
-@admin_articles_bp.route('/propose-themes', methods=['POST'])
-@admin_required
-def propose_themes():
-    """Classify every article that has no theme yet. Same bounded-per-click
-    shape as the summary backfills — sequential AI calls are slow."""
-    from flask import current_app
-    from articles.ai_summary import generate_themes, is_configured
-
-    MAX_AI_PER_RUN = 12
-
-    if not is_configured():
-        flash("IA non configurée — définissez ANTHROPIC__API_KEY pour classer les articles.", 'danger')
-        return redirect(url_for('admin_articles.list_articles'))
-
-    pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
-               if not a.themes and (a.content_html or '').strip()]
-
-    tagged = failed = 0
-    for article in pending[:MAX_AI_PER_RUN]:
-        try:
-            names = generate_themes(article.title, article.content_html or '')
-        except Exception as exc:
-            current_app.logger.warning(f"AI themes failed for article {article.id}: {exc}")
-            failed += 1
-            continue
-        if names:
-            article.themes = [_theme_by_name(n) for n in names]
-            tagged += 1
-    db.session.commit()
-
-    if not tagged:
-        flash("Aucun thème ajouté — tous les articles sont déjà classés." if not failed
-              else f"Aucun thème ajouté ({failed} échec(s) côté IA).",
-              'info' if not failed else 'danger')
-    else:
-        remaining = len(pending) - tagged
-        msg = f"{tagged} article(s) classé(s) par thème"
-        if remaining > 0:
-            msg += f". {remaining} restant(s), relancez pour continuer"
+            msg += f". {remaining} article(s) restant(s), relancez pour continuer"
         flash(msg + ".", 'success')
     return redirect(url_for('admin_articles.list_articles'))
 

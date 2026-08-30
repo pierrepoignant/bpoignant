@@ -417,6 +417,36 @@ def list_tweets():
     )
 
 
+@admin_tweets_bp.route('/test', methods=['POST'])
+@admin_required
+def x_test():
+    """Non-destructive check that the X credentials are wired and can post.
+
+    Lives here rather than with the articles: it tests the connection, not any
+    particular article."""
+    from x import is_configured, verify_credentials
+
+    if not is_configured():
+        flash("X n'est pas configuré — les 4 clés BPOIGNANT_X__… sont absentes de l'environnement.", 'danger')
+        return redirect(url_for('admin_tweets.list_tweets'))
+
+    ok, info = verify_credentials()
+    if not ok:
+        flash(f"Échec de la connexion à X : {info.get('error')}", 'danger')
+    else:
+        level = info.get('access_level') or 'inconnu'
+        handle = info.get('screen_name') or '?'
+        if 'write' in level:
+            flash(f"Connexion X OK — @{handle} (accès : {level}). Prêt à publier.", 'success')
+        else:
+            flash(
+                f"Connexion X OK pour @{handle}, mais l'accès est « {level} » (lecture seule). "
+                "Passez l'app en « Lecture et écriture » puis régénérez le jeton d'accès.",
+                'warning',
+            )
+    return redirect(url_for('admin_tweets.list_tweets'))
+
+
 @admin_tweets_bp.route('/refresh', methods=['POST'])
 @admin_required
 def refresh():

@@ -28,28 +28,12 @@
                 </a>
             </div>
             <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem;">
-            <form method="POST" action="{{ url_for('admin_articles.propose_summaries') }}" style="margin: 0;"
-                  onsubmit="return confirm('Rédiger par IA un résumé, dans le style de Bernard, pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
+            <form method="POST" action="{{ url_for('admin_articles.propose_missing') }}" style="margin: 0;"
+                  onsubmit="return confirm('Compléter par IA les champs manquants (résumé, accroche X, thèmes) ? Ce qui est déjà rempli n&#39;est pas touché.')">
                 <button type="submit" class="btn btn-sm btn-outline"
                         style="color: var(--noir); border-color: #e0e0e0; background: white;"
-                        title="Rédiger un résumé par IA (style de Bernard) pour les articles qui n'en ont pas">
-                    <i class="fas fa-wand-magic-sparkles"></i> Résumés manquants (IA)
-                </button>
-            </form>
-            <form method="POST" action="{{ url_for('admin_articles.propose_social_summaries') }}" style="margin: 0;"
-                  onsubmit="return confirm('Rédiger par IA une accroche X (première personne, style de Bernard) pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
-                <button type="submit" class="btn btn-sm btn-outline"
-                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
-                        title="Rédiger par IA l'accroche X (première personne) pour les articles qui n'en ont pas">
-                    <i class="fa-brands fa-x-twitter"></i> Accroches manquantes (IA)
-                </button>
-            </form>
-            <form method="POST" action="{{ url_for('admin_articles.propose_themes') }}" style="margin: 0;"
-                  onsubmit="return confirm('Classer par thème, avec l&#39;IA, les articles qui n&#39;en ont pas ?')">
-                <button type="submit" class="btn btn-sm btn-outline"
-                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
-                        title="Attribuer 1 à 3 thèmes par IA aux articles non classés">
-                    <i class="fas fa-tags"></i> Thèmes manquants (IA)
+                        title="Rédiger résumé, accroche X et thèmes pour les articles auxquels il en manque">
+                    <i class="fas fa-wand-magic-sparkles"></i> Champs manquants (IA)
                 </button>
             </form>
             <form method="POST" action="{{ url_for('admin_articles.cleanup_all') }}" style="margin: 0;"
@@ -60,15 +44,6 @@
                     <i class="fas fa-broom"></i> Tout nettoyer
                 </button>
             </form>
-            {% if x_configured %}
-            <form method="POST" action="{{ url_for('admin_articles.x_test') }}" style="margin: 0;">
-                <button type="submit" class="btn btn-sm btn-outline"
-                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
-                        title="Vérifier la connexion à X (sans publier)">
-                    <i class="fa-brands fa-x-twitter"></i> Tester X
-                </button>
-            </form>
-            {% endif %}
             </div>
         </div>
     </div>
