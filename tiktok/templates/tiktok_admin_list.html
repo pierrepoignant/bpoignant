@@ -1,0 +1,111 @@
+{% extends 'admin_base.html' %}
+{% block title %}TikTok{% endblock %}
+
+{% block admin_title %}<i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> TikTok{% endblock %}
+{% block admin_subtitle %}<p>Les clips prêts à publier, leur texte, et l'URL une fois postés.</p>{% endblock %}
+
+{% block admin_content %}
+    {% if not storage_ok %}
+    <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Le stockage n'est pas configuré (variables <code>OVH__…</code>) — l'envoi de vidéos échouera.
+    </div>
+    {% endif %}
+
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 1.5rem; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
+            <i class="fas fa-upload" style="color: var(--rouge);"></i> Nouvelle vidéo
+        </h2>
+        <form method="POST" action="{{ url_for('admin_tiktok.upload') }}" enctype="multipart/form-data">
+            <input type="text" name="title" placeholder="Titre interne (facultatif)"
+                   style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit; margin-bottom: 0.7rem;">
+            <textarea name="caption" rows="3" placeholder="Texte du post (facultatif — modifiable ensuite)"
+                      style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 10px; font-family: inherit; margin-bottom: 0.7rem;"></textarea>
+            <input type="file" name="video" accept="video/*" required
+                   style="width: 100%; padding: 10px; border: 2px dashed #e0e0e0; border-radius: 10px; font-family: inherit; background: white; margin-bottom: 0.9rem;">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-cloud-arrow-up"></i> Enregistrer la vidéo
+            </button>
+            <div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.6rem;">
+                La vidéo est stockée sur le serveur de fichiers. Publiez-la ensuite depuis
+                l'application TikTok, puis collez ici l'URL du post.
+            </div>
+        </form>
+    </div>
+
+    {% if posts %}
+    <h2 style="font-size: 1.15rem; margin: 0 0 1rem;">
+        <i class="fas fa-film" style="color: var(--rouge);"></i>
+        {{ posts|length }} clip{{ 's' if posts|length != 1 else '' }}
+        <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">
+            · {{ posts|selectattr('is_posted')|list|length }} publié(s)
+        </span>
+    </h2>
+
+    {% for p in posts %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem; margin-bottom: 0.9rem;">
+        <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start;">
+            <video src="{{ p.video_url }}" controls preload="metadata"
+                   style="width: 150px; max-height: 260px; border-radius: 10px; background: #000; flex: none;"></video>
+
+            <div style="flex: 1; min-width: 260px;">
+                <form method="POST" action="{{ url_for('admin_tiktok.update', post_id=p.id) }}">
+                    <input type="text" name="title" value="{{ p.title }}"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 700; margin-bottom: 0.5rem;">
+                    <textarea name="caption" rows="4" placeholder="Texte du post"
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.5;">{{ p.caption or '' }}</textarea>
+
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; align-items: center;">
+                        <input type="url" name="posted_url" value="{{ p.posted_url or '' }}"
+                               placeholder="URL du post TikTok (à coller après publication)"
+                               style="flex: 1; min-width: 240px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="fas fa-save"></i> Enregistrer
+                        </button>
+                    </div>
+                </form>
+
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.7rem; font-size: 0.8rem; color: var(--gris);">
+                    <span>
+                        {% if p.is_posted %}
+                        <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+                        Publié le {{ p.posted_at.strftime('%d/%m/%Y') if p.posted_at else '—' }}
+                        {% else %}
+                        <i class="far fa-clock"></i> Pas encore publié
+                        {% endif %}
+                    </span>
+                    {% if p.duration_seconds %}<span>{{ '%.0f'|format(p.duration_seconds) }} s</span>{% endif %}
+                    <a href="{{ p.video_url }}" download style="color: var(--rouge);">
+                        <i class="fas fa-download"></i> Télécharger
+                    </a>
+                    {% if p.is_posted %}
+                    <a href="{{ p.posted_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">
+                        <i class="fa-brands fa-tiktok"></i> Voir sur TikTok
+                    </a>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}"
+                          style="margin: 0 0 0 auto;"
+                          onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">
+                        <button type="submit" class="btn btn-sm"
+                                style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+
+                {% if p.transcript %}
+                <details style="margin-top: 0.6rem;">
+                    <summary style="font-size: 0.82rem; color: var(--gris); cursor: pointer;">Transcription</summary>
+                    <p style="font-size: 0.88rem; line-height: 1.6; color: var(--noir); margin: 0.5rem 0 0;">{{ p.transcript }}</p>
+                </details>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris); background: white; border-radius: 12px;">
+        <i class="fa-brands fa-tiktok" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <p>Aucun clip pour l'instant.</p>
+    </div>
+    {% endif %}
+{% endblock %}

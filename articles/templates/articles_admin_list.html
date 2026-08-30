@@ -13,6 +13,11 @@
         {# Primary action on its own line; batch/maintenance tools underneath. #}
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+                <a href="{{ url_for('admin_tiktok.list_posts') }}" class="btn btn-sm btn-outline"
+                   style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                   title="Clips TikTok : vidéos enregistrées, textes, et URL une fois publiées">
+                    <i class="fa-brands fa-tiktok"></i> TikTok
+                </a>
                 {% if video_tools %}
                 {# Onglet de navigation impossible pour l'instant : admin_base.html
                    appartient à root et n'est pas modifiable. Ce bouton donne un
