@@ -1,0 +1,12 @@
+# Outillage vidéo — machine de développement uniquement.
+#
+# Volontairement séparé de requirements.txt : ces paquets pèsent près d'un Go
+# (binaires ffmpeg statiques + ctranslate2) et n'ont rien à faire dans l'image
+# déployée. La page /admin/video n'est enregistrée que si VIDEO_TOOLS est
+# défini, ce que la production ne fait pas.
+#
+#   pip install -r requirements-video.txt
+#   VIDEO_TOOLS=1 python run.py --debug
+
+static-ffmpeg==2.13
+faster-whisper==1.2.1

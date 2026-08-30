@@ -1,0 +1,79 @@
+{% extends 'admin_base.html' %}
+{% block title %}{{ job.name }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-film" style="color: var(--vert);"></i> {{ job.name }}{% endblock %}
+
+{% block admin_content %}
+    <p style="margin: 0 0 1.2rem;">
+        <a href="{{ url_for('admin_video.index') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Toutes les vidéos
+        </a>
+    </p>
+
+    <div id="progress" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <i id="icon" class="fas fa-spinner fa-spin" style="color: var(--gris);"></i>
+            <strong id="step">{{ job.step }}</strong>
+        </div>
+        <div id="stats" style="color: var(--gris); font-size: 0.85rem; margin-top: 0.5rem;"></div>
+        <div id="error" style="color: var(--rouge); font-size: 0.9rem; margin-top: 0.5rem;"></div>
+    </div>
+
+    <div id="result" style="display: none;">
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.8rem;"><i class="fas fa-download" style="color: var(--vert);"></i> Vidéo montée</h2>
+            <a href="{{ url_for('admin_video.download', job_id=job.id) }}" class="btn btn-primary">
+                <i class="fas fa-download"></i> Télécharger le MP4
+            </a>
+        </div>
+
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;"><i class="fas fa-pen-nib" style="color: var(--rouge);"></i> Texte à publier</h2>
+            <pre id="caption" style="white-space: pre-wrap; font-family: inherit; font-size: 0.95rem; line-height: 1.6; margin: 0; background: var(--gris-clair); padding: 1rem; border-radius: 8px;"></pre>
+            <button type="button" class="btn btn-sm btn-outline" style="margin-top: 0.7rem; color: var(--noir); border-color: #e0e0e0;"
+                    onclick="navigator.clipboard.writeText(document.getElementById('caption').textContent.trim())">
+                <i class="far fa-copy"></i> Copier
+            </button>
+        </div>
+
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;"><i class="fas fa-closed-captioning" style="color: var(--gris);"></i> Transcription</h2>
+            <p id="transcript" style="font-size: 0.95rem; line-height: 1.7; margin: 0;"></p>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        const url = "{{ url_for('admin_video.job_status', job_id=job.id) }}";
+        function tick() {
+            fetch(url).then(r => r.json()).then(j => {
+                document.getElementById('step').textContent = j.step || '';
+                const icon = document.getElementById('icon');
+                const bits = [];
+                if (j.duration) bits.push(j.duration + ' s à l’origine');
+                if (j.kept) bits.push(j.kept + ' s conservées');
+                if (j.removed) bits.push(j.removed + ' s de blancs retirés');
+                if (j.cuts) bits.push(j.cuts + ' segment(s)');
+                document.getElementById('stats').textContent = bits.join(' · ');
+
+                if (j.status === 'error') {
+                    icon.className = 'fas fa-circle-exclamation';
+                    icon.style.color = 'var(--rouge)';
+                    document.getElementById('error').textContent = j.error || '';
+                    return;                      // plus de polling
+                }
+                if (j.status === 'done') {
+                    icon.className = 'fas fa-circle-check';
+                    icon.style.color = 'var(--vert)';
+                    document.getElementById('caption').textContent = j.caption || '(aucun texte — clé ANTHROPIC absente ?)';
+                    document.getElementById('transcript').textContent = j.transcript || '';
+                    document.getElementById('result').style.display = 'block';
+                    return;
+                }
+                setTimeout(tick, 1500);
+            }).catch(() => setTimeout(tick, 3000));
+        }
+        tick();
+    })();
+    </script>
+{% endblock %}

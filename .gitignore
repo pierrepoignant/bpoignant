@@ -19,3 +19,6 @@ build/
 bpoignant.json
 *-credentials.json
 service-account*.json
+
+# Fichiers de travail de l’outil vidéo (machine de dev)
+instance/video/

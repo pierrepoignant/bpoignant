@@ -133,6 +133,15 @@ def create_app(db_name='ovh'):
     from tweets import admin_tweets_bp
     app.register_blueprint(admin_tweets_bp)
 
+    # Video tooling: development machine only. Its dependencies weigh close to
+    # a gigabyte, so the blueprint is not registered unless VIDEO_TOOLS is set
+    # — production never sets it, and the import itself is skipped there.
+    import video
+    if video.is_enabled():
+        from video.routes import admin_video_bp
+        app.register_blueprint(admin_video_bp)
+        app.config['VIDEO_TOOLS'] = True
+
     with app.app_context():
         db.create_all()
         _migrate_schema()
@@ -150,6 +159,7 @@ def create_app(db_name='ovh'):
             # Surfaced in the admin banner. One cheap config lookup, and only
             # for signed-in admins — visitors never trigger it.
             'gdrive_error': _gdrive_error_for_banner(),
+            'video_tools': app.config.get('VIDEO_TOOLS', False),
         }
 
     @app.route('/')
