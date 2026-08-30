@@ -435,18 +435,43 @@ Sa voix : un français clair et soigné, un propos engagé à gauche mais mesur�
 et républicain. Sur une vidéo courte il parle à la première personne, va droit \
 au but, et ne prend pas les gens de haut.
 
-À partir de la transcription fournie, écris :
+À partir de la transcription fournie, écris le texte de publication, prêt à \
+être collé tel quel :
 
-ACCROCHE : une première phrase très courte (moins de 60 caractères) qui donne \
-envie de rester — une question, une affirmation nette, jamais du racolage.
-TEXTE : deux à trois phrases qui résument ce qu'il dit, à la première personne.
-HASHTAGS : trois à cinq mots-clés pertinents, précédés de #, en minuscules, \
-sans accents, séparés par des espaces.
+- Première ligne : une accroche très courte (moins de 60 caractères) qui donne \
+envie de rester — une question ou une affirmation nette, jamais du racolage.
+- Puis une ligne vide, puis deux à trois phrases à la première personne qui \
+résument ce qu'il dit.
+- Puis une ligne vide, puis trois à cinq mots-clés précédés de #, en \
+minuscules, sans accents, séparés par des espaces.
 
 Règles :
 - Reste fidèle à ce qui est dit : n'invente aucune position.
 - Pas d'emoji, pas de majuscules d'insistance, pas de « lien en bio ».
-- Réponds exactement dans ce format, une section par ligne, rien d'autre."""
+- N'écris aucune étiquette de section : le texte doit pouvoir être copié tel \
+quel dans TikTok, sans rien retirer.
+Réponds uniquement par ce texte."""
+
+
+# Filet de sécurité : si le modèle remet malgré tout des étiquettes, on les
+# retire plutôt que de les laisser arriver dans un copier-coller.
+_CAPTION_LABEL = re.compile(
+    r'^\s*(ACCROCHE|TEXTE|HASHTAGS|LÉGENDE|LEGENDE)\s*:\s*', re.IGNORECASE)
+
+
+def _strip_labels(text):
+    lines = [_CAPTION_LABEL.sub('', ln) for ln in (text or '').splitlines()]
+    # Deux lignes vides consécutives au plus, et rien qui traîne aux extrémités.
+    out, blank = [], 0
+    for ln in lines:
+        if ln.strip():
+            blank = 0
+            out.append(ln.rstrip())
+        else:
+            blank += 1
+            if blank == 1 and out:
+                out.append('')
+    return '\n'.join(out).strip()
 
 
 def write_caption(transcript_text):
@@ -467,7 +492,7 @@ def write_caption(transcript_text):
         messages=[{'role': 'user',
                    'content': f"Transcription de la vidéo :\n{transcript_text[:6000]}"}],
     )
-    return ''.join(b.text for b in resp.content if b.type == 'text').strip()
+    return _strip_labels(''.join(b.text for b in resp.content if b.type == 'text'))
 
 
 # ── Jobs ─────────────────────────────────────────────────────
