@@ -12,9 +12,21 @@
         </h2>
         {# Primary action on its own line; batch/maintenance tools underneath. #}
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
-            <a href="{{ url_for('admin_articles.create_article') }}" class="btn btn-sm btn-primary">
-                <i class="fas fa-plus"></i> Nouvel article
-            </a>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end;">
+                {% if video_tools %}
+                {# Onglet de navigation impossible pour l'instant : admin_base.html
+                   appartient à root et n'est pas modifiable. Ce bouton donne un
+                   accès en attendant. #}
+                <a href="{{ url_for('admin_video.index') }}" class="btn btn-sm btn-outline"
+                   style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                   title="Couper les blancs, transcrire et rédiger le texte d'une vidéo courte">
+                    <i class="fas fa-scissors"></i> Montage vidéo
+                </a>
+                {% endif %}
+                <a href="{{ url_for('admin_articles.create_article') }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-plus"></i> Nouvel article
+                </a>
+            </div>
             <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem;">
             <form method="POST" action="{{ url_for('admin_articles.propose_summaries') }}" style="margin: 0;"
                   onsubmit="return confirm('Rédiger par IA un résumé, dans le style de Bernard, pour chaque article qui n&#39;en a pas ? Vous pourrez les modifier ensuite.')">
