@@ -46,6 +46,12 @@ class TikTokPost(db.Model):
     x_retweet_count = db.Column(db.Integer, nullable=True)
     x_metrics_at = db.Column(db.DateTime, nullable=True)
 
+    # Posts that were promoted with paid advertising. Their figures are not
+    # comparable with the organic ones — the 2021-2022 clips were all boosted
+    # and run into six figures, against a few hundred for the current ones —
+    # so the statistics leave them out rather than average the two together.
+    boosted = db.Column(db.Boolean, default=False, nullable=False)
+
     # Figures from the last Apify scrape.
     views = db.Column(db.Integer, nullable=True)
     likes = db.Column(db.Integer, nullable=True)

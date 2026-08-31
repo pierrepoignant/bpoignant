@@ -399,6 +399,11 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN x_posted_at DATETIME NULL"))
             db.session.commit()
 
+        if 'boosted' not in cols:
+            db.session.execute(text(
+                "ALTER TABLE tiktok_posts ADD COLUMN boosted BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
+
         # Métriques X du post vidéo, ajoutées après coup : sans elles, la page
         # Twitter n'avait rien à afficher pour les clips qu'on y publie.
         if 'x_like_count' not in cols:

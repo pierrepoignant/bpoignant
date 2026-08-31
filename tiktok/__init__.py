@@ -198,6 +198,23 @@ def _parse_time(value):
         return None
 
 
+@admin_tiktok_bp.route('/<int:post_id>/boosted', methods=['POST'])
+@admin_required
+def toggle_boosted(post_id):
+    """Mark a post as promoted, or unmark it. Promoted posts are left out of
+    the statistics — their reach was bought, and averaging it with the organic
+    posts describes neither."""
+    post = db.session.get(TikTokPost, post_id)
+    if post is None:
+        abort(404)
+    post.boosted = not post.boosted
+    db.session.commit()
+    flash("Post marqué comme sponsorisé — il sort des statistiques."
+          if post.boosted else
+          "Post repassé en organique — il revient dans les statistiques.", 'success')
+    return redirect(url_for('admin_tiktok.list_posts'))
+
+
 @admin_tiktok_bp.route('/<int:post_id>/attach', methods=['POST'])
 @admin_required
 def attach_video(post_id):

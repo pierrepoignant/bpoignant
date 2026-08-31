@@ -121,6 +121,18 @@
                     </form>
                     {% endif %}
                     {% endif %}
+                    {# Sponsorisé : la mention est aussi ce qui sort le post des
+                       statistiques, d'où le libellé explicite plutôt qu'une icône. #}
+                    <form method="POST" action="{{ url_for('admin_tiktok.toggle_boosted', post_id=p.id) }}" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm"
+                                style="padding: 4px 10px; border-radius: 50px; border: 1px solid {{ '#8a6d00' if p.boosted else '#e0e0e0' }};
+                                       background: {{ 'rgba(255,165,0,0.14)' if p.boosted else 'none' }};
+                                       color: {{ '#8a6d00' if p.boosted else 'var(--gris)' }};"
+                                title="{{ 'Compté comme sponsorisé, donc hors statistiques' if p.boosted else 'Marquer comme sponsorisé (hors statistiques)' }}">
+                            <i class="fas fa-bullhorn"></i>
+                            {{ 'Sponsorisé' if p.boosted else 'Organique' }}
+                        </button>
+                    </form>
                     <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}"
                           style="margin: 0 0 0 auto;"
                           onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">

@@ -7,9 +7,9 @@
 {% block admin_content %}
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem;">
         <a href="{{ url_for('admin_tweets.stats', period='week') }}"
-           class="btn btn-sm {% if period == 'week' %}btn-primary{% else %}btn-outline{% endif %}">Par semaine</a>
+           class="btn btn-sm {% if period == 'week' %}btn-vert{% else %}btn-outline{% endif %}">Par semaine</a>
         <a href="{{ url_for('admin_tweets.stats', period='month') }}"
-           class="btn btn-sm {% if period == 'month' %}btn-primary{% else %}btn-outline{% endif %}">Par mois</a>
+           class="btn btn-sm {% if period == 'month' %}btn-vert{% else %}btn-outline{% endif %}">Par mois</a>
         {% if total_periods > shown %}
         <a href="{{ url_for('admin_tweets.stats', period=period, tout='0' if everything else '1') }}"
            class="btn btn-sm btn-outline" style="margin-left: auto; color: var(--noir); border-color: #e0e0e0;">
@@ -25,6 +25,13 @@
         sont leurs compteurs actuels — pas les vues gagnées pendant la période.
         Les périodes récentes sont donc naturellement plus basses : leurs publications
         ont eu moins de temps.
+        {% if excluded %}
+        <br><br>
+        {{ excluded }} post{{ 's' if excluded != 1 else '' }} sponsorisé{{ 's' if excluded != 1 else '' }}
+        {{ 'sont exclus' if excluded != 1 else 'est exclu' }} de ces totaux : une audience achetée
+        et une audience organique ne se moyennent pas. La case se coche sur la
+        <a href="{{ url_for('admin_tiktok.list_posts') }}" style="color: inherit; text-decoration: underline;">page TikTok</a>.
+        {% endif %}
     </div>
 
     {% macro tableau(rows, titre, icone, couleur, l_reactions, l_partages) %}

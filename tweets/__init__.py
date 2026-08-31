@@ -556,8 +556,13 @@ def platform_stats(period='week', limit=DEFAULT_PERIODS):
 
     x_buckets, tt_buckets = {}, {}
 
+    # Les posts sponsorisés sont écartés : mélanger une audience achetée à une
+    # audience organique fait une moyenne qui ne décrit ni l'une ni l'autre.
     articles = Article.query.filter(Article.x_posted_at.isnot(None)).all()
-    clips = TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all()
+    clips = (TikTokPost.query
+             .filter(TikTokPost.x_post_id.isnot(None),
+                     TikTokPost.boosted.is_(False))
+             .all())
 
     for row in articles + clips:
         start = _period_start(row.x_posted_at, period)
@@ -568,7 +573,10 @@ def platform_stats(period='week', limit=DEFAULT_PERIODS):
         b['replies'] += row.x_reply_count or 0
         b['shares'] += row.x_retweet_count or 0
 
-    for clip in TikTokPost.query.filter(TikTokPost.posted_at.isnot(None)).all():
+    for clip in (TikTokPost.query
+                 .filter(TikTokPost.posted_at.isnot(None),
+                         TikTokPost.boosted.is_(False))
+                 .all()):
         start = _period_start(clip.posted_at, period)
         b = tt_buckets.setdefault(start, blank())
         b['posts'] += 1
@@ -596,8 +604,10 @@ def platform_stats(period='week', limit=DEFAULT_PERIODS):
             out.append(b)
         return out
 
+    excluded = TikTokPost.query.filter(TikTokPost.boosted.is_(True)).count()
     return {'x': rows(x_buckets), 'tiktok': rows(tt_buckets), 'period': period,
-            'total_periods': max(len(x_buckets), len(tt_buckets))}
+            'total_periods': max(len(x_buckets), len(tt_buckets)),
+            'excluded': excluded}
 
 
 @admin_tweets_bp.route('/stats')
@@ -610,4 +620,5 @@ def stats():
                            x_rows=data['x'], tt_rows=data['tiktok'],
                            period=data['period'], everything=everything,
                            total_periods=data['total_periods'],
+                           excluded=data['excluded'],
                            shown=DEFAULT_PERIODS)
