@@ -228,28 +228,40 @@ def auto_post():
 
 
 def sync_metrics():
-    """Refresh like / view / reply counts for every article we've tweeted.
-    Returns the number of articles updated."""
+    """Refresh like / view / reply counts for everything we've tweeted —
+    articles and the TikTok clips re-posted to X alike.
+
+    Both go into one call: fetch_metrics batches by 100 ids, and the two sets
+    together stay well inside a single batch, so covering the video tweets
+    costs no extra quota.
+
+    Returns the number of rows updated.
+    """
     import x
+    from tiktok.models import TikTokPost
 
     articles = Article.query.filter(Article.x_post_id.isnot(None)).all()
-    if not articles:
+    clips = TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all()
+    if not articles and not clips:
         return 0
 
     by_post_id = {a.x_post_id: a for a in articles}
+    by_post_id.update({c.x_post_id: c for c in clips})
     metrics = x.fetch_metrics(list(by_post_id))
 
     now = datetime.utcnow()
     updated = 0
     for post_id, m in metrics.items():
-        article = by_post_id.get(post_id)
-        if article is None:
+        row = by_post_id.get(post_id)
+        if row is None:
             continue
-        article.x_like_count = m['likes']
-        article.x_view_count = m['views']
-        article.x_reply_count = m['replies']
-        article.x_retweet_count = m['retweets']
-        article.x_metrics_at = now
+        # Articles and clips carry the same five column names, so one loop
+        # serves both.
+        row.x_like_count = m['likes']
+        row.x_view_count = m['views']
+        row.x_reply_count = m['replies']
+        row.x_retweet_count = m['retweets']
+        row.x_metrics_at = now
         updated += 1
 
     db.session.commit()
@@ -403,9 +415,19 @@ def list_tweets():
         .count()
     )
 
+    # Les clips re-publiés sur X : mêmes chiffres, source différente.
+    from tiktok.models import TikTokPost
+    clips = (
+        TikTokPost.query
+        .filter(TikTokPost.x_post_id.isnot(None))
+        .order_by(TikTokPost.x_posted_at.desc())
+        .all()
+    )
+
     return render_template(
         'tweets_admin_list.html',
         articles=articles,
+        clips=clips,
         snapshot=latest_snapshot,
         follower_deltas=follower_deltas,
         next_to_post=next_article_to_post(),

@@ -37,6 +37,15 @@ class TikTokPost(db.Model):
     x_post_id = db.Column(db.String(40), nullable=True)
     x_posted_at = db.Column(db.DateTime, nullable=True)
 
+    # Figures for the X post, refreshed by the same daily sync that updates the
+    # articles' — a video tweet is a tweet, and its numbers are only
+    # comparable to TikTok's if someone actually reads them.
+    x_like_count = db.Column(db.Integer, nullable=True)
+    x_view_count = db.Column(db.Integer, nullable=True)
+    x_reply_count = db.Column(db.Integer, nullable=True)
+    x_retweet_count = db.Column(db.Integer, nullable=True)
+    x_metrics_at = db.Column(db.DateTime, nullable=True)
+
     # Figures from the last Apify scrape.
     views = db.Column(db.Integer, nullable=True)
     likes = db.Column(db.Integer, nullable=True)

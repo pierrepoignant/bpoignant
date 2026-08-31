@@ -399,6 +399,17 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN x_posted_at DATETIME NULL"))
             db.session.commit()
 
+        # Métriques X du post vidéo, ajoutées après coup : sans elles, la page
+        # Twitter n'avait rien à afficher pour les clips qu'on y publie.
+        if 'x_like_count' not in cols:
+            for col in ('x_like_count', 'x_view_count', 'x_reply_count',
+                        'x_retweet_count'):
+                db.session.execute(text(
+                    f"ALTER TABLE tiktok_posts ADD COLUMN {col} INTEGER NULL"))
+            db.session.execute(text(
+                "ALTER TABLE tiktok_posts ADD COLUMN x_metrics_at DATETIME NULL"))
+            db.session.commit()
+
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}
         if 'newsletter_intro' not in cols:

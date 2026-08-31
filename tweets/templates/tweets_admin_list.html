@@ -2,7 +2,7 @@
 {% block title %}Twitter{% endblock %}
 
 {% block admin_title %}<i class="fa-brands fa-x-twitter" style="color: var(--vert);"></i> Twitter{% endblock %}
-{% block admin_subtitle %}<p>Statistiques et réponses des articles partagés sur X. Synchronisé chaque jour.</p>{% endblock %}
+{% block admin_subtitle %}<p>Statistiques et réponses de ce qui est partagé sur X — articles et clips vidéo. Synchronisé chaque jour.</p>{% endblock %}
 
 {% block admin_content %}
     <div class="admin-row" style="justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.6rem;">
@@ -95,6 +95,10 @@
     </div>
     {% endif %}
 
+    <h2 style="font-size: 1.15rem; margin: 0 0 0.9rem;">
+        <i class="fas fa-newspaper" style="color: var(--rouge);"></i> Articles
+    </h2>
+
     {% if articles %}
         {% for a in articles %}
         {% set replies = replies_by_article.get(a.id, []) %}
@@ -150,6 +154,59 @@
             <i class="fa-brands fa-x-twitter" style="font-size: 3rem; margin-bottom: 1rem;"></i>
             <p>Aucun article partagé sur X pour l'instant.<br>
                Partagez-en un depuis la <a href="{{ url_for('admin_articles.list_articles') }}">liste des articles</a>.</p>
+        </div>
+    {% endif %}
+
+    {# Les clips re-publiés sur X. Les deux séries de chiffres sont côte à côte
+       parce que la question qu'on se pose devant un clip est justement celle
+       de l'écart : la même vidéo, sur les deux plateformes. #}
+    <h2 style="font-size: 1.15rem; margin: 2rem 0 0.9rem;">
+        <i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> Clips vidéo
+        {% if clips %}<span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">· {{ clips|length }} publié(s) sur X</span>{% endif %}
+    </h2>
+
+    {% if clips %}
+        {% for c in clips %}
+        <div style="background: white; border-radius: 12px; padding: 1.1rem 1.3rem; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start;">
+                <div style="flex: 1; min-width: 240px;">
+                    <div style="font-weight: 700; margin-bottom: 0.2rem;">{{ c.title|truncate(90) }}</div>
+                    <div style="font-size: 0.8rem; color: var(--gris);">
+                        Publié sur X le {{ c.x_posted_at.strftime('%d/%m/%Y') if c.x_posted_at else '—' }}
+                        {% if c.x_url %}
+                        · <a href="{{ c.x_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
+                        {% endif %}
+                        {% if c.posted_url %}
+                        · <a href="{{ c.posted_url }}" target="_blank" rel="noopener" style="color: var(--gris);">sur TikTok</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1.2rem; font-size: 0.9rem; color: var(--noir); align-items: center;">
+                    <span title="Vues sur X"><i class="far fa-eye" style="color: var(--gris);"></i> {{ c.x_view_count if c.x_view_count is not none else '—' }}</span>
+                    <span title="J'aime sur X"><i class="far fa-heart" style="color: var(--rouge);"></i> {{ c.x_like_count if c.x_like_count is not none else '—' }}</span>
+                    <span title="Retweets"><i class="fas fa-retweet" style="color: var(--vert);"></i> {{ c.x_retweet_count if c.x_retweet_count is not none else '—' }}</span>
+                    <span title="Réponses sur X"><i class="far fa-comment" style="color: var(--gris);"></i> {{ c.x_reply_count if c.x_reply_count is not none else '—' }}</span>
+                </div>
+            </div>
+
+            {% if c.views is not none %}
+            <div style="margin-top: 0.7rem; border-top: 1px solid #f0f0f0; padding-top: 0.6rem; font-size: 0.82rem; color: var(--gris); display: flex; gap: 1.1rem; flex-wrap: wrap; align-items: center;">
+                <span style="font-weight: 600; color: var(--noir);">
+                    <i class="fa-brands fa-tiktok"></i> Sur TikTok
+                </span>
+                <span><i class="far fa-eye"></i> {{ c.views }}</span>
+                <span><i class="far fa-heart"></i> {{ c.likes }}</span>
+                <span><i class="far fa-comment"></i> {{ c.comments_count }}</span>
+                <span><i class="fas fa-share"></i> {{ c.shares }}</span>
+                {% if c.scraped_at %}<span>· relevé le {{ c.scraped_at.strftime('%d/%m/%Y') }}</span>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; padding: 2rem; color: var(--gris); background: white; border-radius: 12px;">
+            <p style="margin: 0;">Aucun clip publié sur X pour l'instant.<br>
+               Rattachez une vidéo à un post depuis la <a href="{{ url_for('admin_tiktok.list_posts') }}">page TikTok</a>, puis publiez-la sur X.</p>
         </div>
     {% endif %}
 {% endblock %}
