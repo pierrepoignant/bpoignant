@@ -93,9 +93,12 @@ def create_app(db_name='ovh'):
     app.register_blueprint(auth_bp)
 
     from articles.models import Article, Author  # noqa: F401
-    from articles import articles_bp, admin_articles_bp, admin_authors_bp
+    from articles import (
+        articles_bp, admin_articles_bp, admin_authors_bp, admin_themes_bp,
+    )
     app.register_blueprint(articles_bp)
     app.register_blueprint(admin_articles_bp)
+    app.register_blueprint(admin_themes_bp)
     app.register_blueprint(admin_authors_bp)
 
     from newsletter.models import Subscriber  # noqa: F401
@@ -376,6 +379,13 @@ def _migrate_schema():
             db.session.commit()
         if 'spam_score' not in cols:
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
+            db.session.commit()
+
+    if 'themes' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('themes')}
+        if 'description' not in cols:
+            db.session.execute(text("ALTER TABLE themes ADD COLUMN description TEXT NULL"))
+            db.session.execute(text("ALTER TABLE themes ADD COLUMN description_at DATETIME NULL"))
             db.session.commit()
 
     if 'tiktok_posts' in inspector.get_table_names():

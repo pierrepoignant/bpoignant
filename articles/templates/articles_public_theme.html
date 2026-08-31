@@ -12,6 +12,11 @@
             {{ articles|length }} article{{ 's' if articles|length != 1 else '' }}{% if videos %},
             {{ videos|length }} vidéo{{ 's' if videos|length != 1 else '' }}{% endif %} sur ce thème
         </p>
+        {% if theme.description %}
+        <p style="color: rgba(255,255,255,0.9); margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.65; max-width: 62ch;">
+            {{ theme.description }}
+        </p>
+        {% endif %}
     </div>
 </section>
 

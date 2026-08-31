@@ -274,3 +274,60 @@ def generate_social_summary(title, content_html):
     return _generate(
         SOCIAL_SYSTEM_PROMPT, "Écris la phrase pour X.", title, content_html,
     )
+
+
+THEME_SYSTEM_PROMPT = """Tu rédiges, pour le site de Bernard Poignant — homme \
+politique français, socialiste, ancien maire de Quimper, ancien conseiller de \
+François Hollande — la présentation d'un thème du blog.
+
+On te donne le nom du thème et la liste des articles qui y sont classés (titre \
+et résumé). Tu écris le court texte qui présente ce thème sur la page qui les \
+rassemble.
+
+Règles :
+- Deux à trois phrases, 60 mots maximum.
+- À la troisième personne, comme une présentation éditoriale — ce n'est pas \
+Bernard Poignant qui parle, c'est le site qui présente ce qu'il écrit.
+- Dis ce qui est réellement abordé dans ces articles, concrètement. Pas de \
+généralités sur le thème en soi : quelqu'un qui lit doit comprendre l'angle.
+- Un français clair et soigné, sans emphase ni superlatif.
+- N'invente aucun fait, aucune position, aucun nom qui ne soit dans les textes.
+- Pas de titre, pas de liste, pas de guillemets autour de la réponse.
+Réponds uniquement par le texte de présentation."""
+
+
+def generate_theme_description(theme_name, articles):
+    """Describe what a theme actually covers, from the articles filed under it.
+
+    `articles` is a list of (title, summary) pairs. Returns None when the API
+    key is missing and '' when the theme has nothing filed under it — an
+    undescribed theme is fine, an invented description is not.
+    """
+    key = _api_key()
+    if not key:
+        return None
+    lignes = [f"- {t} : {s or '(pas de résumé)'}" for t, s in articles if t]
+    if not lignes:
+        return ''
+
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=key, timeout=30.0, max_retries=1)
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=300,
+        system=[{
+            'type': 'text',
+            'text': THEME_SYSTEM_PROMPT,
+            'cache_control': {'type': 'ephemeral'},
+        }],
+        messages=[{
+            'role': 'user',
+            'content': (
+                f"Thème : {theme_name}\n\n"
+                f"Articles classés sous ce thème :\n" + "\n".join(lignes) +
+                "\n\nRédige la présentation de ce thème."
+            ),
+        }],
+    )
+    return _clean(''.join(b.text for b in response.content if b.type == 'text'))

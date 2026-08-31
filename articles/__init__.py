@@ -1,7 +1,10 @@
 from datetime import datetime, date, time, timedelta
 
 import bleach
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, abort, current_app, flash, jsonify, redirect, render_template,
+    request, url_for,
+)
 from flask_login import current_user
 from slugify import slugify
 
@@ -210,6 +213,33 @@ def _related_videos(article, limit=3):
     return picked
 
 
+@articles_bp.route('/themes')
+def public_themes():
+    """Index of the themes actually in use.
+
+    Only themes with something published under them are listed: an empty theme
+    is a dead end for a reader and a thin page for a crawler.
+    """
+    from tiktok.models import TikTokPost
+
+    themes = Theme.query.order_by(Theme.name).all()
+    entries = []
+    for theme in themes:
+        articles = theme.published_articles
+        videos = [v for v in theme.tiktok_posts if v.video_url]
+        if not articles and not videos:
+            continue
+        entries.append({
+            'theme': theme,
+            'articles': len(articles),
+            'videos': len(videos),
+            'last': max((a.created_at for a in articles), default=None),
+        })
+    # Le plus fourni d'abord : c'est ce sur quoi il a le plus écrit.
+    entries.sort(key=lambda e: (-e['articles'] - e['videos'], e['theme'].name))
+    return render_template('articles_public_themes.html', entries=entries)
+
+
 @articles_bp.route('/theme/<slug>')
 def public_theme(slug):
     from tiktok.models import TikTokPost
@@ -236,6 +266,86 @@ def public_theme(slug):
 
 
 # ─── ADMIN ──────────────────────────────────────────────────
+
+admin_themes_bp = Blueprint(
+    'admin_themes', __name__, url_prefix='/admin/themes', template_folder='templates'
+)
+
+
+def _theme_entries():
+    from tiktok.models import TikTokPost
+
+    entries = []
+    for theme in Theme.query.order_by(Theme.name).all():
+        articles = theme.published_articles
+        videos = [v for v in theme.tiktok_posts if v.video_url]
+        entries.append({'theme': theme, 'articles': len(articles),
+                        'videos': len(videos),
+                        'used': bool(articles or videos)})
+    return entries
+
+
+def _describe(theme):
+    """Write a theme's description from the articles filed under it."""
+    from articles.ai_summary import generate_theme_description
+
+    pairs = [(a.title, a.summary) for a in theme.published_articles]
+    try:
+        text = generate_theme_description(theme.name, pairs)
+    except Exception:
+        current_app.logger.exception('theme description failed for %s', theme.name)
+        return None
+    if text:
+        theme.description = text
+        theme.description_at = datetime.utcnow()
+    return text
+
+
+@admin_themes_bp.route('/')
+@admin_required
+def list_themes():
+    return render_template('themes_admin.html', entries=_theme_entries())
+
+
+@admin_themes_bp.route('/<int:theme_id>/describe', methods=['POST'])
+@admin_required
+def describe_theme(theme_id):
+    theme = db.session.get(Theme, theme_id) or abort(404)
+    text = _describe(theme)
+    db.session.commit()
+    flash(f"Présentation rédigée pour « {theme.name} »." if text
+          else "L'IA n'a rien renvoyé — thème sans article publié, ou clé absente.",
+          'success' if text else 'danger')
+    return redirect(url_for('admin_themes.list_themes'))
+
+
+@admin_themes_bp.route('/describe-missing', methods=['POST'])
+@admin_required
+def describe_missing():
+    """Fill in every theme that has articles but no description yet."""
+    done = 0
+    for theme in Theme.query.order_by(Theme.name).all():
+        if theme.description or not theme.published_articles:
+            continue
+        if _describe(theme):
+            done += 1
+    db.session.commit()
+    flash(f"{done} présentation(s) rédigée(s)." if done
+          else "Rien à rédiger — toutes les présentations existent déjà.",
+          'success')
+    return redirect(url_for('admin_themes.list_themes'))
+
+
+@admin_themes_bp.route('/<int:theme_id>/save', methods=['POST'])
+@admin_required
+def save_theme(theme_id):
+    theme = db.session.get(Theme, theme_id) or abort(404)
+    theme.description = (request.form.get('description') or '').strip() or None
+    theme.description_at = datetime.utcnow() if theme.description else None
+    db.session.commit()
+    flash("Présentation enregistrée.", 'success')
+    return redirect(url_for('admin_themes.list_themes'))
+
 
 @admin_articles_bp.route('/')
 @admin_required

@@ -1,0 +1,67 @@
+{% extends 'admin_base.html' %}
+{% block title %}Thèmes{% endblock %}
+
+{% block admin_title %}<i class="fas fa-tags" style="color: var(--vert);"></i> Thèmes{% endblock %}
+{% block admin_subtitle %}<p>La présentation de chaque thème, écrite par l'IA d'après les articles qui y sont classés, et relisible ici. Elle s'affiche sur la page du thème et dans la liste publique.</p>{% endblock %}
+
+{% block admin_content %}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+        <p style="margin: 0; color: var(--gris); font-size: 0.88rem;">
+            {{ entries|selectattr('used')|list|length }} thème(s) utilisé(s) ·
+            {{ entries|selectattr('theme.description')|list|length }} présentation(s) rédigée(s)
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('articles.public_themes') }}" target="_blank"
+               class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-arrow-up-right-from-square"></i> Voir la page publique
+            </a>
+            <form method="POST" action="{{ url_for('admin_themes.describe_missing') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-wand-magic-sparkles"></i> Rédiger les manquantes
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% for e in entries %}
+    {# Un thème sans rien de publié n'apparaît pas côté public : le dire ici
+       évite de chercher pourquoi la page ne le montre pas. #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.3rem; margin-bottom: 0.8rem; {% if not e.used %}opacity: 0.65;{% endif %}">
+        <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: baseline; margin-bottom: 0.6rem;">
+            <h2 style="font-size: 1.05rem; margin: 0;">
+                {{ e.theme.name }}
+                <span style="font-weight: 400; color: var(--gris); font-size: 0.85rem;">
+                    · {{ e.articles }} article{{ 's' if e.articles != 1 else '' }}
+                    {%- if e.videos %} · {{ e.videos }} vidéo{{ 's' if e.videos != 1 else '' }}{% endif %}
+                    {%- if not e.used %} · non publié{% endif %}
+                </span>
+            </h2>
+            {% if e.theme.description_at %}
+            <span style="font-size: 0.76rem; color: var(--gris);">
+                rédigée le {{ e.theme.description_at.strftime('%d/%m/%Y') }}
+            </span>
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_themes.save_theme', theme_id=e.theme.id) }}">
+            <textarea name="description" rows="3"
+                      placeholder="Deux ou trois phrases sur ce qui est abordé dans ce thème."
+                      style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.6;">{{ e.theme.description or '' }}</textarea>
+            {# Deux boutons, un seul formulaire : formaction envoie le second
+               ailleurs, plutôt que d'aligner deux formulaires à la marge. #}
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button type="submit" class="btn btn-sm btn-outline"
+                        formaction="{{ url_for('admin_themes.describe_theme', theme_id=e.theme.id) }}"
+                        style="color: var(--noir); border-color: #e0e0e0;"
+                        {{ 'disabled' if not e.articles }}
+                        title="{{ 'Rédiger à partir des articles du thème' if e.articles else 'Aucun article publié sous ce thème' }}">
+                    <i class="fas fa-wand-magic-sparkles"></i> {{ 'Réécrire' if e.theme.description else 'Rédiger' }} (IA)
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endfor %}
+{% endblock %}

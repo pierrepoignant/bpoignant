@@ -20,10 +20,20 @@ class Theme(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
     slug = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    # Ce qui se dit sur ce thème, écrit par l'IA à partir des articles qui y
+    # sont classés, puis relu. Stocké plutôt que calculé à l'affichage : c'est
+    # du texte que les moteurs doivent voir, et qui ne doit pas changer à
+    # chaque visite.
+    description = db.Column(db.Text, nullable=True)
+    description_at = db.Column(db.DateTime, nullable=True)
 
     @property
     def published_articles(self):
         return [a for a in self.articles if a.published]
+
+    @property
+    def video_count(self):
+        return len([v for v in self.tiktok_posts if v.video_url])
 
 
 class Author(db.Model):

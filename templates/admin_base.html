@@ -41,6 +41,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-newspaper"></i> Articles
         </a>
+        <a href="{{ url_for('admin_themes.list_themes') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/themes') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-tags"></i> Thèmes
+        </a>
         <a href="{{ url_for('admin_authors.list_authors') }}"
            class="btn btn-sm {% if _p.startswith('/admin/authors') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-feather-alt"></i> Auteurs

@@ -64,6 +64,7 @@
         </button>
         <ul class="nav-links">
             <li><a href="{{ url_for('articles.public_list') }}" class="{% if request.endpoint and request.endpoint.startswith('articles.') %}active{% endif %}"><i class="fas fa-newspaper"></i>&nbsp; Articles</a></li>
+            <li><a href="{{ url_for('articles.public_themes') }}" class="{% if request.endpoint in ('articles.public_themes', 'articles.public_theme') %}active{% endif %}"><i class="fas fa-tags"></i>&nbsp; Thèmes</a></li>
             <li><a href="{{ url_for('pages.show', slug='biographie') }}" class="{% if request.endpoint == 'pages.show' and request.view_args and request.view_args.get('slug') == 'biographie' %}active{% endif %}"><i class="fas fa-user"></i>&nbsp; Biographie</a></li>
             <li><a href="{{ url_for('lettre.landing') }}" class="{% if request.endpoint == 'lettre.landing' %}active{% endif %}"><i class="far fa-envelope"></i>&nbsp; La lettre</a></li>
             {% if current_user.is_authenticated %}

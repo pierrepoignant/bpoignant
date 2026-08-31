@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Thèmes{% endblock %}
+{% block meta_description %}Les thèmes abordés par Bernard Poignant : la République, la laïcité, la gauche, la Bretagne, l'Europe et les autres sujets de ses chroniques.{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3.5rem 2rem; color: white;">
+    <div style="max-width: 800px; margin: 0 auto;">
+        <a href="{{ url_for('articles.public_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Tous les articles</a>
+        <h1 style="font-size: 2.2rem; font-weight: 800; margin: 0.5rem 0 0.6rem;">Thèmes</h1>
+        <p style="color: rgba(255,255,255,0.75); margin: 0;">
+            {{ entries|length }} sujet{{ 's' if entries|length != 1 else '' }} abordé{{ 's' if entries|length != 1 else '' }} au fil des chroniques.
+        </p>
+    </div>
+</section>
+
+<section class="section section-tight">
+    {% if entries %}
+    <div class="themes-grid">
+        {% for e in entries %}
+        <a href="{{ url_for('articles.public_theme', slug=e.theme.slug) }}" class="theme-tile">
+            <div class="tile-numero">{{ '%02d' % loop.index }}</div>
+            <div class="tile-icon"><i class="fas fa-tag"></i></div>
+            <h3>{{ e.theme.name }}</h3>
+            {# La présentation est écrite par l'IA d'après les articles classés
+               ici, puis relue. Sans elle la vignette n'est qu'une étiquette. #}
+            <p>{{ e.theme.description or '' }}</p>
+            <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
+                <i class="far fa-newspaper"></i>
+                {{ e.articles }} article{{ 's' if e.articles != 1 else '' }}
+                {% if e.videos %}
+                · <i class="fa-brands fa-tiktok"></i> {{ e.videos }} vidéo{{ 's' if e.videos != 1 else '' }}
+                {% endif %}
+            </div>
+            <div class="tile-cta">Voir le thème <i class="fas fa-arrow-right"></i></div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris);">
+        <p>Aucun thème pour l'instant.</p>
+    </div>
+    {% endif %}
+</section>
+
+{% include '_newsletter_form.html' %}
+{% endblock %}
