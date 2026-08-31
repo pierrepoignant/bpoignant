@@ -1,100 +1,32 @@
-{# Graphique et tableau des statistiques par période, partagés par les pages X
-   et TikTok. Le SVG est dessiné à la main : une seule série, une échelle
-   linéaire, rien qui justifie une bibliothèque et son chargement. #}
+{# Bandeau de statistiques par période, partagé par les pages X et TikTok.
+   Même présentation que /admin/analytics/ : mêmes boutons de plage, mêmes
+   cartes cliquables, même graphique à barres dégradées avec infobulle. #}
 
-{% macro chart(rows, couleur, unite='vues') %}
-    {% if rows %}
-    {# Les lignes arrivent de la plus récente à la plus ancienne ; un graphique
-       se lit dans l'autre sens. #}
-    {% set series = rows|reverse|list %}
-    {% set peak = (series|map(attribute='views')|max) or 1 %}
-    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.2rem 0.8rem; margin-bottom: 1.2rem; overflow-x: auto;">
-        <svg viewBox="0 0 {{ 60 + series|length * 62 }} 240" role="img"
-             style="width: 100%; min-width: {{ 60 + series|length * 62 }}px; height: 240px;"
-             aria-label="Vues par période">
-            {# Trois repères horizontaux : sans eux on compare des hauteurs sans échelle. #}
-            {% for frac in [1, 0.5, 0] %}
-            {% set y = 20 + (1 - frac) * 160 %}
-            <line x1="52" y1="{{ y }}" x2="{{ 56 + series|length * 62 }}" y2="{{ y }}"
-                  stroke="#ececec" stroke-width="1"></line>
-            <text x="46" y="{{ y + 4 }}" text-anchor="end" font-size="10" fill="#8a8a8a">
-                {{ (peak * frac)|round|int }}
-            </text>
-            {% endfor %}
-
-            {% for r in series %}
-            {% set h = (r.views / peak * 160)|round(1) %}
-            {% set x = 60 + loop.index0 * 62 %}
-            <rect x="{{ x }}" y="{{ 180 - h }}" width="38" height="{{ h if h > 0 else 1 }}"
-                  rx="4" fill="{{ couleur }}">
-                <title>{{ r.label }} — {{ r.views }} {{ unite }}, {{ r.posts }} post(s)</title>
-            </rect>
-            <text x="{{ x + 19 }}" y="{{ 174 - h }}" text-anchor="middle" font-size="11"
-                  font-weight="700" fill="#1A1A2E">{{ r.views }}</text>
-            <text x="{{ x + 19 }}" y="198" text-anchor="middle" font-size="10" fill="#6C757D">{{ r.short }}</text>
-            <text x="{{ x + 19 }}" y="212" text-anchor="middle" font-size="9" fill="#adadad">{{ r.posts }} post{{ 's' if r.posts != 1 else '' }}</text>
-            {% endfor %}
-        </svg>
-    </div>
-    {% endif %}
-{% endmacro %}
-
-{% macro table(rows, couleur, l_reactions, l_partages) %}
-    {% if rows %}
-    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
-        <div class="admin-table-wrap">
-        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
-            <thead style="background: var(--gris-clair);">
-                <tr style="font-size: 0.85rem;">
-                    <th style="text-align: left; padding: 0.8rem 1rem;">Période</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;">Posts</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues / post</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_reactions }}</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_partages }}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in rows %}
-                <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td data-label="Période" style="padding: 0.7rem 1rem; white-space: nowrap;">{{ r.label }}</td>
-                    <td data-label="Posts" style="padding: 0.7rem 1rem; text-align: right;">{{ r.posts }}</td>
-                    <td data-label="Vues" style="padding: 0.7rem 1rem; text-align: right; font-weight: 700;">{{ r.views }}</td>
-                    <td data-label="Vues / post" style="padding: 0.7rem 1rem; text-align: right; color: var(--gris);">{{ r.per_post }}</td>
-                    <td data-label="{{ l_reactions }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.likes }}</td>
-                    <td data-label="{{ l_partages }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.shares }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-    </div>
-    {% else %}
-    <div style="text-align: center; padding: 2rem; color: var(--gris); background: white; border-radius: 12px;">
-        <p style="margin: 0;">Rien à afficher pour l'instant.</p>
-    </div>
-    {% endif %}
-{% endmacro %}
-
-{% macro periodes(endpoint, period, everything, total_periods, shown) %}
-<div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap;">
-    <a href="{{ url_for(endpoint, period='week') }}"
-       class="btn btn-sm {% if period == 'week' %}btn-vert{% else %}btn-outline{% endif %}">Par semaine</a>
-    <a href="{{ url_for(endpoint, period='month') }}"
-       class="btn btn-sm {% if period == 'month' %}btn-vert{% else %}btn-outline{% endif %}">Par mois</a>
-    {% if total_periods > shown %}
-    <a href="{{ url_for(endpoint, period=period, tout='0' if everything else '1') }}"
-       class="btn btn-sm btn-outline" style="margin-left: auto; color: var(--noir); border-color: #e0e0e0;">
-        {{ 'Voir seulement les %s dernières'|format(shown) if everything else 'Tout afficher (%s périodes)'|format(total_periods) }}
-    </a>
+{% macro controls(endpoint, days, group, ranges, groups) %}
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;">
+    {% for d, lbl in ranges %}
+    {# btn-outline seul est invisible sur ce fond : la couleur et la bordure
+       viennent en style en ligne, comme sur la page Statistiques. #}
+    <a href="{{ url_for(endpoint, days=d, group=group) }}"
+       class="btn btn-sm {% if days == d %}btn-primary{% else %}btn-outline{% endif %}"
+       {% if days != d %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ lbl }}</a>
+    {% endfor %}
+    {% if days != 1 %}
+    <span style="width: 1px; height: 24px; background: var(--gris-clair); margin: 0 0.3rem;"></span>
+    <span style="color: var(--gris); font-size: 0.85rem;">Grouper&nbsp;:</span>
+    {% for g, lbl in groups %}
+    <a href="{{ url_for(endpoint, days=days, group=g) }}"
+       class="btn btn-sm {% if group == g %}btn-vert{% else %}btn-outline{% endif %}"
+       {% if group != g %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ lbl }}</a>
+    {% endfor %}
     {% endif %}
 </div>
 {% endmacro %}
 
-{% macro avertissement(excluded=0) %}
+{% macro caveat(excluded=0) %}
 {# Sans cette phrase, la dernière barre se lit comme un effondrement de
    l'audience alors qu'elle ne dit que la jeunesse des posts. #}
-<div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: var(--noir); margin-bottom: 1.4rem; line-height: 1.6;">
+<div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: var(--noir); margin-bottom: 1.5rem; line-height: 1.6;">
     Les posts sont rangés selon leur <strong>date de publication</strong>, et les chiffres
     sont leurs compteurs actuels — pas les vues gagnées pendant la période.
     Les périodes récentes sont donc naturellement plus basses : leurs publications
@@ -106,4 +38,106 @@
     et une audience organique ne se moyennent pas.
     {% endif %}
 </div>
+{% endmacro %}
+
+{% macro dashboard(points, totals, group, l_likes='J\'aime', l_shares='Retweets') %}
+{% set unite = {'day': 'jour', 'week': 'semaine', 'month': 'mois'}[group] %}
+<div class="analytics-kpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="kpi-card active" data-metric="views" role="button" tabindex="0" aria-pressed="true"
+         style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
+        <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Vues</div>
+        <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(totals.views).replace(',', ' ') }}</div>
+        <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ totals.per_post }} par post</div>
+    </div>
+    <div class="kpi-card" data-metric="likes" role="button" tabindex="0" aria-pressed="false"
+         style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
+        <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ l_likes }}</div>
+        <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce); margin-top: 0.3rem;">{{ '{:,}'.format(totals.likes).replace(',', ' ') }}</div>
+        <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ totals.shares }} {{ l_shares|lower }}, {{ totals.replies }} réponses</div>
+    </div>
+    <div class="kpi-card" data-metric="posts" role="button" tabindex="0" aria-pressed="false"
+         style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
+        <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Publications</div>
+        <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--rouge); margin-top: 0.3rem;">{{ totals.posts }}</div>
+        <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">sur la période</div>
+    </div>
+</div>
+
+<div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+    <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-chart-bar" style="color: var(--rouge);"></i> <span id="chart-title">Vues</span></h2>
+    <div id="chart" style="position: relative;">
+        <div id="chart-bars" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px;"></div>
+        <div id="chart-tooltip" role="status"
+             style="position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.12s; transform: translate(-50%, -100%);
+                    background: var(--noir); color: white; padding: 6px 9px; border-radius: 8px; font-size: 0.78rem; white-space: nowrap; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,0.2);"></div>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--gris); margin-top: 6px;">
+        <span>{{ points[0].full if points }}</span>
+        <span>{{ points[-1].full if points }}</span>
+    </div>
+</div>
+
+<script id="chart-data" type="application/json">{{ points|tojson }}</script>
+<script>
+(function () {
+    var data = JSON.parse(document.getElementById('chart-data').textContent || '[]');
+    var METRICS = {
+        views: { label: 'Vues',          unit: 'vues',  grad: ['var(--rouge)', 'var(--rouge-fonce)'] },
+        likes: { label: {{ l_likes|tojson }}, unit: 'j’aime', grad: ['var(--vert)', 'var(--vert-fonce)'] },
+        posts: { label: 'Publications',  unit: 'post(s)', grad: ['#16213E', '#0d1526'] }
+    };
+    var bars = document.getElementById('chart-bars');
+    var tooltip = document.getElementById('chart-tooltip');
+    var title = document.getElementById('chart-title');
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.kpi-card[data-metric]'));
+    var current = 'views';
+
+    function fmt(n) { return (Math.round(n * 10) / 10).toLocaleString('fr-FR'); }
+
+    function render(metric) {
+        current = metric;
+        var meta = METRICS[metric];
+        title.textContent = meta.label;
+        var max = data.reduce(function (m, p) { return Math.max(m, p[metric]); }, 0) || 1;
+        bars.innerHTML = '';
+        data.forEach(function (p) {
+            var val = p[metric];
+            var bar = document.createElement('div');
+            bar.style.flex = '1';
+            bar.style.minWidth = '3px';
+            bar.style.height = (val / max * 100).toFixed(1) + '%';
+            bar.style.borderRadius = '2px 2px 0 0';
+            bar.style.opacity = val === 0 ? '0.35' : '1';
+            bar.style.background = 'linear-gradient(180deg, ' + meta.grad[0] + ', ' + meta.grad[1] + ')';
+            bar.style.transition = 'height 0.2s';
+            bar.addEventListener('mouseenter', function () { showTip(p, bar, meta); });
+            bar.addEventListener('mousemove', function () { showTip(p, bar, meta); });
+            bar.addEventListener('mouseleave', hideTip);
+            bars.appendChild(bar);
+        });
+        cards.forEach(function (c) {
+            var on = c.dataset.metric === metric;
+            c.classList.toggle('active', on);
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+    }
+
+    function showTip(p, bar, meta) {
+        tooltip.innerHTML = '<strong>' + p.full + '</strong><br>' + fmt(p[current]) + ' ' + meta.unit
+                          + (current !== 'posts' ? '<br>' + p.posts + ' post(s)' : '');
+        tooltip.style.left = (bar.offsetLeft + bar.offsetWidth / 2) + 'px';
+        tooltip.style.top = (bar.offsetTop - 6) + 'px';
+        tooltip.style.opacity = '1';
+    }
+    function hideTip() { tooltip.style.opacity = '0'; }
+
+    cards.forEach(function (c) {
+        c.addEventListener('click', function () { render(c.dataset.metric); });
+        c.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); render(c.dataset.metric); }
+        });
+    });
+    render('views');
+})();
+</script>
 {% endmacro %}

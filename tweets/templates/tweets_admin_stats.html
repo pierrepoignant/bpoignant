@@ -1,13 +1,12 @@
 {% extends 'admin_base.html' %}
-{% import '_stats_chart.html' as stats %}
+{% import '_stats_chart.html' as st %}
 {% block title %}Statistiques X{% endblock %}
 
 {% block admin_title %}<i class="fa-brands fa-x-twitter" style="color: var(--vert);"></i> Statistiques X{% endblock %}
-{% block admin_subtitle %}<p>Ce que les publications de chaque période ont réuni sur X — articles et clips.</p>{% endblock %}
+{% block admin_subtitle %}<p>{% if days == 1 %}Publications d'hier{% else %}Publications des {{ days }} derniers jours{% endif %} — articles et clips.</p>{% endblock %}
 
 {% block admin_content %}
-    {{ stats.periodes('admin_tweets.stats', period, everything, total_periods, shown) }}
-    {{ stats.avertissement() }}
-    {{ stats.chart(x_rows, '#E6003E') }}
-    {{ stats.table(x_rows, '#E6003E', "J'aime", 'Retweets') }}
+    {{ st.controls('admin_tweets.stats', days, group, ranges, groups) }}
+    {{ st.caveat() }}
+    {{ st.dashboard(points, totals, group, "J'aime", 'Retweets') }}
 {% endblock %}

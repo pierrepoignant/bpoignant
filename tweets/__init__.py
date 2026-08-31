@@ -514,119 +514,145 @@ def refresh():
 # Statistiques par période
 # --------------------------------------------------------------------------
 
-def _period_start(moment, period):
-    """The Monday of the week, or the first of the month, containing `moment`."""
-    day = moment.date()
-    if period == 'month':
-        return day.replace(day=1)
-    return day - timedelta(days=day.weekday())
-
-
 MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
         'août', 'septembre', 'octobre', 'novembre', 'décembre']
+# Les abréviations françaises d'usage : tronquer à quatre lettres donnait
+# « octo. », « nove. », « déce. ».
+MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.',
+               'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+RANGES = [(1, 'Hier'), (7, '7 j'), (30, '30 j'), (90, '90 j'), (365, '1 an')]
+GROUPS = [('day', 'Jour'), ('week', 'Semaine'), ('month', 'Mois')]
 
 
-def _period_label(start, period):
-    if period == 'month':
-        return f'{MOIS[start.month - 1]} {start.year}'
-    return f'semaine du {start.strftime("%d/%m/%Y")}'
+def _bucket_start(day, group):
+    """The day, the Monday of its week, or the first of its month."""
+    if group == 'month':
+        return day.replace(day=1)
+    if group == 'week':
+        return day - timedelta(days=day.weekday())
+    return day
 
 
-def _period_short(start, period):
-    """Axis label — the long form does not fit under a bar."""
-    if period == 'month':
-        return f'{MOIS[start.month - 1][:4]}. {start.strftime("%y")}'
-    return start.strftime('%d/%m')
+def _bucket_next(start, group):
+    if group == 'month':
+        return (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    if group == 'week':
+        return start + timedelta(days=7)
+    return start + timedelta(days=1)
 
 
-# Par défaut on n'affiche qu'une fenêtre récente : le compte TikTok a une
-# première vie en 2022 dont les chiffres écrasent tout le reste, et une barre
-# calculée sur ce pic rend les semaines actuelles invisibles.
-DEFAULT_PERIODS = 12
+def _bucket_labels(start, group):
+    """(short axis label, full tooltip label)."""
+    if group == 'month':
+        return (MOIS_COURTS[start.month - 1],
+                f'{MOIS[start.month - 1]} {start.year}')
+    if group == 'week':
+        return start.strftime('%d/%m'), f'semaine du {start.strftime("%d/%m/%Y")}'
+    return start.strftime('%d/%m'), start.strftime('%d/%m/%Y')
 
 
-def platform_stats(period='week', limit=DEFAULT_PERIODS):
-    """Totals per period for X and for TikTok, newest period first.
+def platform_stats(days=30, group='day'):
+    """Per-period totals for X and TikTok over the last `days` days.
 
-    Grouped by the date a post went out, not by when the views arrived: the
-    figures we hold are lifetime counters read at the last sync, and nothing
-    records how they grew. So a row answers "what the posts published that week
-    have drawn since" — which means the most recent periods are necessarily
-    lower, their posts having had less time. The page says so; without that the
-    last bar reads as a collapse in reach.
+    Posts are grouped by the date they went out, and the figures are their
+    current lifetime counters — nothing records how those counters grew. A
+    bucket therefore says what the posts published then have drawn since, not
+    what arrived during it, and the pages say so.
+
+    Every bucket in the range is present, empty ones included, so the chart
+    reads as a timeline rather than as a list of the days something happened.
     """
     from tiktok.models import TikTokPost
 
-    if period not in ('week', 'month'):
-        period = 'week'
+    if group not in dict(GROUPS):
+        group = 'day'
+    days = days if days in dict(RANGES) else 30
 
-    def blank():
-        return {'posts': 0, 'views': 0, 'likes': 0, 'replies': 0, 'shares': 0}
+    today = datetime.utcnow().date()
+    # "Hier" = la veille seule ; les autres plages incluent aujourd'hui.
+    if days == 1:
+        first, last = today - timedelta(days=1), today - timedelta(days=1)
+    else:
+        first, last = today - timedelta(days=days - 1), today
 
-    x_buckets, tt_buckets = {}, {}
+    def empty_series():
+        series, start = {}, _bucket_start(first, group)
+        while start <= last:
+            series[start] = {'posts': 0, 'views': 0, 'likes': 0,
+                             'replies': 0, 'shares': 0}
+            start = _bucket_next(start, group)
+        return series
 
+    x_series, tt_series = empty_series(), empty_series()
+
+    def add(series, moment, views, likes, replies, shares):
+        if moment is None:
+            return
+        day = moment.date()
+        if day < first or day > last:
+            return
+        b = series.get(_bucket_start(day, group))
+        if b is None:
+            return
+        b['posts'] += 1
+        b['views'] += views or 0
+        b['likes'] += likes or 0
+        b['replies'] += replies or 0
+        b['shares'] += shares or 0
+
+    for a in Article.query.filter(Article.x_posted_at.isnot(None)).all():
+        add(x_series, a.x_posted_at, a.x_view_count, a.x_like_count,
+            a.x_reply_count, a.x_retweet_count)
     # `boosted` décrit une promotion payée sur TikTok : elle ne change rien à
-    # l'audience du même clip sur X, dont les chiffres restent organiques. Le
-    # filtre ne s'applique donc qu'aux totaux TikTok, plus bas.
-    articles = Article.query.filter(Article.x_posted_at.isnot(None)).all()
-    clips = TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all()
+    # l'audience du même clip sur X, dont les chiffres restent organiques.
+    for c in TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all():
+        add(x_series, c.x_posted_at, c.x_view_count, c.x_like_count,
+            c.x_reply_count, c.x_retweet_count)
 
-    for row in articles + clips:
-        start = _period_start(row.x_posted_at, period)
-        b = x_buckets.setdefault(start, blank())
-        b['posts'] += 1
-        b['views'] += row.x_view_count or 0
-        b['likes'] += row.x_like_count or 0
-        b['replies'] += row.x_reply_count or 0
-        b['shares'] += row.x_retweet_count or 0
+    # Les posts sponsorisés sont écartés : mélanger une audience achetée à une
+    # audience organique fait une moyenne qui ne décrit ni l'une ni l'autre.
+    for c in (TikTokPost.query
+              .filter(TikTokPost.posted_at.isnot(None),
+                      TikTokPost.boosted.is_(False))
+              .all()):
+        add(tt_series, c.posted_at, c.views, c.likes, c.comments_count, c.shares)
 
-    for clip in (TikTokPost.query
-                 .filter(TikTokPost.posted_at.isnot(None),
-                         TikTokPost.boosted.is_(False))
-                 .all()):
-        start = _period_start(clip.posted_at, period)
-        b = tt_buckets.setdefault(start, blank())
-        b['posts'] += 1
-        b['views'] += clip.views or 0
-        b['likes'] += clip.likes or 0
-        b['replies'] += clip.comments_count or 0
-        b['shares'] += clip.shares or 0
+    def shape(series):
+        points = []
+        for start in sorted(series):
+            b = dict(series[start])
+            short, full = _bucket_labels(start, group)
+            b.update(label=short, full=full,
+                     per_post=round(b['views'] / b['posts']) if b['posts'] else 0)
+            points.append(b)
+        totals = {k: sum(p[k] for p in points)
+                  for k in ('posts', 'views', 'likes', 'replies', 'shares')}
+        totals['per_post'] = (round(totals['views'] / totals['posts'])
+                              if totals['posts'] else 0)
+        return points, totals
 
-    def rows(buckets):
-        out = []
-        keys = sorted(buckets, reverse=True)
-        if limit:
-            keys = keys[:limit]
-        # Le pic est celui des lignes montrées, pas de tout l'historique :
-        # sinon la barre la plus longue est hors écran et les autres sont plates.
-        peak = max((buckets[k]['views'] for k in keys), default=0)
-        for start in keys:
-            b = dict(buckets[start])
-            b['start'] = start
-            b['label'] = _period_label(start, period)
-            b['short'] = _period_short(start, period)
-            # Largeur de barre relative au pic, pour lire la série d'un coup
-            # d'œil sans dépendre d'une bibliothèque de graphiques.
-            b['bar'] = round(100 * b['views'] / peak) if peak else 0
-            b['per_post'] = round(b['views'] / b['posts']) if b['posts'] else 0
-            out.append(b)
-        return out
-
+    x_points, x_totals = shape(x_series)
+    tt_points, tt_totals = shape(tt_series)
     excluded = TikTokPost.query.filter(TikTokPost.boosted.is_(True)).count()
-    return {'x': rows(x_buckets), 'tiktok': rows(tt_buckets), 'period': period,
-            'total_periods': max(len(x_buckets), len(tt_buckets)),
-            'excluded': excluded}
+
+    return {'x': x_points, 'x_totals': x_totals,
+            'tiktok': tt_points, 'tiktok_totals': tt_totals,
+            'days': days, 'group': group, 'excluded': excluded}
+
+
+def _stats_args():
+    days = request.args.get('days', type=int) or 30
+    group = request.args.get('group') or ('day' if days <= 30 else 'week')
+    return days, group
 
 
 @admin_tweets_bp.route('/stats')
 @admin_required
 def stats():
-    period = request.args.get('period', 'week')
-    everything = request.args.get('tout') == '1'
-    data = platform_stats(period, limit=None if everything else DEFAULT_PERIODS)
+    days, group = _stats_args()
+    data = platform_stats(days, group)
     return render_template('tweets_admin_stats.html',
-                           x_rows=data['x'], tt_rows=data['tiktok'],
-                           period=data['period'], everything=everything,
-                           total_periods=data['total_periods'],
-                           excluded=data['excluded'],
-                           shown=DEFAULT_PERIODS)
+                           points=data['x'], totals=data['x_totals'],
+                           days=data['days'], group=data['group'],
+                           ranges=RANGES, groups=GROUPS)
