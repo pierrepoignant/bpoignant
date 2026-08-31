@@ -774,3 +774,27 @@ def local_renders():
         })
     renders.sort(key=lambda r: r['created_at'], reverse=True)
     return renders
+
+
+def job_for_render(filename):
+    """The job that produced a given render, or None.
+
+    Renders are named after their job id, but a file adopted from disk before
+    jobs were persisted may not be, so the output path is checked too.
+    """
+    name = os.path.basename(filename)
+    stem = os.path.splitext(name)[0]
+
+    # Le fichier envoyé dans le bucket reçoit un suffixe aléatoire
+    # (« 55624574db68-37c91a91.mp4 ») : on essaie donc aussi la racine avant le
+    # dernier tiret, sinon un post ne retrouve jamais son job.
+    for candidate in (stem, stem.rsplit('-', 1)[0]):
+        job = get_job(candidate)
+        if job:
+            return job
+
+    for candidate in all_jobs():
+        out = candidate.get('output')
+        if out and os.path.basename(out) in (name, f'{stem}.mp4'):
+            return candidate
+    return None

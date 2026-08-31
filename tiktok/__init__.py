@@ -259,8 +259,17 @@ def attach_video(post_id):
         return redirect(url_for('admin_tiktok.list_posts'))
 
     post.duration_seconds = video.probe_duration(path)
+
+    # La transcription vit dans le job de montage, sur cette machine
+    # uniquement : si elle n'est pas recopiée ici au moment du rattachement,
+    # elle n'existe nulle part côté production.
+    job = video.job_for_render(path) or {}
+    if job.get('transcript') and not post.transcript:
+        post.transcript = job['transcript']
+
     db.session.commit()
-    flash("Vidéo attachée au post.", 'success')
+    flash("Vidéo attachée au post."
+          + (" Transcription enregistrée." if job.get('transcript') else ""), 'success')
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
