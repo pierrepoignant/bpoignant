@@ -1,0 +1,13 @@
+{% extends 'admin_base.html' %}
+{% import '_stats_chart.html' as stats %}
+{% block title %}Statistiques TikTok{% endblock %}
+
+{% block admin_title %}<i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> Statistiques TikTok{% endblock %}
+{% block admin_subtitle %}<p>Ce que les clips de chaque période ont réuni sur TikTok.</p>{% endblock %}
+
+{% block admin_content %}
+    {{ stats.periodes('admin_tiktok.stats', period, everything, total_periods, shown) }}
+    {{ stats.avertissement(excluded) }}
+    {{ stats.chart(tt_rows, '#25F4EE') }}
+    {{ stats.table(tt_rows, '#25F4EE', "J'aime", 'Partages') }}
+{% endblock %}

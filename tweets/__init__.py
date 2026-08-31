@@ -522,12 +522,21 @@ def _period_start(moment, period):
     return day - timedelta(days=day.weekday())
 
 
+MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+        'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+
 def _period_label(start, period):
     if period == 'month':
-        mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
-                'août', 'septembre', 'octobre', 'novembre', 'décembre']
-        return f'{mois[start.month - 1]} {start.year}'
+        return f'{MOIS[start.month - 1]} {start.year}'
     return f'semaine du {start.strftime("%d/%m/%Y")}'
+
+
+def _period_short(start, period):
+    """Axis label — the long form does not fit under a bar."""
+    if period == 'month':
+        return f'{MOIS[start.month - 1][:4]}. {start.strftime("%y")}'
+    return start.strftime('%d/%m')
 
 
 # Par défaut on n'affiche qu'une fenêtre récente : le compte TikTok a une
@@ -556,13 +565,11 @@ def platform_stats(period='week', limit=DEFAULT_PERIODS):
 
     x_buckets, tt_buckets = {}, {}
 
-    # Les posts sponsorisés sont écartés : mélanger une audience achetée à une
-    # audience organique fait une moyenne qui ne décrit ni l'une ni l'autre.
+    # `boosted` décrit une promotion payée sur TikTok : elle ne change rien à
+    # l'audience du même clip sur X, dont les chiffres restent organiques. Le
+    # filtre ne s'applique donc qu'aux totaux TikTok, plus bas.
     articles = Article.query.filter(Article.x_posted_at.isnot(None)).all()
-    clips = (TikTokPost.query
-             .filter(TikTokPost.x_post_id.isnot(None),
-                     TikTokPost.boosted.is_(False))
-             .all())
+    clips = TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all()
 
     for row in articles + clips:
         start = _period_start(row.x_posted_at, period)
@@ -597,6 +604,7 @@ def platform_stats(period='week', limit=DEFAULT_PERIODS):
             b = dict(buckets[start])
             b['start'] = start
             b['label'] = _period_label(start, period)
+            b['short'] = _period_short(start, period)
             # Largeur de barre relative au pic, pour lire la série d'un coup
             # d'œil sans dépendre d'une bibliothèque de graphiques.
             b['bar'] = round(100 * b['views'] / peak) if peak else 0

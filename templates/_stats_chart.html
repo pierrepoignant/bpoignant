@@ -1,0 +1,109 @@
+{# Graphique et tableau des statistiques par période, partagés par les pages X
+   et TikTok. Le SVG est dessiné à la main : une seule série, une échelle
+   linéaire, rien qui justifie une bibliothèque et son chargement. #}
+
+{% macro chart(rows, couleur, unite='vues') %}
+    {% if rows %}
+    {# Les lignes arrivent de la plus récente à la plus ancienne ; un graphique
+       se lit dans l'autre sens. #}
+    {% set series = rows|reverse|list %}
+    {% set peak = (series|map(attribute='views')|max) or 1 %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.2rem 0.8rem; margin-bottom: 1.2rem; overflow-x: auto;">
+        <svg viewBox="0 0 {{ 60 + series|length * 62 }} 240" role="img"
+             style="width: 100%; min-width: {{ 60 + series|length * 62 }}px; height: 240px;"
+             aria-label="Vues par période">
+            {# Trois repères horizontaux : sans eux on compare des hauteurs sans échelle. #}
+            {% for frac in [1, 0.5, 0] %}
+            {% set y = 20 + (1 - frac) * 160 %}
+            <line x1="52" y1="{{ y }}" x2="{{ 56 + series|length * 62 }}" y2="{{ y }}"
+                  stroke="#ececec" stroke-width="1"></line>
+            <text x="46" y="{{ y + 4 }}" text-anchor="end" font-size="10" fill="#8a8a8a">
+                {{ (peak * frac)|round|int }}
+            </text>
+            {% endfor %}
+
+            {% for r in series %}
+            {% set h = (r.views / peak * 160)|round(1) %}
+            {% set x = 60 + loop.index0 * 62 %}
+            <rect x="{{ x }}" y="{{ 180 - h }}" width="38" height="{{ h if h > 0 else 1 }}"
+                  rx="4" fill="{{ couleur }}">
+                <title>{{ r.label }} — {{ r.views }} {{ unite }}, {{ r.posts }} post(s)</title>
+            </rect>
+            <text x="{{ x + 19 }}" y="{{ 174 - h }}" text-anchor="middle" font-size="11"
+                  font-weight="700" fill="#1A1A2E">{{ r.views }}</text>
+            <text x="{{ x + 19 }}" y="198" text-anchor="middle" font-size="10" fill="#6C757D">{{ r.short }}</text>
+            <text x="{{ x + 19 }}" y="212" text-anchor="middle" font-size="9" fill="#adadad">{{ r.posts }} post{{ 's' if r.posts != 1 else '' }}</text>
+            {% endfor %}
+        </svg>
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro table(rows, couleur, l_reactions, l_partages) %}
+    {% if rows %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--gris-clair);">
+                <tr style="font-size: 0.85rem;">
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Période</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Posts</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues / post</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_reactions }}</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_partages }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td data-label="Période" style="padding: 0.7rem 1rem; white-space: nowrap;">{{ r.label }}</td>
+                    <td data-label="Posts" style="padding: 0.7rem 1rem; text-align: right;">{{ r.posts }}</td>
+                    <td data-label="Vues" style="padding: 0.7rem 1rem; text-align: right; font-weight: 700;">{{ r.views }}</td>
+                    <td data-label="Vues / post" style="padding: 0.7rem 1rem; text-align: right; color: var(--gris);">{{ r.per_post }}</td>
+                    <td data-label="{{ l_reactions }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.likes }}</td>
+                    <td data-label="{{ l_partages }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.shares }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: var(--gris); background: white; border-radius: 12px;">
+        <p style="margin: 0;">Rien à afficher pour l'instant.</p>
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{% macro periodes(endpoint, period, everything, total_periods, shown) %}
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap;">
+    <a href="{{ url_for(endpoint, period='week') }}"
+       class="btn btn-sm {% if period == 'week' %}btn-vert{% else %}btn-outline{% endif %}">Par semaine</a>
+    <a href="{{ url_for(endpoint, period='month') }}"
+       class="btn btn-sm {% if period == 'month' %}btn-vert{% else %}btn-outline{% endif %}">Par mois</a>
+    {% if total_periods > shown %}
+    <a href="{{ url_for(endpoint, period=period, tout='0' if everything else '1') }}"
+       class="btn btn-sm btn-outline" style="margin-left: auto; color: var(--noir); border-color: #e0e0e0;">
+        {{ 'Voir seulement les %s dernières'|format(shown) if everything else 'Tout afficher (%s périodes)'|format(total_periods) }}
+    </a>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro avertissement(excluded=0) %}
+{# Sans cette phrase, la dernière barre se lit comme un effondrement de
+   l'audience alors qu'elle ne dit que la jeunesse des posts. #}
+<div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: var(--noir); margin-bottom: 1.4rem; line-height: 1.6;">
+    Les posts sont rangés selon leur <strong>date de publication</strong>, et les chiffres
+    sont leurs compteurs actuels — pas les vues gagnées pendant la période.
+    Les périodes récentes sont donc naturellement plus basses : leurs publications
+    ont eu moins de temps.
+    {% if excluded %}
+    <br><br>
+    {{ excluded }} post{{ 's' if excluded != 1 else '' }} sponsorisé{{ 's' if excluded != 1 else '' }}
+    {{ 'sont exclus' if excluded != 1 else 'est exclu' }} de ces totaux : une audience achetée
+    et une audience organique ne se moyennent pas.
+    {% endif %}
+</div>
+{% endmacro %}

@@ -91,6 +91,19 @@
         </a>
     </nav>
 
+    {% if _p.startswith('/admin/tiktok') %}
+    <nav class="admin-tabs" aria-label="TikTok" style="margin-top: -0.4rem;">
+        <a href="{{ url_for('admin_tiktok.list_posts') }}"
+           class="btn btn-sm {% if not _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Posts
+        </a>
+        <a href="{{ url_for('admin_tiktok.stats') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Statistiques
+        </a>
+    </nav>
+    {% endif %}
+
     {% if _p.startswith('/admin/tweets') %}
     <nav class="admin-tabs" aria-label="Twitter" style="margin-top: -0.4rem;">
         <a href="{{ url_for('admin_tweets.list_tweets') }}"

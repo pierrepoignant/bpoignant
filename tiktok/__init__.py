@@ -198,6 +198,24 @@ def _parse_time(value):
         return None
 
 
+@admin_tiktok_bp.route('/stats')
+@admin_required
+def stats():
+    """TikTok's own figures per week or month. Shares the aggregation with the
+    X page — same buckets, same caveats, different platform."""
+    from tweets import platform_stats, DEFAULT_PERIODS
+
+    period = request.args.get('period', 'week')
+    everything = request.args.get('tout') == '1'
+    data = platform_stats(period, limit=None if everything else DEFAULT_PERIODS)
+    return render_template('tiktok_admin_stats.html',
+                           tt_rows=data['tiktok'], period=data['period'],
+                           everything=everything,
+                           total_periods=data['total_periods'],
+                           excluded=data['excluded'],
+                           shown=DEFAULT_PERIODS)
+
+
 @admin_tiktok_bp.route('/<int:post_id>/boosted', methods=['POST'])
 @admin_required
 def toggle_boosted(post_id):
