@@ -619,6 +619,12 @@ def _save_article(article):
     # Themes the admin ticked; empty means "let the AI decide" on first save.
     chosen_themes = request.form.getlist('themes')
     image_url = (request.form.get('image_url') or '').strip()
+    # Un gabarit qui rend None sans garde-fou envoie la chaîne « None », qui est
+    # ensuite vraie partout : <img src="None"> sur la page publique et dans les
+    # données structurées. Le gabarit est corrigé, mais la valeur est refusée
+    # ici aussi — c'est le seul point par lequel tout passe.
+    if image_url.lower() in ('none', 'null', 'undefined'):
+        image_url = ''
     content_html = clean_article_html(_clean_html(request.form.get('content_html')))
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))

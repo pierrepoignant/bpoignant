@@ -147,7 +147,10 @@
             </div>
             <div class="form-group">
                 <label for="image_file">Image de l'article (optionnel)</label>
-                <input type="hidden" name="image_url" value="{{ article.image_url if article else '' }}">
+                {# `article.image_url` vaut None quand il n'y a pas d'image, et Jinja
+                   écrit alors la chaîne « None » dans value= — que l'enregistrement
+                   suivant range en base comme une vraie URL. D'où le `or ''`. #}
+                <input type="hidden" name="image_url" value="{{ (article.image_url if article else '') or '' }}">
                 {% if article and article.image_url %}
                 <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.6rem;">
                     <img src="{{ article.image_url }}" alt=""
