@@ -91,6 +91,19 @@
         </a>
     </nav>
 
+    {% if _p.startswith('/admin/tweets') %}
+    <nav class="admin-tabs" aria-label="Twitter" style="margin-top: -0.4rem;">
+        <a href="{{ url_for('admin_tweets.list_tweets') }}"
+           class="btn btn-sm {% if not _p.startswith('/admin/tweets/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Publications
+        </a>
+        <a href="{{ url_for('admin_tweets.stats') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tweets/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Statistiques
+        </a>
+    </nav>
+    {% endif %}
+
     {# Sous-navigation de la section Newsletter : les trois vues qui occupaient
        auparavant trois onglets de premier niveau. #}
     {% if _p.startswith('/admin/subscribers') or _p.startswith('/admin/sends') %}

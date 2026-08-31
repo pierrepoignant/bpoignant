@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint, current_app, flash, has_request_context, redirect,
-    render_template, url_for,
+    render_template, request, url_for,
 )
 
 from auth import admin_required
@@ -415,7 +415,9 @@ def list_tweets():
         .count()
     )
 
-    # Les clips re-publiés sur X : mêmes chiffres, source différente.
+    # Articles et clips dans une seule chronologie : ce qui est parti sur X un
+    # mardi est parti un mardi, quelle qu'en soit la nature, et les lire dans
+    # deux listes séparées obligeait à recoller les dates de tête.
     from tiktok.models import TikTokPost
     clips = (
         TikTokPost.query
@@ -424,10 +426,22 @@ def list_tweets():
         .all()
     )
 
+    entries = [{'kind': 'article', 'obj': a, 'posted_at': a.x_posted_at,
+                'url': a.x_post_url, 'title': a.title,
+                'replies': replies_by_article.get(a.id, [])}
+               for a in articles]
+    entries += [{'kind': 'clip', 'obj': c, 'posted_at': c.x_posted_at,
+                 'url': c.x_url, 'title': c.title, 'replies': []}
+                for c in clips]
+    # datetime.min pour les rares lignes sans date : elles finissent en bas
+    # plutôt que de faire échouer le tri sur une comparaison avec None.
+    entries.sort(key=lambda e: e['posted_at'] or datetime.min, reverse=True)
+
     return render_template(
         'tweets_admin_list.html',
         articles=articles,
         clips=clips,
+        entries=entries,
         snapshot=latest_snapshot,
         follower_deltas=follower_deltas,
         next_to_post=next_article_to_post(),
@@ -494,3 +508,106 @@ def refresh():
         msg += ", aucune nouvelle réponse"
     flash(msg + ".", 'success')
     return redirect(url_for('admin_tweets.list_tweets'))
+
+
+# --------------------------------------------------------------------------
+# Statistiques par période
+# --------------------------------------------------------------------------
+
+def _period_start(moment, period):
+    """The Monday of the week, or the first of the month, containing `moment`."""
+    day = moment.date()
+    if period == 'month':
+        return day.replace(day=1)
+    return day - timedelta(days=day.weekday())
+
+
+def _period_label(start, period):
+    if period == 'month':
+        mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+                'août', 'septembre', 'octobre', 'novembre', 'décembre']
+        return f'{mois[start.month - 1]} {start.year}'
+    return f'semaine du {start.strftime("%d/%m/%Y")}'
+
+
+# Par défaut on n'affiche qu'une fenêtre récente : le compte TikTok a une
+# première vie en 2022 dont les chiffres écrasent tout le reste, et une barre
+# calculée sur ce pic rend les semaines actuelles invisibles.
+DEFAULT_PERIODS = 12
+
+
+def platform_stats(period='week', limit=DEFAULT_PERIODS):
+    """Totals per period for X and for TikTok, newest period first.
+
+    Grouped by the date a post went out, not by when the views arrived: the
+    figures we hold are lifetime counters read at the last sync, and nothing
+    records how they grew. So a row answers "what the posts published that week
+    have drawn since" — which means the most recent periods are necessarily
+    lower, their posts having had less time. The page says so; without that the
+    last bar reads as a collapse in reach.
+    """
+    from tiktok.models import TikTokPost
+
+    if period not in ('week', 'month'):
+        period = 'week'
+
+    def blank():
+        return {'posts': 0, 'views': 0, 'likes': 0, 'replies': 0, 'shares': 0}
+
+    x_buckets, tt_buckets = {}, {}
+
+    articles = Article.query.filter(Article.x_posted_at.isnot(None)).all()
+    clips = TikTokPost.query.filter(TikTokPost.x_post_id.isnot(None)).all()
+
+    for row in articles + clips:
+        start = _period_start(row.x_posted_at, period)
+        b = x_buckets.setdefault(start, blank())
+        b['posts'] += 1
+        b['views'] += row.x_view_count or 0
+        b['likes'] += row.x_like_count or 0
+        b['replies'] += row.x_reply_count or 0
+        b['shares'] += row.x_retweet_count or 0
+
+    for clip in TikTokPost.query.filter(TikTokPost.posted_at.isnot(None)).all():
+        start = _period_start(clip.posted_at, period)
+        b = tt_buckets.setdefault(start, blank())
+        b['posts'] += 1
+        b['views'] += clip.views or 0
+        b['likes'] += clip.likes or 0
+        b['replies'] += clip.comments_count or 0
+        b['shares'] += clip.shares or 0
+
+    def rows(buckets):
+        out = []
+        keys = sorted(buckets, reverse=True)
+        if limit:
+            keys = keys[:limit]
+        # Le pic est celui des lignes montrées, pas de tout l'historique :
+        # sinon la barre la plus longue est hors écran et les autres sont plates.
+        peak = max((buckets[k]['views'] for k in keys), default=0)
+        for start in keys:
+            b = dict(buckets[start])
+            b['start'] = start
+            b['label'] = _period_label(start, period)
+            # Largeur de barre relative au pic, pour lire la série d'un coup
+            # d'œil sans dépendre d'une bibliothèque de graphiques.
+            b['bar'] = round(100 * b['views'] / peak) if peak else 0
+            b['per_post'] = round(b['views'] / b['posts']) if b['posts'] else 0
+            out.append(b)
+        return out
+
+    return {'x': rows(x_buckets), 'tiktok': rows(tt_buckets), 'period': period,
+            'total_periods': max(len(x_buckets), len(tt_buckets))}
+
+
+@admin_tweets_bp.route('/stats')
+@admin_required
+def stats():
+    period = request.args.get('period', 'week')
+    everything = request.args.get('tout') == '1'
+    data = platform_stats(period, limit=None if everything else DEFAULT_PERIODS)
+    return render_template('tweets_admin_stats.html',
+                           x_rows=data['x'], tt_rows=data['tiktok'],
+                           period=data['period'], everything=everything,
+                           total_periods=data['total_periods'],
+                           shown=DEFAULT_PERIODS)

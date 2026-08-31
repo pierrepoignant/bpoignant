@@ -1,0 +1,78 @@
+{% extends 'admin_base.html' %}
+{% block title %}Statistiques X et TikTok{% endblock %}
+
+{% block admin_title %}<i class="fas fa-chart-column" style="color: var(--vert);"></i> Statistiques des publications{% endblock %}
+{% block admin_subtitle %}<p>Ce que les publications de chaque période ont réuni, sur X et sur TikTok.</p>{% endblock %}
+
+{% block admin_content %}
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem;">
+        <a href="{{ url_for('admin_tweets.stats', period='week') }}"
+           class="btn btn-sm {% if period == 'week' %}btn-primary{% else %}btn-outline{% endif %}">Par semaine</a>
+        <a href="{{ url_for('admin_tweets.stats', period='month') }}"
+           class="btn btn-sm {% if period == 'month' %}btn-primary{% else %}btn-outline{% endif %}">Par mois</a>
+        {% if total_periods > shown %}
+        <a href="{{ url_for('admin_tweets.stats', period=period, tout='0' if everything else '1') }}"
+           class="btn btn-sm btn-outline" style="margin-left: auto; color: var(--noir); border-color: #e0e0e0;">
+            {{ 'Voir seulement les %s dernières'|format(shown) if everything else 'Tout afficher (%s périodes)'|format(total_periods) }}
+        </a>
+        {% endif %}
+    </div>
+
+    {# Sans cette phrase, la dernière ligne se lit comme un effondrement de
+       l'audience alors qu'elle ne dit que la jeunesse des posts. #}
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; color: var(--noir); margin-bottom: 1.6rem; line-height: 1.6;">
+        Les posts sont rangés selon leur <strong>date de publication</strong>, et les chiffres
+        sont leurs compteurs actuels — pas les vues gagnées pendant la période.
+        Les périodes récentes sont donc naturellement plus basses : leurs publications
+        ont eu moins de temps.
+    </div>
+
+    {% macro tableau(rows, titre, icone, couleur, l_reactions, l_partages) %}
+    <h2 style="font-size: 1.15rem; margin: 0 0 1rem;">
+        <i class="{{ icone }}" style="color: {{ couleur }};"></i> {{ titre }}
+    </h2>
+    {% if rows %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2.2rem;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--gris-clair);">
+                <tr style="font-size: 0.85rem;">
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Période</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Posts</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Vues / post</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_reactions }}</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">{{ l_partages }}</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem; width: 28%;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td data-label="Période" style="padding: 0.7rem 1rem; white-space: nowrap;">{{ r.label }}</td>
+                    <td data-label="Posts" style="padding: 0.7rem 1rem; text-align: right;">{{ r.posts }}</td>
+                    <td data-label="Vues" style="padding: 0.7rem 1rem; text-align: right; font-weight: 700;">{{ '{:,}'.format(r.views).replace(',', ' ') }}</td>
+                    <td data-label="Vues / post" style="padding: 0.7rem 1rem; text-align: right; color: var(--gris);">{{ '{:,}'.format(r.per_post).replace(',', ' ') }}</td>
+                    <td data-label="{{ l_reactions }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.likes }}</td>
+                    <td data-label="{{ l_partages }}" style="padding: 0.7rem 1rem; text-align: right;">{{ r.shares }}</td>
+                    <td style="padding: 0.7rem 1rem;">
+                        <div style="background: var(--gris-clair); border-radius: 50px; height: 8px; overflow: hidden;">
+                            <div style="width: {{ r.bar }}%; height: 100%; background: {{ couleur }}; border-radius: 50px;"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: var(--gris); background: white; border-radius: 12px; margin-bottom: 2.2rem;">
+        <p style="margin: 0;">Rien à afficher pour l'instant.</p>
+    </div>
+    {% endif %}
+    {% endmacro %}
+
+    {{ tableau(x_rows, 'Sur X — articles et clips', 'fa-brands fa-x-twitter', 'var(--rouge)', "J'aime", 'Retweets') }}
+    {{ tableau(tt_rows, 'Sur TikTok', 'fa-brands fa-tiktok', 'var(--vert)', "J'aime", 'Partages') }}
+{% endblock %}
