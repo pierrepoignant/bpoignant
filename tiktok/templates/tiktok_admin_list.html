@@ -26,7 +26,12 @@
             son post{% if not video_enabled %} (depuis le serveur de développement){% endif %}.
         </p>
         {% if apify_ok %}
-        <form method="POST" action="{{ url_for('admin_tiktok.sync') }}" style="margin: 0;">
+        {# La récupération prend des minutes et ne donnait aucun signe de vie :
+           on recliquait, et les deux passages inséraient le même clip. #}
+        <form method="POST" action="{{ url_for('admin_tiktok.sync') }}" style="margin: 0;"
+              onsubmit="const b = this.querySelector('button');
+                        b.disabled = true;
+                        b.innerHTML = '<i class=\'fas fa-rotate fa-spin\'></i> Récupération en cours…';">
             <button type="submit" class="btn btn-sm btn-primary">
                 <i class="fas fa-rotate"></i> Récupérer les posts
             </button>

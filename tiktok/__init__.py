@@ -13,9 +13,15 @@ from flask import (
     Blueprint, abort, flash, redirect, render_template, request, url_for,
 )
 
+from sqlalchemy.exc import IntegrityError
+
 from init_db import db
 from auth import admin_required
 from tiktok.models import TikTokPost
+
+import logging
+
+log = logging.getLogger(__name__)
 
 admin_tiktok_bp = Blueprint('admin_tiktok', __name__, url_prefix='/admin/tiktok',
                             template_folder='templates')
@@ -91,23 +97,54 @@ def sync_posts(full=False):
     import apify
 
     items = apify.scrape_profile()
+    try:
+        return _upsert(items, full=full)
+    except IntegrityError:
+        # Two syncs can overlap — the actor run takes minutes, and a second
+        # click (or the nightly job crossing a manual refresh) starts a fresh
+        # one. Both then see the same clip as new and both insert it. Retry
+        # once against the rows the other run committed; the items are already
+        # in hand, so this costs no second Apify run.
+        log.warning('tiktok sync: insertion concurrente, nouvelle tentative')
+        db.session.rollback()
+        return _upsert(items, full=full)
+
+
+def _upsert(items, full=False):
+    """Write one batch of scraped items to the database.
+
+    Existing rows are read up front rather than queried inside the loop. A
+    query per item autoflushes the half-built row added by the previous
+    iteration, which is how a feed listing the same clip twice used to end in
+    a duplicate-key error rather than an update.
+    """
+    import apify
+
+    by_tiktok_id, by_url = {}, {}
+    for post in TikTokPost.query.all():
+        if post.tiktok_id:
+            by_tiktok_id[post.tiktok_id] = post
+        if post.posted_url:
+            by_url[post.posted_url] = post
+
     created = updated = skipped = 0
     now = datetime.utcnow()
     cutoff = now - timedelta(days=RECENT_DAYS)
 
     for raw in items:
         item = apify.normalise(raw)
-        if not item.get('id') and not item.get('url'):
+        tiktok_id = str(item['id']) if item.get('id') else None
+        url = item.get('url')
+        if not tiktok_id and not url:
             continue
-        post = None
-        if item.get('id'):
-            post = TikTokPost.query.filter_by(tiktok_id=str(item['id'])).first()
-        if post is None and item.get('url'):
-            post = TikTokPost.query.filter_by(posted_url=item['url']).first()
 
-        is_new = post is None
-        if is_new:
-            post = TikTokPost(title=(item.get('text') or 'Clip TikTok')[:200])
+        post = by_tiktok_id.get(tiktok_id) if tiktok_id else None
+        if post is None and url:
+            post = by_url.get(url)
+
+        if post is None:
+            post = TikTokPost(title=(item.get('text') or 'Clip TikTok')[:200],
+                              tiktok_id=tiktok_id)
             db.session.add(post)
             created += 1
         else:
@@ -119,8 +156,16 @@ def sync_posts(full=False):
                 continue
             updated += 1
 
-        post.tiktok_id = str(item['id']) if item.get('id') else post.tiktok_id
-        post.posted_url = item.get('url') or post.posted_url
+        # Index the row straight away, under both keys: a feed that lists the
+        # same clip twice then updates it the second time instead of adding a
+        # second row with the same id.
+        if tiktok_id:
+            post.tiktok_id = tiktok_id
+            by_tiktok_id[tiktok_id] = post
+        if url:
+            post.posted_url = url
+            by_url[url] = post
+
         # The caption on TikTok is what viewers actually saw; keep it in sync.
         if item.get('text'):
             post.caption = item['text']
