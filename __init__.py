@@ -399,6 +399,11 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN x_posted_at DATETIME NULL"))
             db.session.commit()
 
+        if 'poster_url' not in cols:
+            db.session.execute(text(
+                "ALTER TABLE tiktok_posts ADD COLUMN poster_url VARCHAR(500) NULL"))
+            db.session.commit()
+
         if 'boosted' not in cols:
             db.session.execute(text(
                 "ALTER TABLE tiktok_posts ADD COLUMN boosted BOOLEAN NOT NULL DEFAULT 0"))

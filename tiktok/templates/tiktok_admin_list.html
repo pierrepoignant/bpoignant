@@ -153,6 +153,31 @@
                 </form>
                 {% endif %}
 
+                <form method="POST" action="{{ url_for('admin_tiktok.update_themes', post_id=p.id) }}"
+                      style="margin-top: 0.7rem; border-top: 1px solid #f2f2f2; padding-top: 0.6rem;">
+                    <div style="font-size: 0.78rem; color: var(--gris); margin-bottom: 0.4rem;">
+                        Thèmes <span style="color: #bbb;">— ils décident sur quelles pages de thème la vidéo apparaît</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; margin-bottom: 0.5rem;">
+                        {% set choisis = p.themes|map(attribute='id')|list %}
+                        {% for t in all_themes %}
+                        <label style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;">
+                            <input type="checkbox" name="themes" value="{{ t.id }}" {{ 'checked' if t.id in choisis }}>
+                            {{ t.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fas fa-tags"></i> Enregistrer les thèmes
+                    </button>
+                    <button type="submit" name="auto" value="1" class="btn btn-sm btn-outline"
+                            style="color: var(--noir); border-color: #e0e0e0;"
+                            {{ 'disabled' if not p.transcript }}
+                            title="{{ 'Classer à partir de la transcription' if p.transcript else 'Pas de transcription à classer' }}">
+                        <i class="fas fa-wand-magic-sparkles"></i> Proposer (IA)
+                    </button>
+                </form>
+
                 {% if p.transcript %}
                 <details style="margin-top: 0.6rem;">
                     <summary style="font-size: 0.82rem; color: var(--gris); cursor: pointer;">Transcription</summary>

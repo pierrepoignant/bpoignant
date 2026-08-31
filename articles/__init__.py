@@ -122,6 +122,7 @@ def public_show(slug):
     if article is None:
         abort(404)
     related = _related_articles(article)
+    related_videos = _related_videos(article)
     from engagement.models import Comment
     from engagement import reactions_context
     comments = (
@@ -133,12 +134,13 @@ def public_show(slug):
         'articles_public_show.html',
         article=article,
         related=related,
+        related_videos=related_videos,
         comments=comments,
         reactions=reactions_context(article),
     )
 
 
-def _related_articles(article, limit=4):
+def _related_articles(article, limit=3):
     """Other articles sharing a theme, newest first, topped up with recent
     ones when the article has few or no themes — the page always shows
     something rather than an empty block."""
@@ -173,8 +175,45 @@ def _related_articles(article, limit=4):
     return picked
 
 
+def _related_videos(article, limit=3):
+    """Clips sharing a theme with this article, newest first, topped up with
+    recent ones.
+
+    The clips stand alone — none of them is the video of an article — so the
+    link is thematic, not editorial, and the block is labelled accordingly.
+    """
+    from tiktok.models import TikTokPost
+
+    theme_ids = {t.id for t in article.themes}
+    picked = []
+    if theme_ids:
+        candidates = (
+            TikTokPost.query
+            .filter(TikTokPost.video_url.isnot(None),
+                    TikTokPost.themes.any(Theme.id.in_(theme_ids)))
+            .all()
+        )
+        candidates.sort(
+            key=lambda v: (-len(theme_ids & {t.id for t in v.themes}),
+                           -(v.posted_at or v.created_at).timestamp())
+        )
+        picked = candidates[:limit]
+    if len(picked) < limit:
+        seen = {v.id for v in picked}
+        picked.extend(
+            TikTokPost.query
+            .filter(TikTokPost.video_url.isnot(None), TikTokPost.id.notin_(seen or [0]))
+            .order_by(TikTokPost.posted_at.desc())
+            .limit(limit - len(picked))
+            .all()
+        )
+    return picked
+
+
 @articles_bp.route('/theme/<slug>')
 def public_theme(slug):
+    from tiktok.models import TikTokPost
+
     theme = Theme.query.filter_by(slug=slug).first() or abort(404)
     articles = (
         Article.query
@@ -183,7 +222,17 @@ def public_theme(slug):
         .order_by(Article.created_at.desc())
         .all()
     )
-    return render_template('articles_public_theme.html', theme=theme, articles=articles)
+    # Les clips du même thème : ils n'ont pas d'article derrière eux, et cette
+    # page est le seul endroit du site où ils sont lisibles par un moteur.
+    videos = (
+        TikTokPost.query
+        .filter(TikTokPost.video_url.isnot(None),
+                TikTokPost.themes.any(Theme.id == theme.id))
+        .order_by(TikTokPost.posted_at.desc())
+        .all()
+    )
+    return render_template('articles_public_theme.html', theme=theme,
+                           articles=articles, videos=videos)
 
 
 # ─── ADMIN ──────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import '_video_cards.html' as vc %}
 {% block title %}{{ article.title }}{% endblock %}
 {% block meta_description %}{{ article.summary or (article.title ~ ' — Bernard Poignant') }}{% endblock %}
 {% block og_type %}article{% endblock %}
@@ -96,6 +97,13 @@
 </article>
 
 {% include '_comments_section.html' %}
+
+{% if related_videos %}
+<section class="section section-tight">
+    {{ vc.videos(related_videos, 'Sur le même thème, en vidéo') }}
+</section>
+{% endif %}
+
 
 {% if related %}
 <section class="section">

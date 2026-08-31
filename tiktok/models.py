@@ -10,6 +10,15 @@ from datetime import datetime
 
 from init_db import db
 
+# Many-to-many with the article themes: the clips are not tied to articles, but
+# they are about the same subjects, and the theme pages are where they earn
+# their keep in search.
+tiktok_post_themes = db.Table(
+    'tiktok_post_themes',
+    db.Column('post_id', db.Integer, db.ForeignKey('tiktok_posts.id'), primary_key=True),
+    db.Column('theme_id', db.Integer, db.ForeignKey('themes.id'), primary_key=True),
+)
+
 
 class TikTokPost(db.Model):
     __tablename__ = 'tiktok_posts'
@@ -65,6 +74,14 @@ class TikTokPost(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow,
                            onupdate=datetime.utcnow, nullable=False)
+
+    # Poster frame, uploaded beside the video: a bare <video> shows a black
+    # rectangle until it is played, and the thumbnail is also what Google wants
+    # for a video rich result.
+    poster_url = db.Column(db.String(500), nullable=True)
+
+    themes = db.relationship('Theme', secondary=tiktok_post_themes,
+                             backref='tiktok_posts', lazy='selectin')
 
     article = db.relationship('Article')
 

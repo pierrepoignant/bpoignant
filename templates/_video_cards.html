@@ -1,0 +1,56 @@
+{# Bloc de vidéos réutilisable : page de thème et bas d'article.
+
+   Le balisage VideoObject est le vrai gain : sans lui, une vidéo dans une page
+   n'est qu'un élément <video> pour un moteur de recherche ; avec lui, elle peut
+   apparaître comme résultat vidéo. La transcription y sert de description et
+   reste visible sous la vidéo, dépliable. #}
+{% macro videos(items, titre='Vidéos', montrer_transcription=True) %}
+{% if items %}
+<h2 style="font-size: 1.4rem; margin: 2.5rem 0 1.2rem;">
+    <i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> {{ titre }}
+</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.4rem;">
+    {% for v in items %}
+    <article style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); overflow: hidden; display: flex; flex-direction: column;">
+        <video src="{{ v.video_url }}" controls preload="none"
+               {% if v.poster_url %}poster="{{ v.poster_url }}"{% endif %}
+               style="width: 100%; max-height: 420px; background: #000; display: block;"></video>
+        <div style="padding: 1rem 1.1rem; flex: 1; display: flex; flex-direction: column;">
+            <h3 style="font-size: 1rem; line-height: 1.4; margin: 0 0 0.5rem;">{{ v.title|truncate(90) }}</h3>
+            <div style="font-size: 0.78rem; color: var(--gris); margin-bottom: 0.6rem;">
+                {% if v.posted_at %}<i class="far fa-calendar"></i> {{ v.posted_at.strftime('%d/%m/%Y') }}{% endif %}
+                {% if v.duration_seconds %} · {{ '%.0f'|format(v.duration_seconds) }} s{% endif %}
+            </div>
+            {% if montrer_transcription and v.transcript %}
+            <details style="margin-top: auto;">
+                <summary style="font-size: 0.82rem; color: var(--gris); cursor: pointer;">Transcription</summary>
+                <p style="font-size: 0.88rem; line-height: 1.65; color: var(--noir); margin: 0.6rem 0 0;">{{ v.transcript }}</p>
+            </details>
+            {% endif %}
+            {% if v.posted_url %}
+            <a href="{{ v.posted_url }}" target="_blank" rel="noopener"
+               style="font-size: 0.8rem; color: var(--rouge); margin-top: 0.7rem;">
+                Voir sur TikTok <i class="fas fa-arrow-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </article>
+
+    <script type="application/ld+json">
+    {{ {
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject',
+        'name': v.title,
+        'description': (v.transcript or v.caption or v.title)|truncate(500),
+        'thumbnailUrl': [v.poster_url] if v.poster_url else [],
+        'uploadDate': (v.posted_at or v.created_at).isoformat(),
+        'duration': 'PT%dS'|format(v.duration_seconds|round|int) if v.duration_seconds else None,
+        'contentUrl': v.video_url,
+        'url': v.posted_url or None,
+        'transcript': v.transcript or None,
+    }|tojson }}
+    </script>
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

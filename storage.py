@@ -95,6 +95,17 @@ def upload_video(fileobj, filename, content_type='video/mp4'):
                    filename=filename, content_type=content_type)
 
 
+def upload_poster(fileobj, filename):
+    """Store a video's poster frame and return its public URL.
+
+    Kept beside the clips rather than with the article images: it belongs to a
+    video, and it is also the thumbnailUrl a video rich result needs.
+    """
+    return _upload(fileobj, prefix='tiktok', allowed=ALLOWED_EXT,
+                   max_bytes=MAX_BYTES, kind='image', fallback='poster',
+                   filename=filename, content_type='image/jpeg')
+
+
 def _upload(source, prefix, allowed, max_bytes, kind, fallback,
             filename=None, content_type=None):
     if not is_configured():

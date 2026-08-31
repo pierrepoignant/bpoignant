@@ -41,7 +41,9 @@ def list_posts():
     # more identifiable than a hex filename.
     local_videos = video.local_renders()
 
+    from articles.models import Theme
     return render_template('tiktok_admin_list.html', posts=posts,
+                           all_themes=Theme.query.order_by(Theme.name).all(),
                            storage_ok=storage.is_configured(),
                            apify_ok=apify.is_configured(),
                            video_enabled=video.is_enabled(),
@@ -143,7 +145,7 @@ def _upsert(items, full=False):
             post = by_url.get(url)
 
         if post is None:
-            post = TikTokPost(title=(item.get('text') or 'Clip TikTok')[:200],
+            post = TikTokPost(title=_title_from_caption(item.get('text')) or 'Clip TikTok',
                               tiktok_id=tiktok_id)
             db.session.add(post)
             created += 1
@@ -170,7 +172,7 @@ def _upsert(items, full=False):
         if item.get('text'):
             post.caption = item['text']
             if not post.title or post.title == 'Clip TikTok':
-                post.title = item['text'][:200]
+                post.title = _title_from_caption(item['text'])
         post.views = item.get('views')
         post.likes = item.get('likes')
         post.comments_count = item.get('comments')
@@ -182,6 +184,21 @@ def _upsert(items, full=False):
     db.session.commit()
     return {'created': created, 'updated': updated, 'skipped': skipped,
             'seen': len(items)}
+
+
+def _title_from_caption(text, limit=200):
+    """The caption's first line, which is how Bernard writes them: a headline,
+    a blank line, then the argument.
+
+    Slicing the first 200 characters instead ran the headline into the body —
+    "Retraites : deux visions, un compromis possible ?Lors de leur débat…" —
+    which is what a video rich result would have shown as its title.
+    """
+    for line in (text or '').splitlines():
+        line = line.strip()
+        if line:
+            return line[:limit]
+    return (text or '')[:limit]
 
 
 def _parse_time(value):
@@ -196,6 +213,48 @@ def _parse_time(value):
         return datetime.fromisoformat(str(value).replace('Z', '+00:00')).replace(tzinfo=None)
     except ValueError:
         return None
+
+
+def _auto_themes(post):
+    """Classify a clip against the article themes, from its transcript.
+
+    Uses the same closed vocabulary and the same prompt as the articles, so a
+    clip and an article on the same subject land on the same theme page. An
+    untagged clip is fine; a wrongly tagged one is not, so any failure returns
+    nothing rather than a guess.
+    """
+    from articles import _theme_by_name
+    from articles.ai_summary import generate_themes
+
+    text = '\n\n'.join(p for p in (post.caption, post.transcript) if p)
+    if not text.strip():
+        return []
+    try:
+        names = generate_themes(post.title or 'Vidéo', text) or []
+        return [_theme_by_name(n) for n in names]
+    except Exception:
+        log.exception('AI themes failed for tiktok post %s', post.id)
+        return []
+
+
+@admin_tiktok_bp.route('/<int:post_id>/themes', methods=['POST'])
+@admin_required
+def update_themes(post_id):
+    """Set a clip's themes by hand, or ask the AI for them."""
+    from articles.models import Theme
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    if request.form.get('auto'):
+        themes = _auto_themes(post)
+        if not themes:
+            flash("Le classement automatique n'a rien renvoyé.", 'danger')
+        post.themes = themes or post.themes
+    else:
+        ids = request.form.getlist('themes', type=int)
+        post.themes = Theme.query.filter(Theme.id.in_(ids)).all() if ids else []
+    db.session.commit()
+    flash("Thèmes enregistrés.", 'success')
+    return redirect(url_for('admin_tiktok.list_posts'))
 
 
 @admin_tiktok_bp.route('/stats')
@@ -266,6 +325,20 @@ def attach_video(post_id):
     job = video.job_for_render(path) or {}
     if job.get('transcript') and not post.transcript:
         post.transcript = job['transcript']
+
+    # Image d'attente : sans elle la vidéo est un rectangle noir sur la page
+    # publique, et c'est aussi la vignette attendue pour un résultat vidéo.
+    try:
+        poster = video.thumbnail(os.path.basename(path))
+        if poster:
+            with open(poster, 'rb') as fh:
+                post.poster_url = storage.upload_poster(
+                    fh, f'{os.path.splitext(os.path.basename(path))[0]}.jpg')
+    except Exception:
+        log.exception('poster upload failed for post %s', post.id)
+
+    if post.transcript and not post.themes:
+        post.themes = _auto_themes(post)
 
     db.session.commit()
     flash("Vidéo attachée au post."
