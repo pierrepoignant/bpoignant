@@ -162,11 +162,14 @@ def fetch_metrics(tweet_ids):
         batch = ids[start:start + METRICS_BATCH]
         body = _get(TWEETS_URL, {
             'ids': ','.join(batch),
-            'tweet.fields': 'public_metrics',
+            # `text` ne coûte rien de plus sur cet appel et rend le texte
+            # réellement publié, que nous ne conservions pas à l'envoi.
+            'tweet.fields': 'public_metrics,text',
         })
         for item in (body.get('data') or []):
             m = item.get('public_metrics') or {}
             out[str(item['id'])] = {
+                'text': item.get('text') or '',
                 'likes': m.get('like_count', 0),
                 # impression_count is only returned for the authenticated
                 # account's own tweets — which is exactly what we ask for.

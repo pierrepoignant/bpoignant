@@ -325,6 +325,8 @@ def attach_video(post_id):
     job = video.job_for_render(path) or {}
     if job.get('transcript') and not post.transcript:
         post.transcript = job['transcript']
+    if job.get('title') and not post.banner_title:
+        post.banner_title = job['title']
 
     # Image d'attente : sans elle la vidéo est un rectangle noir sur la page
     # publique, et c'est aussi la vignette attendue pour un résultat vidéo.
@@ -344,6 +346,12 @@ def attach_video(post_id):
     flash("Vidéo attachée au post."
           + (" Transcription enregistrée." if job.get('transcript') else ""), 'success')
     return redirect(url_for('admin_tiktok.list_posts'))
+
+
+def tweet_text_for(post, limit=280):
+    """The text that would go to X: the one already sent if there is one,
+    otherwise the caption condensed to fit."""
+    return post.x_text or _tweet_text(post, limit=limit)
 
 
 def _tweet_text(post, limit=280):
@@ -391,7 +399,9 @@ def post_to_x(post_id):
         flash("X n'est pas configuré (clés API manquantes).", 'danger')
         return redirect(url_for('admin_tiktok.list_posts'))
 
-    text = _tweet_text(post)
+    # Un texte saisi dans le champ « Texte X » l'emporte : sinon la légende
+    # TikTok est condensée, et ce qui part n'est plus ce qui était relu.
+    text = (request.form.get('x_text') or '').strip() or tweet_text_for(post)
     if not text:
         flash("Ce post n'a pas de texte à publier.", 'danger')
         return redirect(url_for('admin_tiktok.list_posts'))
@@ -426,6 +436,9 @@ def post_to_x(post_id):
 
     post.x_post_id = str(detail) if detail else None
     post.x_posted_at = datetime.utcnow()
+    # Ce qui est parti, conservé tel quel : le texte est parfois condensé par
+    # l'IA au moment de l'envoi, et sans cela il n'existait plus nulle part.
+    post.x_text = text
     db.session.commit()
     flash("Clip publié sur X.", 'success')
     return redirect(url_for('admin_tiktok.list_posts'))
@@ -434,28 +447,27 @@ def post_to_x(post_id):
 @admin_tiktok_bp.route('/<int:post_id>/update', methods=['POST'])
 @admin_required
 def update(post_id):
-    """Edit the text, or record the URL once the clip has been posted."""
+    """Edit the five texts of a clip, or record the URL once it is posted.
+
+    They are genuinely different things — an editorial title, the band burnt
+    into the picture, what was said, what was published on TikTok, and what
+    was published on X — and editing one must not overwrite another.
+    """
     post = db.session.get(TikTokPost, post_id) or abort(404)
 
-    if 'title' in request.form:
-        title = (request.form.get('title') or '').strip()
-        if title:
-            post.title = title[:200]
-    if 'caption' in request.form:
-        post.caption = (request.form.get('caption') or '').strip() or None
+    for champ in ('title', 'banner_title', 'caption', 'transcript', 'x_text'):
+        if champ in request.form:
+            valeur = (request.form.get(champ) or '').strip()
+            setattr(post, champ, valeur or None)
 
     if 'posted_url' in request.form:
-        url = (request.form.get('posted_url') or '').strip()
-        post.posted_url = url[:500] or None
-        # Stamp the first time a URL is recorded; clearing it clears the date
-        # too, so the two never contradict each other.
-        if url and not post.posted_at:
-            post.posted_at = datetime.utcnow()
-        elif not url:
-            post.posted_at = None
+        post.posted_url = (request.form.get('posted_url') or '').strip() or None
+
+    if not post.title:
+        post.title = _title_from_caption(post.caption) or 'Clip TikTok'
 
     db.session.commit()
-    flash("Post mis à jour.", 'success')
+    flash("Post enregistré.", 'success')
     return redirect(url_for('admin_tiktok.list_posts'))
 
 

@@ -257,6 +257,10 @@ def sync_metrics():
             continue
         # Articles and clips carry the same five column names, so one loop
         # serves both.
+        # Le texte publié, pour les clips : il est parfois condensé par l'IA à
+        # l'envoi, et n'était conservé nulle part.
+        if m.get('text') and hasattr(row, 'x_text') and not row.x_text:
+            row.x_text = m['text']
         row.x_like_count = m['likes']
         row.x_view_count = m['views']
         row.x_reply_count = m['replies']

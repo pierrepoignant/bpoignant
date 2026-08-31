@@ -32,8 +32,16 @@ class TikTokPost(db.Model):
     # because a post exists as soon as it is scraped, long before anyone links
     # the file that produced it.
     video_url = db.Column(db.String(500), nullable=True)
+    # Les cinq textes d'un clip, distincts et non interchangeables :
+    #   title        — le titre éditorial, celui qui s'affiche sur le site
+    #   banner_title — le bandeau incrusté dans l'image, en capitales
+    #   transcript   — la transcription intégrale de ce qui est dit
+    #   caption      — le texte publié sur TikTok
+    #   x_text       — le texte réellement publié sur X, souvent plus court
+    banner_title = db.Column(db.String(120), nullable=True)
     caption = db.Column(db.Text, nullable=True)
     transcript = db.Column(db.Text, nullable=True)
+    x_text = db.Column(db.Text, nullable=True)
     duration_seconds = db.Column(db.Float, nullable=True)
 
     # Filled in once the clip is actually posted. Nullable by design: a clip is

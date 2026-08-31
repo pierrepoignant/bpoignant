@@ -55,15 +55,42 @@
             {% endif %}
 
             <div style="flex: 1; min-width: 260px;">
+                {# Cinq textes distincts, et qui ne se remplacent pas : le titre
+                   éditorial affiché sur le site, le bandeau incrusté dans
+                   l'image, ce qui est dit, ce qui est publié sur TikTok, ce qui
+                   est publié sur X. #}
                 <form method="POST" action="{{ url_for('admin_tiktok.update', post_id=p.id) }}">
-                    <input type="text" name="title" value="{{ p.title }}"
-                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 700; margin-bottom: 0.5rem;">
-                    <textarea name="caption" rows="4" placeholder="Texte du post"
-                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.5;">{{ p.caption or '' }}</textarea>
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Titre</label>
+                    <input type="text" name="title" value="{{ p.title or '' }}"
+                           placeholder="Titre affiché sur le site et dans les résultats vidéo"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 700; margin-bottom: 0.6rem;">
+
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Bandeau de la vidéo</label>
+                    <input type="text" name="banner_title" value="{{ p.banner_title or '' }}" maxlength="120"
+                           placeholder="Texte incrusté en capitales, ex. DÉBAT RETRAITES"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; text-transform: uppercase; font-size: 0.88rem; margin-bottom: 0.6rem;">
+
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Texte publié sur TikTok</label>
+                    <textarea name="caption" rows="4" placeholder="La légende telle qu'elle est sur TikTok"
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.5; margin-bottom: 0.6rem;">{{ p.caption or '' }}</textarea>
+
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">
+                        Texte publié sur X
+                        {% if not p.x_post_id %}<span style="text-transform:none; letter-spacing:0; color:#bbb;">— laissez vide pour condenser la légende automatiquement</span>{% endif %}
+                    </label>
+                    <textarea name="x_text" rows="3" maxlength="280"
+                              placeholder="280 caractères maximum"
+                              {{ 'readonly' if p.x_post_id }}
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.6rem;
+                                     {% if p.x_post_id %}background: var(--gris-clair); color: var(--gris);{% endif %}">{{ p.x_text or '' }}</textarea>
+
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Transcription</label>
+                    <textarea name="transcript" rows="5" placeholder="Transcription intégrale — reprise du montage, corrigeable ici"
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; line-height: 1.6;">{{ p.transcript or '' }}</textarea>
 
                     <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; align-items: center;">
                         <input type="url" name="posted_url" value="{{ p.posted_url or '' }}"
-                               placeholder="URL du post TikTok (à coller après publication)"
+                               placeholder="URL du post TikTok"
                                style="flex: 1; min-width: 240px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
                         <button type="submit" class="btn btn-sm btn-primary">
                             <i class="fas fa-save"></i> Enregistrer
@@ -178,12 +205,6 @@
                     </button>
                 </form>
 
-                {% if p.transcript %}
-                <details style="margin-top: 0.6rem;">
-                    <summary style="font-size: 0.82rem; color: var(--gris); cursor: pointer;">Transcription</summary>
-                    <p style="font-size: 0.88rem; line-height: 1.6; color: var(--noir); margin: 0.5rem 0 0;">{{ p.transcript }}</p>
-                </details>
-                {% endif %}
             </div>
         </div>
     </div>

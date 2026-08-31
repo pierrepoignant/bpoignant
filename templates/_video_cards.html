@@ -41,7 +41,7 @@
         '@context': 'https://schema.org',
         '@type': 'VideoObject',
         'name': v.title,
-        'description': (v.transcript or v.caption or v.title)|truncate(500),
+        'description': (v.caption or v.transcript or v.title)|truncate(500),
         'thumbnailUrl': [v.poster_url] if v.poster_url else [],
         'uploadDate': (v.posted_at or v.created_at).isoformat(),
         'duration': 'PT%dS'|format(v.duration_seconds|round|int) if v.duration_seconds else None,
