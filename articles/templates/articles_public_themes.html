@@ -8,7 +8,7 @@
         <a href="{{ url_for('articles.public_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Tous les articles</a>
         <h1 style="font-size: 2.2rem; font-weight: 800; margin: 0.5rem 0 0.6rem;">Thèmes</h1>
         <p style="color: rgba(255,255,255,0.75); margin: 0;">
-            {{ entries|length }} sujet{{ 's' if entries|length != 1 else '' }} abordé{{ 's' if entries|length != 1 else '' }} au fil des chroniques.
+            {{ entries|length }} sujet{{ 's' if entries|length > 1 else '' }} abordé{{ 's' if entries|length > 1 else '' }} au fil des chroniques.
         </p>
     </div>
 </section>
@@ -24,12 +24,14 @@
             {# La présentation est écrite par l'IA d'après les articles classés
                ici, puis relue. Sans elle la vignette n'est qu'une étiquette. #}
             <p>{{ e.theme.description or '' }}</p>
+            {# Les deux comptes toujours affichés, zéro compris : montrer la
+               vidéo seulement quand il y en a rendait les vignettes
+               dissemblables et laissait croire à un oubli. #}
             <div style="color: var(--gris); font-size: 0.8rem; margin-top: 0.8rem;">
                 <i class="far fa-newspaper"></i>
-                {{ e.articles }} article{{ 's' if e.articles != 1 else '' }}
-                {% if e.videos %}
-                · <i class="fa-brands fa-tiktok"></i> {{ e.videos }} vidéo{{ 's' if e.videos != 1 else '' }}
-                {% endif %}
+                {{ e.articles }} article{{ 's' if e.articles > 1 else '' }}
+                · <i class="fa-brands fa-tiktok"></i>
+                {{ e.videos }} vidéo{{ 's' if e.videos > 1 else '' }}
             </div>
             <div class="tile-cta">Voir le thème <i class="fas fa-arrow-right"></i></div>
         </a>
