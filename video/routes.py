@@ -123,3 +123,22 @@ def render_preview(filename):
     """The render itself, played inline in the picker."""
     return send_file(_render_path(filename), mimetype='video/mp4',
                      conditional=True)
+
+
+@admin_video_bp.route('/job/<job_id>/banner', methods=['POST'])
+@admin_required
+def confirm_banner(job_id):
+    """Confirm (or clear) the proposed band, then finish the render."""
+    job = video.get_job(job_id)
+    if not job:
+        abort(404)
+    if job.get('status') != 'awaiting_banner':
+        flash("Ce montage n'attend pas de bandeau.", 'danger')
+        return redirect(url_for('admin_video.job_page', job_id=job_id))
+
+    banner = (request.form.get('title') or '').strip()
+    if request.form.get('sans_bandeau'):
+        banner = ''
+    if not video.apply_banner(job_id, banner):
+        flash("Impossible de terminer le montage — voir le détail ci-dessous.", 'danger')
+    return redirect(url_for('admin_video.job_page', job_id=job_id))

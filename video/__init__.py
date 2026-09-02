@@ -309,6 +309,41 @@ def _fit_font_size(text, usable_px, ceiling, floor):
     return int(min(ceiling, max(floor, usable_px / per_px)))
 
 
+BANNER_MAX_LINE = 26          # caractères par ligne avant de passer à deux
+
+
+def wrap_banner(text, max_line=BANNER_MAX_LINE):
+    """Split a banner into at most two balanced lines.
+
+    A single line has to shrink to fit the frame, and past a certain length it
+    becomes too small to read from a phone. Two lines keep the type large.
+    The break is chosen to even out the two halves rather than filling the
+    first line greedily, which otherwise leaves an orphan word underneath.
+    """
+    text = ' '.join((text or '').split())
+    if len(text) <= max_line:
+        return [text] if text else []
+
+    mots = text.split(' ')
+    if len(mots) == 1:
+        return [text]
+
+    meilleur, ecart = None, None
+    for i in range(1, len(mots)):
+        haut, bas = ' '.join(mots[:i]), ' '.join(mots[i:])
+        # Deux lignes déséquilibrées se lisent mal ; on prend la coupure qui
+        # rapproche le plus les deux longueurs.
+        d = abs(len(haut) - len(bas)) + 40 * (max(len(haut), len(bas)) > 2 * max_line)
+        # Ne pas finir la première ligne sur un mot outil ou un nombre :
+        # « LA RETRAITE À 60 / ANS » sépare le nombre de son unité.
+        dernier = mots[i - 1].strip(',;:').lower()
+        if dernier.isdigit() or (len(dernier) <= 2 and dernier.isalpha()):
+            d += 12
+        if ecart is None or d < ecart:
+            meilleur, ecart = (haut, bas), d
+    return list(meilleur)
+
+
 def title_filter(text, width=1080, workdir=None):
     """Filter chain drawing a title band across the lower part of the frame.
 
@@ -316,13 +351,21 @@ def title_filter(text, width=1080, workdir=None):
     apostrophes, backslashes and percent signs as syntax, and French titles are
     full of apostrophes. A textfile sidesteps the entire escaping problem.
     """
-    text = (text or '').strip().upper()
-    if not text:
+    lignes = wrap_banner((text or '').strip().upper())
+    if not lignes:
         return None, None
 
-    fd, path = tempfile.mkstemp(suffix='.txt', dir=workdir or None)
-    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-        fh.write(text)
+    # Un fichier et un drawtext par ligne. Un seul textfile contenant un saut
+    # de ligne paraît plus simple, mais drawtext dessine alors le saut lui-même
+    # sous forme de carré blanc, et `x=(w-text_w)/2` centre le bloc entier — ce
+    # qui aligne les lignes à gauche les unes sous les autres au lieu de les
+    # centrer chacune.
+    paths = []
+    for ligne in lignes:
+        fd, chemin = tempfile.mkstemp(suffix='.txt', dir=workdir or None)
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            fh.write(ligne)
+        paths.append(chemin)
 
     # Fit to width rather than using a fixed size: DejaVu Bold averages about
     # 0.58 em per character, so a long title shrinks instead of running off the
@@ -331,19 +374,35 @@ def title_filter(text, width=1080, workdir=None):
     # 576-wide source would otherwise run off both edges.
     padding = max(16, int(TITLE_SIDE_PADDING * width / 1080))
     usable = width - 2 * padding
-    size = _fit_font_size(text, usable, ceiling=int(width * 0.082),
-                          floor=int(width * 0.032))
+    # La taille est calée sur la ligne la plus longue, et le plafond baisse sur
+    # deux lignes : à taille égale le bloc déborderait du bandeau.
+    plafond = 0.082 if len(lignes) == 1 else 0.062
+    size = _fit_font_size(max(lignes, key=len), usable,
+                          ceiling=int(width * plafond),
+                          floor=int(width * 0.030))
 
-    chain = (
-        f"drawbox=x=0:y=ih*{TITLE_BAND_TOP}:w=iw:h=ih*{TITLE_BAND_HEIGHT}"
-        f":color={TITLE_BG}@1.0:t=fill,"
-        f"drawtext=fontfile={TITLE_FONT}:textfile={path}"
-        f":fontcolor={TITLE_FG}:fontsize={size}"
+    # Le bandeau s'agrandit pour deux lignes, et remonte d'autant pour rester
+    # au même endroit dans l'image.
+    hauteur = TITLE_BAND_HEIGHT if len(lignes) == 1 else TITLE_BAND_HEIGHT * 1.75
+    haut = TITLE_BAND_TOP - (hauteur - TITLE_BAND_HEIGHT) / 2
+
+    interligne = 1.24            # hauteur d'une ligne, en multiples du corps
+    bloc = size * (1 + interligne * (len(lignes) - 1))
+
+    parties = [f"drawbox=x=0:y=ih*{haut:.4f}:w=iw:h=ih*{hauteur:.4f}"
+               f":color={TITLE_BG}@1.0:t=fill"]
+    for i, chemin in enumerate(paths):
+        # Chaque ligne est centrée pour elle-même, et décalée d'un interligne.
         # drawtext uses `h` for the frame height; `ih` is drawbox vocabulary and
         # makes drawtext fail to initialise with a bare "Invalid argument".
-        f":x=(w-text_w)/2:y=h*{TITLE_BAND_TOP}+(h*{TITLE_BAND_HEIGHT}-text_h)/2"
-    )
-    return chain, path
+        decalage = i * size * interligne - (bloc - size) / 2
+        parties.append(
+            f"drawtext=fontfile={TITLE_FONT}:textfile={chemin}"
+            f":fontcolor={TITLE_FG}:fontsize={size}"
+            f":x=(w-text_w)/2"
+            f":y=h*{haut:.4f}+(h*{hauteur:.4f}-text_h)/2+({decalage:.1f})"
+        )
+    return ','.join(parties), paths
 
 
 def polish(src, dest, loudness=None, gamma=None, title=None):
@@ -369,12 +428,12 @@ def polish(src, dest, loudness=None, gamma=None, title=None):
     args = [_bin('ffmpeg'), '-hide_banner', '-nostats', '-y', '-i', src,
             '-af', audio]
 
-    video_chain, textfile = [], None
+    video_chain, textfiles = [], []
     if gamma:
         video_chain.append(f'eq=gamma={gamma}')
     if title:
-        chain, textfile = title_filter(title, width=probe_width(src),
-                                       workdir=os.path.dirname(dest))
+        chain, textfiles = title_filter(title, width=probe_width(src),
+                                        workdir=os.path.dirname(dest))
         if chain:
             video_chain.append(chain)
 
@@ -390,9 +449,9 @@ def polish(src, dest, loudness=None, gamma=None, title=None):
     try:
         code, _, err = _run(args)
     finally:
-        if textfile:
+        for chemin in textfiles:
             try:
-                os.remove(textfile)
+                os.remove(chemin)
             except OSError:
                 pass
     if code != 0:
@@ -480,19 +539,22 @@ def _strip_labels(text):
 BANNER_PROMPT = """Tu titres une vidéo courte de Bernard Poignant, homme \
 politique français, pour un bandeau affiché à l'écran.
 
-À partir de la transcription, écris UN titre très court qui dit de quoi parle \
-la vidéo.
+À partir de la transcription, écris UN titre court qui dit ce que la vidéo \
+soutient.
 
 Règles :
-- 30 caractères maximum, espaces compris. C'est une contrainte stricte : \
-au-delà, le texte ne tient pas dans le bandeau.
-- Un groupe nominal, pas une phrase : « DÉBAT HOLLANDE – PHILIPPE », \
-« LA DETTE FRANÇAISE », « DÉCENTRALISATION ».
-- Le sujet concret de la vidéo, pas une accroche ni une opinion.
+- 44 caractères maximum, espaces compris. Contrainte stricte : le bandeau tient \
+sur deux lignes au plus.
+- Le propos, pas l'étiquette du sujet. Pour une vidéo qui montre que Le Pen et \
+Mélenchon veulent toujours quitter l'Union sans l'avouer, on écrit \
+« SORTIR DE L'EUROPE SANS LE DIRE », et non « EUROPE ET PRÉSIDENTIELLE ».
+- Une formule brève : un groupe nominal ou une phrase sans verbe conjugué \
+convient, l'infinitif aussi.
+- Fidèle à ce qui est dit. N'invente rien, ne durcis pas le propos.
 - Pas de ponctuation finale, pas de guillemets, pas d'emoji.
 Réponds uniquement par le titre."""
 
-BANNER_MAX_CHARS = 30
+BANNER_MAX_CHARS = 44
 
 
 def generate_banner_title(transcript_text):
@@ -635,8 +697,13 @@ def all_jobs():
 
 
 def start_job(src_path, original_name, vertical=False, title=None):
-    """Kick off processing in a thread and return the job id. Everything slow
-    happens here; the page polls for progress."""
+    """First phase: cut, measure, transcribe, and propose a band title.
+
+    It stops there rather than rendering straight through. The band is burnt
+    into the picture and cannot be undone afterwards, and the proposal is the
+    one step worth a human glance — so the job waits for the text to be
+    confirmed, and `apply_banner` finishes it.
+    """
     job_id = uuid.uuid4().hex[:12]
     _set(job_id, id=job_id, name=original_name, status='queued', step='En attente…',
          created_at=datetime.utcnow().isoformat(timespec='seconds'),
@@ -660,47 +727,76 @@ def start_job(src_path, original_name, vertical=False, title=None):
             loudness = measure_loudness(cut)
             luma = measure_brightness(cut)
             gamma = gamma_for(luma)
-            _set(job_id, luma=luma, gamma=gamma,
+            # Conservés dans le job : la deuxième phase en a besoin et tourne
+            # dans une autre requête, souvent après un redémarrage.
+            _set(job_id, luma=luma, gamma=gamma, cut=cut, loudness=loudness,
                  lufs_before=(round(float(loudness['input_i']), 1)
                               if loudness and loudness.get('input_i') not in (None, '-inf')
                               else None))
 
-            # Transcribe before drawing the band, not after: the band text is
-            # derived from what is actually said, so the words have to exist
-            # first. Transcribing the cut is also cheaper than the original —
-            # the silence is already gone.
+            # Transcribe before proposing the band: its text is derived from
+            # what is actually said, so the words have to exist first.
+            # Transcribing the cut is also cheaper than the original — the
+            # silence is already gone.
             _set(job_id, step='Transcription…')
             tr = transcribe(cut)
             _set(job_id, transcript=tr['text'], segments_text=tr['segments'])
 
+            _set(job_id, step='Rédaction du texte…')
+            _set(job_id, caption=write_caption(tr['text']))
+
             # A separate name on purpose: assigning to `title` here would make
-            # it local to this closure, and the `if not title` above it would
-            # raise UnboundLocalError before ever reading the argument.
+            # it local to this closure, and reading it below would raise
+            # UnboundLocalError before ever reaching the argument.
             banner = title
             if not banner:
                 _set(job_id, step='Titre du bandeau…')
                 banner = generate_banner_title(tr['text'])
-                _set(job_id, title=banner)
-
-            _set(job_id, step='Égalisation du son et de l’image…')
-            dest = os.path.join(WORKDIR, f'{job_id}.mp4')
-            polish(cut, dest, loudness=loudness, gamma=gamma, title=banner)
-            _set(job_id, output=dest)
-            # The intermediate is only useful if the polish pass failed.
-            try:
-                os.remove(cut)
-            except OSError:
-                pass
-
-            _set(job_id, step='Rédaction du texte…')
-            _set(job_id, caption=write_caption(tr['text']))
-
-            _set(job_id, status='done', step='Terminé')
+            _set(job_id, title=banner, status='awaiting_banner',
+                 step='Bandeau à confirmer')
         except Exception as exc:
             _set(job_id, status='error', step='Échec', error=str(exc)[:400])
 
     threading.Thread(target=_work, name=f'video-{job_id}', daemon=True).start()
     return job_id
+
+
+def apply_banner(job_id, banner=None):
+    """Second phase: burn the confirmed band in and finish the render.
+
+    Returns immediately; the page polls as it does for the first phase. Passing
+    an empty banner renders the clip without a band, which is a legitimate
+    choice rather than a missing value.
+    """
+    job = get_job(job_id)
+    if not job:
+        return False
+    cut = job.get('cut')
+    if not cut or not os.path.exists(cut):
+        _set(job_id, status='error', step='Échec',
+             error="Le montage intermédiaire a disparu — relancez l'import.")
+        return False
+
+    banner = (banner if banner is not None else job.get('title')) or None
+    _set(job_id, title=banner, status='running',
+         step='Égalisation du son et de l’image…')
+
+    def _work():
+        try:
+            dest = os.path.join(WORKDIR, f'{job_id}.mp4')
+            polish(cut, dest, loudness=job.get('loudness'), gamma=job.get('gamma'),
+                   title=banner)
+            _set(job_id, output=dest, status='done', step='Terminé')
+            # The intermediate is only useful if the polish pass failed.
+            try:
+                os.remove(cut)
+            except OSError:
+                pass
+        except Exception as exc:
+            _set(job_id, status='error', step='Échec', error=str(exc)[:400])
+
+    threading.Thread(target=_work, name=f'video-band-{job_id}', daemon=True).start()
+    return True
 
 
 THUMB_DIR = os.path.join(WORKDIR, 'thumbs')

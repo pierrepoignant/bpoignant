@@ -19,6 +19,49 @@
         <div id="error" style="color: var(--rouge); font-size: 0.9rem; margin-top: 0.5rem;"></div>
     </div>
 
+    {# Étape de confirmation : le bandeau est incrusté dans l'image et ne se
+       défait pas, alors la proposition passe sous les yeux avant le rendu. #}
+    <div id="bandeau" style="display: none;">
+        <form method="POST" action="{{ url_for('admin_video.confirm_banner', job_id=job.id) }}"
+              style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.3rem;">
+                <i class="fas fa-closed-captioning" style="color: var(--rouge);"></i> Bandeau proposé
+            </h2>
+            <p style="font-size: 0.85rem; color: var(--gris); margin: 0 0 0.8rem;">
+                Il sera incrusté dans l'image, en blanc sur le bleu du site.
+                Au-delà de 26 caractères il passe sur deux lignes, en plus petit.
+            </p>
+            <input type="text" name="title" id="banner-input" maxlength="44"
+                   oninput="apercuBandeau()"
+                   style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
+                          font-family: inherit; font-weight: 700; text-transform: uppercase; font-size: 1rem;">
+            <div style="font-size: 0.78rem; color: var(--gris); margin: 0.3rem 0 0.9rem;">
+                <span id="banner-count"></span>
+            </div>
+
+            <div style="background: var(--noir); border-radius: 8px; padding: 1.6rem 1rem; text-align: center; margin-bottom: 1rem;">
+                <div id="banner-preview"
+                     style="background: #16213E; color: white; font-weight: 700; text-transform: uppercase;
+                            padding: 0.5rem 1rem; border-radius: 2px; line-height: 1.25; letter-spacing: 0.01em;"></div>
+            </div>
+
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Appliquer et terminer
+                </button>
+                <button type="submit" name="sans_bandeau" value="1" class="btn btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0;">
+                    Sans bandeau
+                </button>
+            </div>
+        </form>
+
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;"><i class="fas fa-closed-captioning" style="color: var(--gris);"></i> Transcription</h2>
+            <p id="transcript-attente" style="font-size: 0.95rem; line-height: 1.7; margin: 0;"></p>
+        </div>
+    </div>
+
     <div id="result" style="display: none;">
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
             <h2 style="font-size: 1.05rem; margin: 0 0 0.8rem;"><i class="fas fa-download" style="color: var(--vert);"></i> Vidéo montée</h2>
@@ -47,6 +90,34 @@
     </div>
 
     <script>
+    // Même règle de césure que le rendu : deux lignes équilibrées au-delà de
+    // 26 caractères, pour que l'aperçu ne mente pas sur le résultat.
+    function decouperBandeau(texte) {
+        texte = (texte || '').trim().replace(/\s+/g, ' ');
+        if (texte.length <= 26) return texte ? [texte] : [];
+        const mots = texte.split(' ');
+        if (mots.length === 1) return [texte];
+        let meilleur = null, ecart = null;
+        for (let i = 1; i < mots.length; i++) {
+            const haut = mots.slice(0, i).join(' '), bas = mots.slice(i).join(' ');
+            let d = Math.abs(haut.length - bas.length);
+            const dernier = mots[i - 1].replace(/[,;:]/g, '').toLowerCase();
+            if (/^\d+$/.test(dernier) || (dernier.length <= 2 && /^[a-zà-ÿ]+$/.test(dernier))) d += 12;
+            if (ecart === null || d < ecart) { meilleur = [haut, bas]; ecart = d; }
+        }
+        return meilleur;
+    }
+
+    function apercuBandeau() {
+        const champ = document.getElementById('banner-input');
+        const lignes = decouperBandeau(champ.value);
+        const boite = document.getElementById('banner-preview');
+        boite.innerHTML = lignes.length ? lignes.map(l => '<div>' + l.replace(/[<>&]/g, '') + '</div>').join('') : '&nbsp;';
+        boite.style.fontSize = lignes.length > 1 ? '1.1rem' : '1.45rem';
+        document.getElementById('banner-count').textContent =
+            champ.value.length + ' / 44 caractères · ' + (lignes.length > 1 ? 'deux lignes' : 'une ligne');
+    }
+
     (function () {
         const url = "{{ url_for('admin_video.job_status', job_id=job.id) }}";
         function tick() {
@@ -68,6 +139,19 @@
                     icon.style.color = 'var(--rouge)';
                     document.getElementById('error').textContent = j.error || '';
                     return;                      // plus de polling
+                }
+                if (j.status === 'awaiting_banner') {
+                    icon.className = 'fas fa-circle-question';
+                    icon.style.color = 'var(--rouge)';
+                    const champ = document.getElementById('banner-input');
+                    if (!champ.dataset.rempli) {
+                        champ.value = (j.title || '').toUpperCase();
+                        champ.dataset.rempli = '1';
+                    }
+                    document.getElementById('transcript-attente').textContent = j.transcript || '';
+                    document.getElementById('bandeau').style.display = 'block';
+                    apercuBandeau();
+                    return;
                 }
                 if (j.status === 'done') {
                     icon.className = 'fas fa-circle-check';
