@@ -265,16 +265,44 @@ def _access_token():
     except requests.RequestException as exc:
         raise GoogleDriveError(f"Connexion à Google impossible : {exc}") from exc
     if resp.status_code != 200:
-        # A revoked/expired refresh token comes back as invalid_grant here —
-        # surface it so the admin knows to reconnect.
-        message = _oauth_error(resp) + " Reconnectez Google Drive."
-        record_auth_failure(message)
-        raise GoogleDriveAuthError(message)
+        # Only a genuinely dead credential earns the banner and the alert.
+        # Google answers this endpoint with 429 when rate-limited and 5xx when
+        # it is having a bad day, and treating those as a revoked token raised
+        # a permanent "reconnect Google Drive" over a passing hiccup — the
+        # banner then stayed up until the next successful Drive call, which
+        # only happens when someone opens the import dialog.
+        message = _oauth_error(resp)
+        if _is_dead_credential(resp):
+            message += " Reconnectez Google Drive."
+            record_auth_failure(message)
+            raise GoogleDriveAuthError(message)
+        raise GoogleDriveError(message)
     token = resp.json().get('access_token')
     if not token:
         raise GoogleDriveError("Réponse Google sans jeton d'accès.")
     record_success()
     return token
+
+
+# Les codes OAuth qui veulent dire « ce jeton ne reviendra pas » : jeton révoqué
+# ou expiré, client supprimé, autorisation retirée. Tout le reste est passager.
+DEAD_CREDENTIAL_ERRORS = {
+    'invalid_grant', 'invalid_client', 'unauthorized_client', 'invalid_request',
+}
+
+
+def _is_dead_credential(resp):
+    """True when Google says the credential itself is finished, rather than
+    that it is busy or broken for the moment."""
+    if resp.status_code >= 500 or resp.status_code == 429:
+        return False
+    try:
+        code = (resp.json().get('error') or '').strip().lower()
+    except ValueError:
+        # Pas de JSON : sur un 4xx c'est assez inhabituel pour mériter l'alerte,
+        # sur le reste on ne conclut rien.
+        return 400 <= resp.status_code < 500
+    return code in DEAD_CREDENTIAL_ERRORS
 
 
 def _oauth_error(resp):

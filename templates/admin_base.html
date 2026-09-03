@@ -29,6 +29,15 @@
             <strong>Google Drive est déconnecté.</strong>
             L'import de documents ne fonctionne plus tant que la connexion n'est pas rétablie.
         </span>
+        {# Deux issues : re-tester, quand l'incident est passé et que seul le
+           bandeau reste, ou refaire l'autorisation quand le jeton est bien mort. #}
+        <form method="POST" action="{{ url_for('admin_settings.gdrive_verify') }}" style="margin: 0;">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" class="btn btn-sm btn-outline"
+                    style="white-space: nowrap; color: #8a1c1c; border-color: #E6003E;">
+                <i class="fas fa-rotate"></i> Vérifier
+            </button>
+        </form>
         <a href="{{ url_for('admin_settings.gdrive_connect', next=request.path) }}"
            class="btn btn-sm btn-primary" style="white-space: nowrap;">
             <i class="fab fa-google-drive"></i> Reconnecter

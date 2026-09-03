@@ -117,6 +117,24 @@ def gdrive_credentials():
     return redirect(url_for('admin_settings.index'))
 
 
+@admin_settings_bp.route('/gdrive/verifier', methods=['POST'])
+@admin_required
+def gdrive_verify():
+    """Re-test the stored credential and clear the banner if it works.
+
+    The banner is only lifted by a successful Drive call, so a failure that has
+    since resolved kept warning until someone happened to open the import
+    dialog. This asks Google directly, and costs one token request.
+    """
+    import gdrive
+
+    ok, message = gdrive.health_check()
+    flash("Google Drive répond — la connexion est valide." if ok
+          else f"Google Drive ne répond toujours pas : {message}",
+          'success' if ok else 'danger')
+    return redirect(request.form.get('next') or url_for('admin_settings.index'))
+
+
 @admin_settings_bp.route('/gdrive/connect')
 @admin_required
 def gdrive_connect():
