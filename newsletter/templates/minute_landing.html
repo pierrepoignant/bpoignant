@@ -74,8 +74,25 @@
 {# Lecteur plein écran : au téléphone c'est la seule façon de voir un format
    vertical en grand ; sur ordinateur cela évite d'ouvrir un onglet. #}
 <div id="minute-lecteur" role="dialog" aria-modal="true" aria-label="Lecture">
-    <button type="button" id="minute-fermer" aria-label="Fermer"><i class="fas fa-xmark"></i></button>
+    {# Une barre pleine plutôt qu'un rond translucide : au-dessus d'une vidéo
+       claire, l'ancien bouton était invisible, et c'était la seule sortie. #}
+    <div id="minute-barre">
+        <button type="button" id="minute-fermer" aria-label="Fermer la vidéo">
+            <i class="fas fa-xmark"></i> Fermer
+        </button>
+        <span id="minute-rang"></span>
+    </div>
     <video id="minute-video" controls playsinline preload="auto"></video>
+    <div id="minute-legende">
+        <h2 id="minute-titre-video"></h2>
+        <p id="minute-aide">Balayez vers le haut ou le bas pour changer de vidéo</p>
+    </div>
+    <button type="button" class="minute-nav" id="minute-precedent" aria-label="Vidéo précédente">
+        <i class="fas fa-chevron-up"></i>
+    </button>
+    <button type="button" class="minute-nav" id="minute-suivant" aria-label="Vidéo suivante">
+        <i class="fas fa-chevron-down"></i>
+    </button>
 </div>
 
 {% include '_newsletter_form.html' %}
@@ -85,7 +102,15 @@
 <script>
 (function () {
     var lecteur = document.getElementById('minute-lecteur');
-    var video = document.getElementById('minute-video');
+    var video   = document.getElementById('minute-video');
+    var titre   = document.getElementById('minute-titre-video');
+    var rang    = document.getElementById('minute-rang');
+    var aide    = document.getElementById('minute-aide');
+
+    // La grille est la source : le lecteur n'est qu'un index dans cette liste,
+    // ce qui rend le passage d'une vidéo à l'autre trivial.
+    var clips = Array.prototype.slice.call(document.querySelectorAll('.minute-item'));
+    var courant = -1;
 
     // Comptée au démarrage de la lecture, pas à l'affichage de la grille :
     // une planche de vignettes n'est pas vingt vues. sendBeacon survit à la
@@ -100,48 +125,90 @@
         } catch (e) { /* sans effet sur la lecture */ }
     }
 
-    function ouvrir(src, urlVue, poster) {
-        compter(urlVue);
+    function montrer(i) {
+        if (i < 0 || i >= clips.length) return;
+        var el = clips[i];
+        courant = i;
+        compter(el.dataset.vue);
         // L'image d'attente évite le rectangle noir quand la lecture
-        // automatique est refusée — ce qui est la règle sur téléphone après
-        // une navigation, donc le cas courant depuis un e-mail.
-        if (poster) video.poster = poster; else video.removeAttribute('poster');
-        video.src = src;
-        lecteur.classList.add('ouvert');
-        document.body.style.overflow = 'hidden';
-        // La lecture peut être refusée (économie de données, réglage iOS) :
-        // les contrôles restent là, l'utilisateur appuie lui-même.
+        // automatique est refusée — la règle sur téléphone après une
+        // navigation, donc le cas courant depuis un e-mail.
+        if (el.dataset.poster) video.poster = el.dataset.poster;
+        else video.removeAttribute('poster');
+        video.src = el.dataset.src;
+        titre.textContent = (el.querySelector('figcaption h2') || {}).textContent || '';
+        rang.textContent = (i + 1) + ' / ' + clips.length;
+        document.getElementById('minute-precedent').style.visibility = i > 0 ? 'visible' : 'hidden';
+        document.getElementById('minute-suivant').style.visibility = i < clips.length - 1 ? 'visible' : 'hidden';
         var p = video.play();
         if (p && p.catch) p.catch(function () {});
     }
 
-    function fermer() {
+    function ouvrir(i) {
+        lecteur.classList.add('ouvert');
+        document.body.style.overflow = 'hidden';
+        // Une entrée d'historique par ouverture : le retour du téléphone
+        // referme le lecteur au lieu de quitter le site, ce que tout le monde
+        // essaie en premier.
+        try { history.pushState({minute: true}, ''); } catch (e) {}
+        montrer(i);
+        setTimeout(function () { if (aide) aide.style.opacity = '0'; }, 4000);
+    }
+
+    function fermer(depuisHistorique) {
+        if (!lecteur.classList.contains('ouvert')) return;
         video.pause();
         video.removeAttribute('src');
         video.load();                 // libère le téléchargement en cours
         lecteur.classList.remove('ouvert');
         document.body.style.overflow = '';
+        if (aide) aide.style.opacity = '';
+        if (courant >= 0 && clips[courant]) clips[courant].scrollIntoView({block: 'center'});
+        if (!depuisHistorique) { try { history.back(); } catch (e) {} }
     }
 
-    document.querySelectorAll('.minute-item').forEach(function (el) {
-        el.addEventListener('click', function () { ouvrir(el.dataset.src, el.dataset.vue); });
+    clips.forEach(function (el, i) {
+        el.addEventListener('click', function () { ouvrir(i); });
     });
+
+    document.getElementById('minute-fermer').addEventListener('click', function () { fermer(); });
+    document.getElementById('minute-precedent').addEventListener('click', function () { montrer(courant - 1); });
+    document.getElementById('minute-suivant').addEventListener('click', function () { montrer(courant + 1); });
+
+    // Le retour du navigateur referme le lecteur plutôt que de quitter la page.
+    window.addEventListener('popstate', function () { fermer(true); });
+
+    document.addEventListener('keydown', function (e) {
+        if (!lecteur.classList.contains('ouvert')) return;
+        if (e.key === 'Escape') fermer();
+        else if (e.key === 'ArrowDown') { e.preventDefault(); montrer(courant + 1); }
+        else if (e.key === 'ArrowUp')   { e.preventDefault(); montrer(courant - 1); }
+    });
+
+    // Balayage vertical : le geste du format, et la seule navigation naturelle
+    // au pouce. Un mouvement surtout horizontal est laissé aux commandes de
+    // lecture, dont la barre de progression.
+    var y0 = null, x0 = null;
+    lecteur.addEventListener('touchstart', function (e) {
+        y0 = e.touches[0].clientY; x0 = e.touches[0].clientX;
+    }, {passive: true});
+    lecteur.addEventListener('touchend', function (e) {
+        if (y0 === null) return;
+        var dy = e.changedTouches[0].clientY - y0;
+        var dx = e.changedTouches[0].clientX - x0;
+        y0 = x0 = null;
+        if (Math.abs(dy) < 70 || Math.abs(dx) > Math.abs(dy)) return;
+        if (dy < 0) montrer(courant + 1);   // vers le haut : la suivante
+        else        montrer(courant - 1);   // vers le bas : la précédente
+    }, {passive: true});
 
     // ?v=<id> : le lien d'un e-mail vise une vidéo précise, et doit la lancer
     // plutôt que déposer le lecteur devant la grille.
     var vise = new URLSearchParams(location.search).get('v');
     if (vise) {
-        var cible = document.querySelector('.minute-item[data-id="' + vise.replace(/[^0-9]/g, '') + '"]');
-        if (cible) {
-            cible.scrollIntoView({block: 'center'});
-            ouvrir(cible.dataset.src, cible.dataset.vue, cible.dataset.poster);
-        }
+        var idx = clips.findIndex(function (el) { return el.dataset.id === vise.replace(/[^0-9]/g, ''); });
+        if (idx >= 0) { clips[idx].scrollIntoView({block: 'center'}); ouvrir(idx); }
     }
-    document.getElementById('minute-fermer').addEventListener('click', fermer);
-    lecteur.addEventListener('click', function (e) { if (e.target === lecteur) fermer(); });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && lecteur.classList.contains('ouvert')) fermer();
-    });
 })();
 </script>
 {% endblock %}
