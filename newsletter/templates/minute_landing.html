@@ -24,7 +24,8 @@
        clips ne doit pas coûter vingt téléchargements. #}
     <div class="minute-grid">
         {% for v in videos %}
-        <figure class="minute-item" data-src="{{ v.video_url }}"
+        <figure class="minute-item" data-id="{{ v.id }}" data-src="{{ v.video_url }}"
+                {% if v.poster_url %}data-poster="{{ v.poster_url }}"{% endif %}
                 data-vue="{{ url_for('tiktok_public.record_view', post_id=v.id) }}">
             <div class="minute-vignette">
                 {% if v.poster_url %}
@@ -99,8 +100,12 @@
         } catch (e) { /* sans effet sur la lecture */ }
     }
 
-    function ouvrir(src, urlVue) {
+    function ouvrir(src, urlVue, poster) {
         compter(urlVue);
+        // L'image d'attente évite le rectangle noir quand la lecture
+        // automatique est refusée — ce qui est la règle sur téléphone après
+        // une navigation, donc le cas courant depuis un e-mail.
+        if (poster) video.poster = poster; else video.removeAttribute('poster');
         video.src = src;
         lecteur.classList.add('ouvert');
         document.body.style.overflow = 'hidden';
@@ -121,6 +126,17 @@
     document.querySelectorAll('.minute-item').forEach(function (el) {
         el.addEventListener('click', function () { ouvrir(el.dataset.src, el.dataset.vue); });
     });
+
+    // ?v=<id> : le lien d'un e-mail vise une vidéo précise, et doit la lancer
+    // plutôt que déposer le lecteur devant la grille.
+    var vise = new URLSearchParams(location.search).get('v');
+    if (vise) {
+        var cible = document.querySelector('.minute-item[data-id="' + vise.replace(/[^0-9]/g, '') + '"]');
+        if (cible) {
+            cible.scrollIntoView({block: 'center'});
+            ouvrir(cible.dataset.src, cible.dataset.vue, cible.dataset.poster);
+        }
+    }
     document.getElementById('minute-fermer').addEventListener('click', fermer);
     lecteur.addEventListener('click', function (e) { if (e.target === lecteur) fermer(); });
     document.addEventListener('keydown', function (e) {

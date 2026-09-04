@@ -1550,8 +1550,11 @@ def minute_recipients(post):
 
 def _build_minute_payload(post, recipients, intro=None):
     site_url = url_for('articles.public_list', _external=True)
-    minute_url = url_for('minute.minute_landing', _external=True)
-    subject = post.title
+    # ?v= ouvre le lecteur sur ce clip : cliquer la vignette d'un e-mail doit
+    # lancer la vidéo, pas déposer le lecteur devant une grille où il faut la
+    # retrouver.
+    minute_url = url_for('minute.minute_landing', v=post.id, _external=True)
+    subject = f'La Minute : {post.title}'
     payload = []
     for sub in recipients:
         html = render_template(
@@ -1615,13 +1618,13 @@ def send_minute_test(post, to_email, intro=None):
     html = render_template(
         'email/newsletter_minute.html',
         post=post, intro=intro, body=minute_body(post),
-        minute_url=url_for('minute.minute_landing', _external=True),
+        minute_url=url_for('minute.minute_landing', v=post.id, _external=True),
         site_url=url_for('articles.public_list', _external=True),
         site_name=current_app.config['SITE_NAME'],
         site_tagline=current_app.config['SITE_TAGLINE'],
         unsubscribe_url=url_for('minute.minute_landing', _external=True),
     )
-    return send_email(to_email=to_email, subject=f'[Test] {post.title}',
+    return send_email(to_email=to_email, subject=f'[Test] La Minute : {post.title}',
                       html=html, categories=['newsletter', 'minute-test'])
 
 
