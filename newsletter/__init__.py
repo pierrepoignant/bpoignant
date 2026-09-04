@@ -442,42 +442,86 @@ def list_subscribers():
 @admin_sends_bp.route('/')
 @admin_required
 def list_sends():
-    """Admin view of the e-mails that went out: a per-article summary plus
-    the most recent individual deliveries."""
+    """What went out, across the two letters and the announcements.
+
+    A send is only ever counted once per recipient: Delivery, MinuteDelivery
+    and AnnouncementDelivery each carry a unique constraint on their pair, and
+    each send filters out anyone already served. So this page reports what
+    actually reached people, and the counts cannot double.
+    """
     from articles.models import Article
+    from tiktok.models import TikTokPost
 
     articles = {a.id: a for a in Article.query.all()}
+    clips = {c.id: c for c in TikTokPost.query.all()}
+    annonces = {a.id: a for a in Announcement.query.all()}
 
-    rows = (
-        db.session.query(
-            Delivery.article_id,
-            db.func.count(Delivery.id),
-            db.func.max(Delivery.sent_at),
-        )
-        .group_by(Delivery.article_id)
-        .all()
-    )
-    summary = [
-        {'article': articles.get(article_id), 'count': n, 'last': last}
-        for article_id, n, last in rows
-    ]
+    # ── Résumé par envoi, les trois sortes ensemble ────────────────────
+    summary = []
+    for article_id, n, last in (
+            db.session.query(Delivery.article_id, db.func.count(Delivery.id),
+                             db.func.max(Delivery.sent_at))
+            .group_by(Delivery.article_id).all()):
+        art = articles.get(article_id)
+        summary.append({
+            'kind': 'lettre', 'count': n, 'last': last,
+            'title': art.title if art else '(article supprimé)',
+            'url': url_for('articles.public_show', slug=art.slug) if art else None,
+        })
+    for post_id, n, last in (
+            db.session.query(MinuteDelivery.post_id, db.func.count(MinuteDelivery.id),
+                             db.func.max(MinuteDelivery.sent_at))
+            .group_by(MinuteDelivery.post_id).all()):
+        clip = clips.get(post_id)
+        summary.append({
+            'kind': 'minute', 'count': n, 'last': last,
+            'title': clip.title if clip else '(clip supprimé)',
+            'url': url_for('minute.minute_landing', v=post_id) if clip else None,
+        })
+    for ann_id, n, last in (
+            db.session.query(AnnouncementDelivery.announcement_id,
+                             db.func.count(AnnouncementDelivery.id),
+                             db.func.max(AnnouncementDelivery.sent_at))
+            .group_by(AnnouncementDelivery.announcement_id).all()):
+        ann = annonces.get(ann_id)
+        summary.append({
+            'kind': 'annonce', 'count': n, 'last': last,
+            'title': ann.subject if ann else '(message supprimé)',
+            'url': url_for('admin_sends.edit_announcement', announcement_id=ann_id) if ann else None,
+        })
     summary.sort(key=lambda s: s['last'] or datetime.min, reverse=True)
 
-    total = db.session.query(db.func.count(Delivery.id)).scalar() or 0
-    page = request.args.get('page', 1, type=int) or 1
-    recent_pg = (
-        Delivery.query.order_by(Delivery.sent_at.desc())
-        .paginate(page=max(page, 1), per_page=50, error_out=False)
-    )
-    recent = recent_pg.items
+    # ── Les derniers envois individuels, toutes lettres confondues ─────
+    # Trois tables, donc pas de pagination SQL commune : on prend les cent
+    # dernières de chacune et on garde les cent plus récentes de l'ensemble.
+    recent = []
+    for d in Delivery.query.order_by(Delivery.sent_at.desc()).limit(100).all():
+        art = articles.get(d.article_id)
+        recent.append({'kind': 'lettre', 'sent_at': d.sent_at, 'email': d.email,
+                       'title': art.title if art else '(article supprimé)',
+                       'url': url_for('articles.public_show', slug=art.slug) if art else None})
+    for d in MinuteDelivery.query.order_by(MinuteDelivery.sent_at.desc()).limit(100).all():
+        clip = clips.get(d.post_id)
+        recent.append({'kind': 'minute', 'sent_at': d.sent_at, 'email': d.email,
+                       'title': clip.title if clip else '(clip supprimé)',
+                       'url': url_for('minute.minute_landing', v=d.post_id) if clip else None})
+    for d in AnnouncementDelivery.query.order_by(AnnouncementDelivery.sent_at.desc()).limit(100).all():
+        ann = annonces.get(d.announcement_id)
+        recent.append({'kind': 'annonce', 'sent_at': d.sent_at, 'email': d.email,
+                       'title': ann.subject if ann else '(message supprimé)', 'url': None})
+    recent.sort(key=lambda r: r['sent_at'] or datetime.min, reverse=True)
+    recent = recent[:100]
+
+    totaux = {
+        'lettre': db.session.query(db.func.count(Delivery.id)).scalar() or 0,
+        'minute': db.session.query(db.func.count(MinuteDelivery.id)).scalar() or 0,
+        'annonce': db.session.query(db.func.count(AnnouncementDelivery.id)).scalar() or 0,
+    }
 
     return render_template(
         'sends_admin_list.html',
-        summary=summary,
-        pagination=recent_pg,
-        recent=recent,
-        total=total,
-        articles=articles,
+        summary=summary, recent=recent, totaux=totaux,
+        total=sum(totaux.values()),
     )
 
 
