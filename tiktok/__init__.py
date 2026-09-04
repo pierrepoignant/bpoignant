@@ -470,6 +470,7 @@ def edit(post_id):
     """
     import storage, video
     from articles.models import Theme
+    from newsletter import _mailable_query
     from newsletter.models import MinuteSend, MinuteDelivery
 
     post = db.session.get(TikTokPost, post_id) or abort(404)
@@ -483,6 +484,7 @@ def edit(post_id):
         storage_ok=storage.is_configured(),
         minute_sends=envois,
         minute_delivered=MinuteDelivery.query.filter_by(post_id=post.id).count(),
+        minute_count=_mailable_query('minute').count(),
         site_views=VideoView.query.filter_by(post_id=post.id).count(),
         mon_email=getattr(current_user, 'email', '') or '',
     )

@@ -88,14 +88,19 @@
                style="color: var(--gris); padding: 4px 7px;"><i class="fa-brands fa-tiktok"></i></a>
             {% endif %}
             {% if p.has_video %}
-            <button type="button" class="btn btn-sm"
-                    onclick="ouvrirMinute({{ p.title|tojson }},
-                             {{ url_for('admin_tiktok.send_minute_test', post_id=p.id)|tojson }},
-                             {{ url_for('admin_tiktok.send_minute', post_id=p.id)|tojson }})"
+            {# Les valeurs passent par des attributs data-, pas par un onclick :
+               `tojson` produit des guillemets doubles, qui refermaient
+               l'attribut onclick="…" au premier caractère et empêchaient le
+               gestionnaire de se poser — le bouton ne faisait rien. #}
+            <button type="button" class="btn btn-sm bouton-minute"
+                    data-titre="{{ p.title }}"
+                    data-test="{{ url_for('admin_tiktok.send_minute_test', post_id=p.id) }}"
+                    data-envoi="{{ url_for('admin_tiktok.send_minute', post_id=p.id) }}"
                     style="padding: 4px 12px; border-radius: 50px; border: 1px solid #e0e0e0;
                            background: {{ 'var(--gris-clair)' if p.id in minute_sent else 'none' }};
                            color: {{ 'var(--gris)' if p.id in minute_sent else 'var(--noir)' }};">
-                <i class="far fa-envelope"></i> {{ 'Renvoyer' if p.id in minute_sent else 'La Minute' }}
+                <i class="far fa-envelope"></i>
+                {{ 'Renvoyer dans La Minute' if p.id in minute_sent else 'Envoyer dans La Minute' }}
             </button>
             {% endif %}
             <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" class="btn btn-sm btn-outline"
@@ -166,8 +171,9 @@
 </div>
 
 <script>
-    // Les deux adresses sont fournies par le gabarit : les recomposer ici en
-    // collant des morceaux de chemin casserait au premier changement de préfixe.
+    // Les adresses viennent du gabarit, portées par des attributs data- :
+    // les recomposer ici en collant des morceaux de chemin casserait au
+    // premier changement de préfixe.
     function ouvrirMinute(titre, urlTest, urlEnvoi) {
         document.getElementById('minute-clip').textContent = titre;
         document.getElementById('minute-form-test').action = urlTest;
@@ -175,6 +181,12 @@
         document.getElementById('envoi-minute').style.display = 'block';
         document.body.style.overflow = 'hidden';
     }
+
+    document.querySelectorAll('.bouton-minute').forEach(function (b) {
+        b.addEventListener('click', function () {
+            ouvrirMinute(b.dataset.titre, b.dataset.test, b.dataset.envoi);
+        });
+    });
     function fermerMinute() {
         document.getElementById('envoi-minute').style.display = 'none';
         document.body.style.overflow = '';
