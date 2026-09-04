@@ -138,8 +138,9 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_tweets_bp)
 
     from tiktok.models import TikTokPost  # noqa: F401
-    from tiktok import admin_tiktok_bp
+    from tiktok import admin_tiktok_bp, public_tiktok_bp
     app.register_blueprint(admin_tiktok_bp)
+    app.register_blueprint(public_tiktok_bp)
 
     # Video tooling: development machine only. Its dependencies weigh close to
     # a gigabyte, so the blueprint is not registered unless VIDEO_TOOLS is set

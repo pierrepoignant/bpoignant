@@ -101,6 +101,7 @@
 {% if related_videos %}
 <section class="section section-tight">
     {{ vc.videos(related_videos, 'Sur le même thème, en vidéo') }}
+    {{ vc.tracking() }}
 </section>
 {% endif %}
 

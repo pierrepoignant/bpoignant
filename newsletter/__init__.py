@@ -1501,6 +1501,36 @@ def delete_announcement(announcement_id):
 # La Minute : l'envoi d'un clip aux abonnés de la seconde lettre.
 # --------------------------------------------------------------------------
 
+def minute_body(post):
+    """The TikTok caption as it belongs in an e-mail.
+
+    The caption is written for TikTok: a headline, the argument, then a line of
+    hashtags. The headline is already the subject and the title of the mail, and
+    hashtags mean nothing in an inbox, so both are dropped and what remains is
+    the text itself.
+    """
+    texte = (post.caption or '').strip()
+    if not texte:
+        return None
+
+    lignes = texte.splitlines()
+    # Retirer la première ligne quand c'est le titre déjà affiché au-dessus.
+    if lignes and post.title and lignes[0].strip() == (post.title or '').strip():
+        lignes = lignes[1:]
+    # Retirer le bloc de hashtags final, mais pas un mot-dièse au fil du texte.
+    while lignes:
+        derniere = lignes[-1].strip()
+        if not derniere:
+            lignes.pop()
+            continue
+        mots = derniere.split()
+        if mots and all(m.startswith('#') for m in mots):
+            lignes.pop()
+            continue
+        break
+    return '\n'.join(lignes).strip() or None
+
+
 def minute_category(post_id):
     """SendGrid category for a Minute mailing, so its opens and clicks can be
     read the same way an article's are."""
@@ -1526,7 +1556,8 @@ def _build_minute_payload(post, recipients, intro=None):
     for sub in recipients:
         html = render_template(
             'email/newsletter_minute.html',
-            post=post, intro=intro, minute_url=minute_url, site_url=site_url,
+            post=post, intro=intro, body=minute_body(post),
+            minute_url=minute_url, site_url=site_url,
             site_name=current_app.config['SITE_NAME'],
             site_tagline=current_app.config['SITE_TAGLINE'],
             # Le lien porte « minute » : se désinscrire ici ne doit retirer que
@@ -1571,6 +1602,27 @@ def _send_minute_payload(post_id, send_id, payload):
         send.error_count = errors
         db.session.commit()
     return successes, errors
+
+
+def send_minute_test(post, to_email, intro=None):
+    """Send one clip to a single address, to see the real e-mail before it
+    goes to everyone.
+
+    The unsubscribe link points at the site rather than at a subscriber's
+    token: a test has no subscriber behind it, and borrowing someone's token
+    would let a mistyped address unsubscribe a real reader.
+    """
+    html = render_template(
+        'email/newsletter_minute.html',
+        post=post, intro=intro, body=minute_body(post),
+        minute_url=url_for('minute.minute_landing', _external=True),
+        site_url=url_for('articles.public_list', _external=True),
+        site_name=current_app.config['SITE_NAME'],
+        site_tagline=current_app.config['SITE_TAGLINE'],
+        unsubscribe_url=url_for('minute.minute_landing', _external=True),
+    )
+    return send_email(to_email=to_email, subject=f'[Test] {post.title}',
+                      html=html, categories=['newsletter', 'minute-test'])
 
 
 def enqueue_minute_send(post, sent_by=None, intro=None):

@@ -1,0 +1,170 @@
+{% extends 'admin_base.html' %}
+{% block title %}{{ p.title|truncate(50) }}{% endblock %}
+
+{% block admin_title %}<i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> {{ p.title|truncate(60) }}{% endblock %}
+{% block admin_subtitle %}<p>{{ p.posted_at.strftime('%d/%m/%Y') if p.posted_at }}{% if p.duration_seconds %} · {{ '%.0f'|format(p.duration_seconds) }} s{% endif %}</p>{% endblock %}
+
+{% block admin_content %}
+    <p style="margin: 0 0 1.2rem;">
+        <a href="{{ url_for('admin_tiktok.list_posts') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Tous les clips
+        </a>
+    </p>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1.4rem; align-items: start;">
+        <div>
+            {# Les cinq textes d'un clip, distincts et qui ne se remplacent pas :
+               le titre éditorial affiché sur le site, le bandeau incrusté dans
+               l'image, ce qui est dit, ce qui est publié sur TikTok, ce qui est
+               publié sur X. #}
+            <form method="POST" action="{{ url_for('admin_tiktok.update', post_id=p.id) }}"
+                  style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.2rem;">
+                <h2 style="font-size: 1.05rem; margin: 0 0 1rem;"><i class="fas fa-pen-nib" style="color: var(--rouge);"></i> Textes</h2>
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Titre</label>
+                <input type="text" name="title" value="{{ p.title or '' }}"
+                       placeholder="Titre affiché sur le site et dans les résultats vidéo"
+                       style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 700; margin-bottom: 0.9rem;">
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Bandeau de la vidéo</label>
+                <input type="text" name="banner_title" value="{{ p.banner_title or '' }}" maxlength="44"
+                       placeholder="Texte incrusté en capitales, ex. DÉBAT RETRAITES"
+                       style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; text-transform: uppercase; font-size: 0.9rem; margin-bottom: 0.9rem;">
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Texte publié sur TikTok</label>
+                <textarea name="caption" rows="6" placeholder="La légende telle qu'elle est sur TikTok"
+                          style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.55; margin-bottom: 0.9rem;">{{ p.caption or '' }}</textarea>
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+                    Texte publié sur X
+                    {% if not p.x_post_id %}<span style="text-transform:none; letter-spacing:0; color:#bbb;">— vide : la légende sera condensée automatiquement</span>{% endif %}
+                </label>
+                <textarea name="x_text" rows="3" maxlength="280" {{ 'readonly' if p.x_post_id }}
+                          placeholder="280 caractères maximum"
+                          style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.9rem;
+                                 {% if p.x_post_id %}background: var(--gris-clair); color: var(--gris);{% endif %}">{{ p.x_text or '' }}</textarea>
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Transcription</label>
+                <textarea name="transcript" rows="7" placeholder="Transcription intégrale — reprise du montage, corrigeable ici"
+                          style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; line-height: 1.6; margin-bottom: 0.9rem;">{{ p.transcript or '' }}</textarea>
+
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Lien du post TikTok</label>
+                <input type="url" name="posted_url" value="{{ p.posted_url or '' }}"
+                       placeholder="https://www.tiktok.com/@bernardpoignant/video/…"
+                       style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; margin-bottom: 1rem;">
+
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+            </form>
+
+            {# Les thèmes décident sur quelles pages publiques la vidéo apparaît. #}
+            <form method="POST" action="{{ url_for('admin_tiktok.update_themes', post_id=p.id) }}"
+                  style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem;">
+                <h2 style="font-size: 1.05rem; margin: 0 0 0.3rem;"><i class="fas fa-tags" style="color: var(--rouge);"></i> Thèmes</h2>
+                <p style="font-size: 0.83rem; color: var(--gris); margin: 0 0 0.8rem;">
+                    Ils déterminent les pages de thème où la vidéo apparaît.
+                </p>
+                {% set choisis = p.themes|map(attribute='id')|list %}
+                <div style="display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-bottom: 0.9rem;">
+                    {% for t in all_themes %}
+                    <label style="font-size: 0.86rem; display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                        <input type="checkbox" name="themes" value="{{ t.id }}" {{ 'checked' if t.id in choisis }}>
+                        {{ t.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    <i class="fas fa-save"></i> Enregistrer les thèmes
+                </button>
+                <button type="submit" name="auto" value="1" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0;"
+                        {{ 'disabled' if not p.transcript }}
+                        title="{{ 'Classer à partir de la transcription' if p.transcript else 'Pas de transcription à classer' }}">
+                    <i class="fas fa-wand-magic-sparkles"></i> Proposer (IA)
+                </button>
+            </form>
+        </div>
+
+        <div>
+            <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.2rem; margin-bottom: 1.2rem;">
+                {% if p.has_video %}
+                <video src="{{ p.video_url }}" controls preload="metadata"
+                       {% if p.poster_url %}poster="{{ p.poster_url }}"{% endif %}
+                       style="width: 100%; border-radius: 10px; background: #000; display: block; margin-bottom: 0.8rem;"></video>
+                {% else %}
+                <div style="aspect-ratio: 9/16; border-radius: 10px; background: var(--gris-clair); display: flex; align-items: center; justify-content: center; color: var(--gris); font-size: 0.82rem; text-align: center; padding: 1rem; margin-bottom: 0.8rem;">
+                    {% if video_enabled %}Aucune vidéo rattachée{% else %}La vidéo se rattache depuis le serveur de développement{% endif %}
+                </div>
+                {% endif %}
+
+                <div style="font-size: 0.83rem; color: var(--gris); line-height: 1.9;">
+                    <div><i class="far fa-eye"></i> {{ site_views }} lecture{{ 's' if site_views > 1 else '' }} sur le site</div>
+                    {% if p.views is not none %}
+                    <div><i class="fa-brands fa-tiktok"></i> {{ p.views }} vues · {{ p.likes }} j'aime · {{ p.comments_count }} commentaires</div>
+                    {% endif %}
+                    {% if p.x_view_count is not none %}
+                    <div><i class="fa-brands fa-x-twitter"></i> {{ p.x_view_count }} vues · {{ p.x_like_count }} j'aime</div>
+                    {% endif %}
+                    {% if minute_delivered %}
+                    <div><i class="far fa-envelope"></i> La Minute : {{ minute_delivered }} destinataire(s)</div>
+                    {% endif %}
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;">
+                    {% if p.posted_url %}
+                    <a href="{{ p.posted_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-tiktok"></i> Voir sur TikTok
+                    </a>
+                    {% endif %}
+                    {% if p.x_post_id %}
+                    <a href="{{ p.x_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-x-twitter"></i> Voir sur X
+                    </a>
+                    {% elif p.has_video %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_x', post_id=p.id) }}"
+                          onsubmit="return confirm('Publier cette vidéo sur X maintenant ?')" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm" style="width: 100%; background: #000; color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
+                            <i class="fa-brands fa-x-twitter"></i> Publier sur X
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if p.has_video %}
+                    <a href="{{ p.video_url }}" download class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fas fa-download"></i> Télécharger
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if video_enabled and local_videos %}
+            <form method="POST" action="{{ url_for('admin_tiktok.attach_video', post_id=p.id) }}"
+                  style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.2rem; margin-bottom: 1.2rem;">
+                <h2 style="font-size: 0.95rem; margin: 0 0 0.6rem;">{{ 'Remplacer la vidéo' if p.has_video else 'Rattacher une vidéo' }}</h2>
+                <select name="filename" required
+                        style="width: 100%; padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.82rem; margin-bottom: 0.6rem;">
+                    <option value="">Choisir un montage…</option>
+                    {% for f in local_videos %}
+                    <option value="{{ f.filename }}">{{ f.title or f.source_name or f.filename }} — {{ f.created_at.strftime('%d/%m %H:%M') }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    <i class="fas fa-paperclip"></i> Rattacher
+                </button>
+            </form>
+            {% endif %}
+
+            {% if minute_sends %}
+            <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.2rem; font-size: 0.85rem;">
+                <h2 style="font-size: 0.95rem; margin: 0 0 0.5rem;">Envois de La Minute</h2>
+                {% for e in minute_sends %}
+                <div style="color: var(--gris);">
+                    {{ e.sent_at.strftime('%d/%m/%Y') }} — {{ e.success_count }}/{{ e.recipient_count }}
+                    {%- if e.error_count %} <span style="color: var(--rouge);">· {{ e.error_count }} échec(s)</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

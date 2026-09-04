@@ -24,7 +24,8 @@
        clips ne doit pas coûter vingt téléchargements. #}
     <div class="minute-grid">
         {% for v in videos %}
-        <figure class="minute-item" data-src="{{ v.video_url }}">
+        <figure class="minute-item" data-src="{{ v.video_url }}"
+                data-vue="{{ url_for('tiktok_public.record_view', post_id=v.id) }}">
             <div class="minute-vignette">
                 {% if v.poster_url %}
                 <img src="{{ v.poster_url }}" alt="{{ v.title }}" loading="lazy">
@@ -85,7 +86,21 @@
     var lecteur = document.getElementById('minute-lecteur');
     var video = document.getElementById('minute-video');
 
-    function ouvrir(src) {
+    // Comptée au démarrage de la lecture, pas à l'affichage de la grille :
+    // une planche de vignettes n'est pas vingt vues. sendBeacon survit à la
+    // navigation, et l'échec est sans conséquence — on ne le signale pas.
+    function compter(url) {
+        if (!url) return;
+        try {
+            var d = new FormData();
+            d.append('source', location.pathname);
+            if (navigator.sendBeacon) navigator.sendBeacon(url, d);
+            else fetch(url, {method: 'POST', body: d, keepalive: true});
+        } catch (e) { /* sans effet sur la lecture */ }
+    }
+
+    function ouvrir(src, urlVue) {
+        compter(urlVue);
         video.src = src;
         lecteur.classList.add('ouvert');
         document.body.style.overflow = 'hidden';
@@ -104,7 +119,7 @@
     }
 
     document.querySelectorAll('.minute-item').forEach(function (el) {
-        el.addEventListener('click', function () { ouvrir(el.dataset.src); });
+        el.addEventListener('click', function () { ouvrir(el.dataset.src, el.dataset.vue); });
     });
     document.getElementById('minute-fermer').addEventListener('click', fermer);
     lecteur.addEventListener('click', function (e) { if (e.target === lecteur) fermer(); });

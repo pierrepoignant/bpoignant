@@ -13,6 +13,7 @@
     {% for v in items %}
     <article style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); overflow: hidden; display: flex; flex-direction: column;">
         <video src="{{ v.video_url }}" controls preload="none"
+               data-vue="{{ url_for('tiktok_public.record_view', post_id=v.id) }}"
                {% if v.poster_url %}poster="{{ v.poster_url }}"{% endif %}
                style="width: 100%; max-height: 420px; background: #000; display: block;"></video>
         <div style="padding: 1rem 1.1rem; flex: 1; display: flex; flex-direction: column;">
@@ -53,4 +54,25 @@
     {% endfor %}
 </div>
 {% endif %}
+{% endmacro %}
+
+{# Une seule fois par page : compte la première lecture de chaque vidéo. #}
+{% macro tracking() %}
+<script>
+(function () {
+    document.querySelectorAll('video[data-vue]').forEach(function (v) {
+        var envoye = false;
+        v.addEventListener('play', function () {
+            if (envoye) return;
+            envoye = true;
+            try {
+                var d = new FormData();
+                d.append('source', location.pathname);
+                if (navigator.sendBeacon) navigator.sendBeacon(v.dataset.vue, d);
+                else fetch(v.dataset.vue, {method: 'POST', body: d, keepalive: true});
+            } catch (e) { /* sans effet sur la lecture */ }
+        });
+    });
+})();
+</script>
 {% endmacro %}

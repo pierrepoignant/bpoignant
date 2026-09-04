@@ -19,11 +19,14 @@ from init_db import db
 from flask_login import current_user
 
 from auth import admin_required
-from tiktok.models import TikTokPost
+from tiktok.models import TikTokPost, VideoView
 
 import logging
 
 log = logging.getLogger(__name__)
+
+# Public : la seule route TikTok ouverte, pour compter les lectures.
+public_tiktok_bp = Blueprint('tiktok_public', __name__, url_prefix='/tiktok')
 
 admin_tiktok_bp = Blueprint('admin_tiktok', __name__, url_prefix='/admin/tiktok',
                             template_folder='templates')
@@ -43,12 +46,19 @@ def list_posts():
     # more identifiable than a hex filename.
     local_videos = video.local_renders()
 
-    from articles.models import Theme
     from newsletter.models import MinuteSend
+    from newsletter import _mailable_query
     envois = {m.post_id for m in MinuteSend.query.all()}
+    # Lectures sur le site, comptées d'une requête groupée plutôt qu'une par
+    # ligne — la liste tient des dizaines de clips.
+    vues_site = dict(
+        db.session.query(VideoView.post_id, db.func.count(VideoView.id))
+        .group_by(VideoView.post_id).all()
+    )
     return render_template('tiktok_admin_list.html', posts=posts,
-                           minute_sent=envois,
-                           all_themes=Theme.query.order_by(Theme.name).all(),
+                           minute_sent=envois, site_views=vues_site,
+                           minute_count=_mailable_query('minute').count(),
+                           mon_email=getattr(current_user, 'email', '') or '',
                            storage_ok=storage.is_configured(),
                            apify_ok=apify.is_configured(),
                            video_enabled=video.is_enabled(),
@@ -259,7 +269,7 @@ def update_themes(post_id):
         post.themes = Theme.query.filter(Theme.id.in_(ids)).all() if ids else []
     db.session.commit()
     flash("Thèmes enregistrés.", 'success')
-    return redirect(url_for('admin_tiktok.list_posts'))
+    return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
 @admin_tiktok_bp.route('/stats')
@@ -449,6 +459,35 @@ def post_to_x(post_id):
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
+@admin_tiktok_bp.route('/<int:post_id>/edit')
+@admin_required
+def edit(post_id):
+    """Everything editable about one clip, on its own page.
+
+    The list carried five textareas per row, which made a page of a dozen
+    clips unreadable and unscrollable. The list is now a row per clip; the
+    writing happens here.
+    """
+    import storage, video
+    from articles.models import Theme
+    from newsletter.models import MinuteSend, MinuteDelivery
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    local_videos = video.local_renders()
+    envois = (MinuteSend.query.filter_by(post_id=post.id)
+              .order_by(MinuteSend.sent_at.desc()).all())
+    return render_template(
+        'tiktok_admin_edit.html', p=post,
+        all_themes=Theme.query.order_by(Theme.name).all(),
+        video_enabled=video.is_enabled(), local_videos=local_videos,
+        storage_ok=storage.is_configured(),
+        minute_sends=envois,
+        minute_delivered=MinuteDelivery.query.filter_by(post_id=post.id).count(),
+        site_views=VideoView.query.filter_by(post_id=post.id).count(),
+        mon_email=getattr(current_user, 'email', '') or '',
+    )
+
+
 @admin_tiktok_bp.route('/<int:post_id>/update', methods=['POST'])
 @admin_required
 def update(post_id):
@@ -473,6 +512,67 @@ def update(post_id):
 
     db.session.commit()
     flash("Post enregistré.", 'success')
+    return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+
+
+@public_tiktok_bp.route('/videos/<int:post_id>/vue', methods=['POST'])
+def record_view(post_id):
+    """Record that a visitor started playing this clip on the site.
+
+    Answers 204 whatever happens: this is fired from a page as a side effect,
+    and a counter that fails must never surface an error to a reader.
+    """
+    from analytics.tracking import _visitor_hash, _client_ip, _BOT_RE
+
+    try:
+        if db.session.get(TikTokPost, post_id) is None:
+            return ('', 204)
+        # Ne pas compter les lectures de l'administrateur, comme pour les pages.
+        if getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_admin', False):
+            return ('', 204)
+
+        # Même filtre que les pages vues : un robot qui exécute le script ne
+        # regarde pas la vidéo, et gonflerait un compteur destiné à mesurer
+        # une audience réelle.
+        ua = request.headers.get('User-Agent', '')
+        if not ua or _BOT_RE.search(ua):
+            return ('', 204)
+
+        visiteur = _visitor_hash(_client_ip(), ua)
+        source = (request.form.get('source') or request.referrer or '')[:120] or None
+        # Une lecture par visiteur, par vidéo et par jour : le hachage tourne
+        # chaque jour, donc relancer la même vidéo dix fois ne compte qu'une.
+        deja = VideoView.query.filter_by(post_id=post_id, visitor_hash=visiteur).first()
+        if deja is None:
+            db.session.add(VideoView(post_id=post_id, visitor_hash=visiteur,
+                                     source=source))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception('video view not recorded (post %s)', post_id)
+    return ('', 204)
+
+
+@admin_tiktok_bp.route('/<int:post_id>/minute/test', methods=['POST'])
+@admin_required
+def send_minute_test(post_id):
+    """Send this clip to one address only."""
+    from newsletter import send_minute_test as envoyer_test, _EMAIL_RE
+    from mail import is_configured as mail_is_configured
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    to = (request.form.get('email') or getattr(current_user, 'email', '') or '').strip()
+    if not _EMAIL_RE.match(to):
+        flash("Adresse de test invalide.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+    if not mail_is_configured():
+        flash("SendGrid n'est pas configuré — envoi impossible.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    ok = envoyer_test(post, to, intro=(request.form.get('intro') or '').strip() or None)
+    flash(f"E-mail de test envoyé à {to}." if ok
+          else "L'envoi du test a échoué — voir les journaux.",
+          'success' if ok else 'danger')
     return redirect(url_for('admin_tiktok.list_posts'))
 
 

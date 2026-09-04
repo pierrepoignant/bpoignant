@@ -2,7 +2,7 @@
 {% block title %}TikTok{% endblock %}
 
 {% block admin_title %}<i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> TikTok{% endblock %}
-{% block admin_subtitle %}<p>Les clips prêts à publier, leur texte, et l'URL une fois postés.</p>{% endblock %}
+{% block admin_subtitle %}<p>Les clips publiés, leurs chiffres, et ce qui en a été fait.</p>{% endblock %}
 
 {% block admin_content %}
     {% if not apify_ok %}
@@ -15,9 +15,8 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
         <p style="color: var(--gris); font-size: 0.88rem; margin: 0; max-width: 60ch;">
-            Les posts sont récupérés depuis TikTok : publiez depuis l'application,
-            puis synchronisez ici. La vidéo montée peut ensuite être rattachée à
-            son post{% if not video_enabled %} (depuis le serveur de développement){% endif %}.
+            Publiez depuis l'application, puis synchronisez ici. Le montage se rattache
+            ensuite à son post{% if not video_enabled %} depuis le serveur de développement{% endif %}.
         </p>
         {% if apify_ok %}
         {# La récupération prend des minutes et ne donnait aucun signe de vie :
@@ -34,194 +33,82 @@
     </div>
 
     {% if posts %}
-    <h2 style="font-size: 1.15rem; margin: 0 0 1rem;">
-        <i class="fas fa-film" style="color: var(--rouge);"></i>
-        {{ posts|length }} clip{{ 's' if posts|length != 1 else '' }}
+    <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
+        {{ posts|length }} clip{{ 's' if posts|length > 1 else '' }}
         <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">
-            · {{ posts|selectattr('is_posted')|list|length }} publié(s)
+            · {{ posts|selectattr('has_video')|list|length }} avec vidéo
         </span>
     </h2>
 
+    {# Une ligne par clip : la vignette, ce qu'il est, ses chiffres, et les
+       actions. Tout ce qui s'écrit est sur la fiche — cinq zones de texte par
+       ligne rendaient cette page impossible à parcourir. #}
     {% for p in posts %}
-    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem; margin-bottom: 0.9rem;">
-        <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start;">
-            {% if p.has_video %}
-            <video src="{{ p.video_url }}" controls preload="metadata"
-                   style="width: 150px; max-height: 260px; border-radius: 10px; background: #000; flex: none;"></video>
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1.1rem; margin-bottom: 0.7rem;
+                display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}"
+           style="flex: none; width: 64px; height: 96px; border-radius: 8px; overflow: hidden; background: var(--gris-clair); display: block;">
+            {% if p.poster_url %}
+            <img src="{{ p.poster_url }}" alt="" loading="lazy" style="width: 100%; height: 100%; object-fit: cover; display: block;">
             {% else %}
-            <div style="width: 150px; height: 200px; border-radius: 10px; background: var(--gris-clair); display: flex; align-items: center; justify-content: center; color: var(--gris); font-size: 0.78rem; text-align: center; padding: 0.5rem; flex: none;">
-                {% if video_enabled %}Aucune vidéo rattachée{% else %}Vidéo sur le serveur de dev{% endif %}
-            </div>
+            <span style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; color: var(--gris);">
+                <i class="fas fa-video"></i>
+            </span>
             {% endif %}
+        </a>
 
-            <div style="flex: 1; min-width: 260px;">
-                {# Cinq textes distincts, et qui ne se remplacent pas : le titre
-                   éditorial affiché sur le site, le bandeau incrusté dans
-                   l'image, ce qui est dit, ce qui est publié sur TikTok, ce qui
-                   est publié sur X. #}
-                <form method="POST" action="{{ url_for('admin_tiktok.update', post_id=p.id) }}">
-                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Titre</label>
-                    <input type="text" name="title" value="{{ p.title or '' }}"
-                           placeholder="Titre affiché sur le site et dans les résultats vidéo"
-                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 700; margin-bottom: 0.6rem;">
-
-                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Bandeau de la vidéo</label>
-                    <input type="text" name="banner_title" value="{{ p.banner_title or '' }}" maxlength="120"
-                           placeholder="Texte incrusté en capitales, ex. DÉBAT RETRAITES"
-                           style="width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; text-transform: uppercase; font-size: 0.88rem; margin-bottom: 0.6rem;">
-
-                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Texte publié sur TikTok</label>
-                    <textarea name="caption" rows="4" placeholder="La légende telle qu'elle est sur TikTok"
-                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.5; margin-bottom: 0.6rem;">{{ p.caption or '' }}</textarea>
-
-                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">
-                        Texte publié sur X
-                        {% if not p.x_post_id %}<span style="text-transform:none; letter-spacing:0; color:#bbb;">— laissez vide pour condenser la légende automatiquement</span>{% endif %}
-                    </label>
-                    <textarea name="x_text" rows="3" maxlength="280"
-                              placeholder="280 caractères maximum"
-                              {{ 'readonly' if p.x_post_id }}
-                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.6rem;
-                                     {% if p.x_post_id %}background: var(--gris-clair); color: var(--gris);{% endif %}">{{ p.x_text or '' }}</textarea>
-
-                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">Transcription</label>
-                    <textarea name="transcript" rows="5" placeholder="Transcription intégrale — reprise du montage, corrigeable ici"
-                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; line-height: 1.6;">{{ p.transcript or '' }}</textarea>
-
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; align-items: center;">
-                        <input type="url" name="posted_url" value="{{ p.posted_url or '' }}"
-                               placeholder="URL du post TikTok"
-                               style="flex: 1; min-width: 240px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
-                        <button type="submit" class="btn btn-sm btn-primary">
-                            <i class="fas fa-save"></i> Enregistrer
-                        </button>
-                    </div>
-                </form>
-
-                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.7rem; font-size: 0.8rem; color: var(--gris);">
-                    <span>
-                        {% if p.is_posted %}
-                        <i class="fas fa-circle-check" style="color: var(--vert);"></i>
-                        Publié le {{ p.posted_at.strftime('%d/%m/%Y') if p.posted_at else '—' }}
-                        {% else %}
-                        <i class="far fa-clock"></i> Pas encore publié
-                        {% endif %}
-                    </span>
-                    {% if p.views is not none %}
-                    <span title="Vues"><i class="far fa-eye"></i> {{ p.views }}</span>
-                    <span title="J'aime"><i class="far fa-heart"></i> {{ p.likes }}</span>
-                    <span title="Commentaires"><i class="far fa-comment"></i> {{ p.comments_count }}</span>
-                    <span title="Partages"><i class="fas fa-share"></i> {{ p.shares }}</span>
-                    {% endif %}
-                    {% if p.duration_seconds %}<span>{{ '%.0f'|format(p.duration_seconds) }} s</span>{% endif %}
-                    {% if p.has_video %}
-                    <a href="{{ p.video_url }}" download style="color: var(--rouge);">
-                        <i class="fas fa-download"></i> Télécharger
-                    </a>
-                    {% endif %}
-                    {% if p.is_posted %}
-                    <a href="{{ p.posted_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">
-                        <i class="fa-brands fa-tiktok"></i> Voir sur TikTok
-                    </a>
-                    {% endif %}
-                    {% if p.has_video %}
-                    {% if p.x_post_id %}
-                    <a href="{{ p.x_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">
-                        <i class="fa-brands fa-x-twitter"></i> Publié sur X
-                    </a>
-                    {% else %}
-                    {# Publication immédiate : pas de fenêtre de rédaction, d'où
-                       la confirmation — c'est le seul garde-fou avant la mise en ligne. #}
-                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_x', post_id=p.id) }}"
-                          style="margin: 0;"
-                          onsubmit="return confirm('Publier cette vidéo sur X maintenant, avec le texte ci-dessus ?')">
-                        <button type="submit" class="btn btn-sm"
-                                style="padding: 4px 12px; background: #000; color: #fff; border: none; border-radius: 50px;">
-                            <i class="fa-brands fa-x-twitter"></i> Publier sur X
-                        </button>
-                    </form>
-                    {% endif %}
-                    {% endif %}
-                    {# Sponsorisé : la mention est aussi ce qui sort le post des
-                       statistiques, d'où le libellé explicite plutôt qu'une icône. #}
-                    <form method="POST" action="{{ url_for('admin_tiktok.toggle_boosted', post_id=p.id) }}" style="margin: 0;">
-                        <button type="submit" class="btn btn-sm"
-                                style="padding: 4px 10px; border-radius: 50px; border: 1px solid {{ '#8a6d00' if p.boosted else '#e0e0e0' }};
-                                       background: {{ 'rgba(255,165,0,0.14)' if p.boosted else 'none' }};
-                                       color: {{ '#8a6d00' if p.boosted else 'var(--gris)' }};"
-                                title="{{ 'Compté comme sponsorisé, donc hors statistiques' if p.boosted else 'Marquer comme sponsorisé (hors statistiques)' }}">
-                            <i class="fas fa-bullhorn"></i>
-                            {{ 'Sponsorisé' if p.boosted else 'Organique' }}
-                        </button>
-                    </form>
-                    {% if p.has_video %}
-                    {# La Minute : le clip part aux abonnés de la seconde lettre.
-                       Une seule fois — les destinataires déjà servis sont
-                       ignorés au second clic. #}
-                    <form method="POST" action="{{ url_for('admin_tiktok.send_minute', post_id=p.id) }}"
-                          style="margin: 0;"
-                          onsubmit="return confirm('Envoyer ce clip aux abonnés de La Minute ?')">
-                        <button type="submit" class="btn btn-sm"
-                                style="padding: 4px 12px; border-radius: 50px; border: 1px solid #e0e0e0;
-                                       background: {{ 'var(--gris-clair)' if p.id in minute_sent else 'none' }};
-                                       color: {{ 'var(--gris)' if p.id in minute_sent else 'var(--noir)' }};">
-                            <i class="far fa-envelope"></i>
-                            {{ 'Renvoyer dans La Minute' if p.id in minute_sent else 'Envoyer dans La Minute' }}
-                        </button>
-                    </form>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}"
-                          style="margin: 0 0 0 auto;"
-                          onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">
-                        <button type="submit" class="btn btn-sm"
-                                style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                </div>
-
-                {% if video_enabled and local_videos %}
-                {# Le nom de fichier est un identifiant hexadécimal : il ne dit
-                   rien de la vidéo. Le choix se fait donc dans une planche
-                   contact — vignette, date, durée — et non dans une liste. #}
-                <form method="POST" action="{{ url_for('admin_tiktok.attach_video', post_id=p.id) }}"
-                      id="attach-{{ p.id }}" style="margin-top: 0.6rem;">
-                    <input type="hidden" name="filename" value="">
-                    <button type="button" class="btn btn-sm btn-outline"
-                            style="color: var(--noir); border-color: #e0e0e0;"
-                            onclick="ouvrirSelecteur({{ p.id }})">
-                        <i class="fas fa-paperclip"></i>
-                        {{ 'Remplacer la vidéo…' if p.has_video else 'Rattacher une vidéo du serveur…' }}
-                    </button>
-                </form>
-                {% endif %}
-
-                <form method="POST" action="{{ url_for('admin_tiktok.update_themes', post_id=p.id) }}"
-                      style="margin-top: 0.7rem; border-top: 1px solid #f2f2f2; padding-top: 0.6rem;">
-                    <div style="font-size: 0.78rem; color: var(--gris); margin-bottom: 0.4rem;">
-                        Thèmes <span style="color: #bbb;">— ils décident sur quelles pages de thème la vidéo apparaît</span>
-                    </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; margin-bottom: 0.5rem;">
-                        {% set choisis = p.themes|map(attribute='id')|list %}
-                        {% for t in all_themes %}
-                        <label style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                            <input type="checkbox" name="themes" value="{{ t.id }}" {{ 'checked' if t.id in choisis }}>
-                            {{ t.name }}
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
-                        <i class="fas fa-tags"></i> Enregistrer les thèmes
-                    </button>
-                    <button type="submit" name="auto" value="1" class="btn btn-sm btn-outline"
-                            style="color: var(--noir); border-color: #e0e0e0;"
-                            {{ 'disabled' if not p.transcript }}
-                            title="{{ 'Classer à partir de la transcription' if p.transcript else 'Pas de transcription à classer' }}">
-                        <i class="fas fa-wand-magic-sparkles"></i> Proposer (IA)
-                    </button>
-                </form>
-
+        <div style="flex: 1; min-width: 220px;">
+            <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}"
+               style="font-weight: 700; color: var(--noir); display: block; margin-bottom: 0.2rem;">
+                {{ p.title|truncate(80) }}
+            </a>
+            <div style="font-size: 0.78rem; color: var(--gris);">
+                {{ p.posted_at.strftime('%d/%m/%Y') if p.posted_at else '—' }}
+                {% if p.duration_seconds %} · {{ '%.0f'|format(p.duration_seconds) }} s{% endif %}
+                {% if p.boosted %} · <span style="color:#8a6d00;">sponsorisé</span>{% endif %}
+                {% if p.themes %} · {{ p.themes|map(attribute='name')|join(', ')|truncate(48) }}{% endif %}
             </div>
+            <div style="font-size: 0.78rem; color: var(--gris); margin-top: 0.25rem; display: flex; gap: 0.9rem; flex-wrap: wrap;">
+                <span title="Lectures sur le site"><i class="far fa-eye"></i> {{ site_views.get(p.id, 0) }} site</span>
+                {% if p.views is not none %}<span title="Vues TikTok"><i class="fa-brands fa-tiktok"></i> {{ p.views }}</span>{% endif %}
+                {% if p.x_view_count is not none %}<span title="Vues X"><i class="fa-brands fa-x-twitter"></i> {{ p.x_view_count }}</span>{% endif %}
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+            {% if not p.has_video %}
+            <span style="font-size: 0.72rem; color: var(--gris); border: 1px dashed #ddd; border-radius: 20px; padding: 2px 9px;">sans vidéo</span>
+            {% endif %}
+            {% if p.x_post_id %}
+            <a href="{{ p.x_url }}" target="_blank" rel="noopener" title="Publié sur X"
+               style="color: var(--gris); padding: 4px 7px;"><i class="fa-brands fa-x-twitter"></i></a>
+            {% endif %}
+            {% if p.posted_url %}
+            <a href="{{ p.posted_url }}" target="_blank" rel="noopener" title="Voir sur TikTok"
+               style="color: var(--gris); padding: 4px 7px;"><i class="fa-brands fa-tiktok"></i></a>
+            {% endif %}
+            {% if p.has_video %}
+            <button type="button" class="btn btn-sm"
+                    onclick="ouvrirMinute({{ p.title|tojson }},
+                             {{ url_for('admin_tiktok.send_minute_test', post_id=p.id)|tojson }},
+                             {{ url_for('admin_tiktok.send_minute', post_id=p.id)|tojson }})"
+                    style="padding: 4px 12px; border-radius: 50px; border: 1px solid #e0e0e0;
+                           background: {{ 'var(--gris-clair)' if p.id in minute_sent else 'none' }};
+                           color: {{ 'var(--gris)' if p.id in minute_sent else 'var(--noir)' }};">
+                <i class="far fa-envelope"></i> {{ 'Renvoyer' if p.id in minute_sent else 'La Minute' }}
+            </button>
+            {% endif %}
+            <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-pen"></i> Modifier
+            </a>
+            <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}" style="margin: 0;"
+                  onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">
+                <button type="submit" class="btn btn-sm"
+                        style="padding: 4px 10px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>
         </div>
     </div>
     {% endfor %}
@@ -232,77 +119,71 @@
     </div>
     {% endif %}
 
-{% if video_enabled and local_videos %}
-<div id="selecteur-video" role="dialog" aria-modal="true" aria-labelledby="selecteur-titre"
-     style="display: none; position: fixed; inset: 0; z-index: 100; background: rgba(26,26,46,0.55); padding: 4vh 1rem; overflow-y: auto;">
-    <div style="max-width: 980px; margin: 0 auto; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); padding: 1.4rem 1.6rem;">
-        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem;">
-            <h2 id="selecteur-titre" style="font-size: 1.15rem; margin: 0; flex: 1;">
-                <i class="fas fa-film" style="color: var(--rouge);"></i>
-                Vidéos montées sur ce serveur
-                <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">· {{ local_videos|length }}</span>
+{# Envoi de La Minute : un test d'abord, puis l'envoi réel. Le test est la
+   seule façon de voir l'e-mail tel qu'il arrivera, donc il est dans la même
+   fenêtre que le bouton qui l'envoie à tout le monde. #}
+<div id="envoi-minute" role="dialog" aria-modal="true" aria-labelledby="minute-titre"
+     style="display: none; position: fixed; inset: 0; z-index: 120; background: rgba(26,26,46,0.55); padding: 5vh 1rem; overflow-y: auto;">
+    <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); padding: 1.5rem 1.7rem;">
+        <div style="display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.4rem;">
+            <h2 id="minute-titre" style="font-size: 1.15rem; margin: 0; flex: 1;">
+                <i class="far fa-envelope" style="color: var(--rouge);"></i> Envoyer dans La Minute
             </h2>
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                    onclick="fermerSelecteur()">Fermer</button>
+                    onclick="fermerMinute()">Fermer</button>
         </div>
+        <p id="minute-clip" style="font-size: 0.9rem; color: var(--gris); margin: 0 0 1.2rem;"></p>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem;">
-            {% for v in local_videos %}
-            <button type="button" class="selecteur-carte" onclick="choisirVideo('{{ v.filename }}')"
-                    style="text-align: left; background: #fff; border: 1px solid #e6e6e6; border-radius: 10px; padding: 0; overflow: hidden; cursor: pointer; font-family: inherit;">
-                <img src="{{ url_for('admin_video.render_thumb', filename=v.filename) }}"
-                     alt="" loading="lazy"
-                     style="width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #000; display: block;">
-                <div style="padding: 0.6rem 0.7rem;">
-                    <div style="font-size: 0.85rem; font-weight: 600; color: var(--noir); line-height: 1.35; margin-bottom: 0.3rem;">
-                        {{ v.title or v.source_name or v.filename }}
-                    </div>
-                    <div style="font-size: 0.76rem; color: var(--gris);">
-                        {{ v.created_at.strftime('%d/%m/%Y à %H:%M') }}
-                        {% if v.duration %} · {{ '%.0f'|format(v.duration) }} s{% endif %}
-                        · {{ v.size_mb }} Mo
-                    </div>
-                </div>
-            </button>
-            {% endfor %}
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+            Petit mot <span style="text-transform:none; letter-spacing:0;">— facultatif, en tête de l'e-mail</span>
+        </label>
+        <textarea id="minute-intro" rows="3" form="minute-form-envoi" name="intro"
+                  placeholder="Deux lignes d'introduction, si vous le souhaitez."
+                  style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.55; margin-bottom: 1.1rem;"></textarea>
+
+        <div style="border-top: 1px solid var(--gris-clair); padding-top: 1.1rem;">
+            <form method="POST" id="minute-form-test" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.1rem;">
+                <input type="hidden" name="intro" id="minute-intro-test">
+                <input type="email" name="email" value="{{ mon_email }}" placeholder="votre adresse"
+                       style="flex: 1; min-width: 210px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="document.getElementById('minute-intro-test').value = document.getElementById('minute-intro').value;">
+                    <i class="far fa-paper-plane"></i> M'envoyer un test
+                </button>
+            </form>
+
+            <form method="POST" id="minute-form-envoi"
+                  onsubmit="return confirm('Envoyer ce clip aux {{ minute_count }} abonnés de La Minute ? C\'est définitif.')">
+                <button type="submit" class="btn btn-sm btn-vert">
+                    <i class="fas fa-paper-plane"></i> Envoyer aux {{ minute_count }} abonnés
+                </button>
+                <span style="font-size: 0.82rem; color: var(--gris); margin-left: 0.6rem;">
+                    Un envoi ne peut pas être annulé.
+                </span>
+            </form>
         </div>
     </div>
 </div>
 
-<style>
-    .selecteur-carte:hover { border-color: var(--rouge); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
-</style>
-
 <script>
-    let posteVise = null;
-
-    function ouvrirSelecteur(postId) {
-        posteVise = postId;
-        document.getElementById('selecteur-video').style.display = 'block';
+    // Les deux adresses sont fournies par le gabarit : les recomposer ici en
+    // collant des morceaux de chemin casserait au premier changement de préfixe.
+    function ouvrirMinute(titre, urlTest, urlEnvoi) {
+        document.getElementById('minute-clip').textContent = titre;
+        document.getElementById('minute-form-test').action = urlTest;
+        document.getElementById('minute-form-envoi').action = urlEnvoi;
+        document.getElementById('envoi-minute').style.display = 'block';
         document.body.style.overflow = 'hidden';
     }
-
-    function fermerSelecteur() {
-        document.getElementById('selecteur-video').style.display = 'none';
+    function fermerMinute() {
+        document.getElementById('envoi-minute').style.display = 'none';
         document.body.style.overflow = '';
     }
-
-    function choisirVideo(nom) {
-        if (posteVise === null) return;
-        const form = document.getElementById('attach-' + posteVise);
-        form.querySelector('input[name=filename]').value = nom;
-        fermerSelecteur();
-        form.submit();
-    }
-
-    // Fermer au clic sur le fond et à la touche Échap : sans cela l'overlay
-    // n'a qu'une seule sortie, ce qu'on ne devine pas.
-    document.getElementById('selecteur-video').addEventListener('click', function (e) {
-        if (e.target === this) fermerSelecteur();
+    document.getElementById('envoi-minute').addEventListener('click', function (e) {
+        if (e.target === this) fermerMinute();
     });
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') fermerSelecteur();
+        if (e.key === 'Escape') fermerMinute();
     });
 </script>
-{% endif %}
 {% endblock %}

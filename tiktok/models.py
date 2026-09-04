@@ -104,3 +104,28 @@ class TikTokPost(db.Model):
     @property
     def x_url(self):
         return f"https://x.com/i/web/status/{self.x_post_id}" if self.x_post_id else None
+
+
+class VideoView(db.Model):
+    """One row per play started on our own site.
+
+    TikTok and X report their own figures, but nothing counted what the videos
+    do on bernardpoignant.fr — where La Minute and the theme pages now carry
+    them. Recorded when playback actually starts, not when the page loads: a
+    grid of thumbnails is not twenty views.
+
+    `visitor_hash` is the same daily-rotating digest the page views use, so a
+    unique count means the same thing on both, and no raw address is stored.
+    """
+
+    __tablename__ = 'tiktok_video_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('tiktok_posts.id'),
+                        nullable=False, index=True)
+    visitor_hash = db.Column(db.String(32), nullable=False, index=True)
+    # D'où la vidéo a été lancée : /minute, une page de thème, un article.
+    source = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    post = db.relationship('TikTokPost')
