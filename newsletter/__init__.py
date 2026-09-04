@@ -13,6 +13,7 @@ from flask import (
 from init_db import db
 from newsletter.models import (
     Subscriber, Campaign, Delivery, EmailEvent, Announcement, AnnouncementDelivery,
+    MinuteSend, MinuteDelivery,
 )
 from newsletter.antispam import score_signup, is_suspicious, CONFIRM_THRESHOLD
 from auth import admin_required
@@ -30,6 +31,8 @@ admin_subscribers_bp = Blueprint(
 # No url_prefix: the landing page lives at /lettre, a URL short enough to say
 # out loud and to put in a promoted tweet.
 lettre_bp = Blueprint('lettre', __name__, template_folder='templates')
+# Même raison pour /minute : une adresse courte, qu'on peut dire à voix haute.
+minute_bp = Blueprint('minute', __name__, template_folder='templates')
 
 admin_sends_bp = Blueprint(
     'admin_sends', __name__, url_prefix='/admin/sends', template_folder='templates'
@@ -65,6 +68,26 @@ def landing():
     total_articles = Article.query.filter_by(published=True).count()
     return render_template('lettre.html', recent=recent, themes=themes,
                            total_articles=total_articles)
+
+
+@minute_bp.route('/minute')
+def minute_landing():
+    """La Minute: every clip published since 2026, newest first.
+
+    The 2021-2022 clips are another era of the account — promoted, and about
+    an election four years past — so the page starts at 2026, which is also
+    where the current run of videos begins.
+    """
+    from tiktok.models import TikTokPost
+
+    videos = (
+        TikTokPost.query
+        .filter(TikTokPost.video_url.isnot(None),
+                TikTokPost.posted_at >= datetime(2026, 1, 1))
+        .order_by(TikTokPost.posted_at.desc())
+        .all()
+    )
+    return render_template('minute_landing.html', videos=videos)
 
 
 @newsletter_bp.route('/subscribe', methods=['POST'])
@@ -279,32 +302,82 @@ def unsubscribe(token):
     if sub is None:
         abort(404)
 
-    if request.method == 'POST':
-        if sub.unsubscribed_at is None:
-            sub.unsubscribed_at = datetime.utcnow()
-            db.session.commit()
-        return render_template('unsubscribe_done.html', email=sub.email)
+    # La lettre concernée vient du lien cliqué : le pied de page de chaque
+    # envoi porte la sienne, donc « se désinscrire » retire ce qu'on lisait,
+    # pas tout d'un coup.
+    liste = request.values.get('liste')
+    liste = liste if liste in LISTES else 'lettre'
 
-    return render_template('unsubscribe_confirm.html', subscriber=sub)
+    if request.method == 'POST':
+        now = datetime.utcnow()
+        quitte = request.form.getlist('listes') or [liste]
+        if request.form.get('tout'):
+            quitte = list(LISTES)
+
+        if 'lettre' in quitte and sub.wants_lettre:
+            sub.wants_lettre, sub.lettre_unsub_at = False, now
+        if 'minute' in quitte and sub.wants_minute:
+            sub.wants_minute, sub.minute_unsub_at = False, now
+        # Plus rien de coché : c'est un retrait complet, et l'adresse ne doit
+        # plus jamais être sollicitée.
+        if not sub.wants_lettre and not sub.wants_minute and sub.unsubscribed_at is None:
+            sub.unsubscribed_at = now
+        db.session.commit()
+        return render_template('unsubscribe_done.html', email=sub.email,
+                               subscriber=sub, listes=LISTES, quitte=quitte)
+
+    return render_template('unsubscribe_confirm.html', subscriber=sub,
+                           liste=liste, listes=LISTES)
 
 
 # ─── ADMIN ──────────────────────────────────────────────────
 
-def _mailable_query():
-    """Active, confirmed, non-bounced subscribers — the ones a send goes to."""
-    return Subscriber.query.filter(
+LISTES = {
+    'lettre': "La lettre de Bernard Poignant",
+    'minute': "La Minute",
+}
+
+
+def _mailable_query(liste='lettre'):
+    """Active, confirmed, non-bounced subscribers who still want `liste`.
+
+    The list matters: someone who left La Minute is still a reader of la
+    lettre, and sending them the wrong one is exactly what they asked us not
+    to do.
+    """
+    q = Subscriber.query.filter(
         Subscriber.unsubscribed_at.is_(None),
         Subscriber.confirmed_at.isnot(None),
         Subscriber.bounced_at.is_(None),
     )
+    if liste == 'minute':
+        return q.filter(Subscriber.wants_minute.is_(True))
+    if liste == 'tous':
+        # Une annonce n'appartient à aucune des deux lettres : elle va à toute
+        # personne encore abonnée à l'une ou à l'autre.
+        return q.filter(db.or_(Subscriber.wants_lettre.is_(True),
+                               Subscriber.wants_minute.is_(True)))
+    return q.filter(Subscriber.wants_lettre.is_(True))
 
 
 @admin_subscribers_bp.route('/')
 @admin_required
 def list_subscribers():
     page = request.args.get('page', 1, type=int) or 1
+    # Recherche : la liste dépasse la centaine et retrouver quelqu'un en
+    # feuilletant cinquante lignes à la fois n'est pas raisonnable.
+    q = (request.args.get('q') or '').strip()
+    base = _mailable_query('tous')
+    if q:
+        motif = f'%{q}%'
+        base = base.filter(db.or_(
+            Subscriber.email.ilike(motif),
+            Subscriber.prenom.ilike(motif),
+            Subscriber.nom.ilike(motif),
+            Subscriber.ville.ilike(motif),
+        ))
     active_pg = (
-        _mailable_query()
+        base
         .order_by(Subscriber.subscribed_at.desc())
         .paginate(page=max(page, 1), per_page=50, error_out=False)
     )
@@ -331,6 +404,18 @@ def list_subscribers():
         .order_by(Subscriber.unsubscribed_at.desc())
         .all()
     )
+    if q:
+        # Une recherche qui ne trouve pas quelqu'un parce qu'il s'est
+        # désinscrit répond à côté de la question posée.
+        motif_bas = q.lower()
+
+        def correspond(sub):
+            champs = (sub.email, sub.prenom, sub.nom, sub.ville)
+            return any(c and motif_bas in c.lower() for c in champs)
+
+        pending = [s for s in pending if correspond(s)]
+        bounced = [s for s in bounced if correspond(s)]
+        unsubscribed = [s for s in unsubscribed if correspond(s)]
 
     # Flag confirmed/active rows that still look like spam (e.g. bots that
     # slipped in before double opt-in existed) so they can be pruned.
@@ -350,6 +435,7 @@ def list_subscribers():
         unsubscribed=unsubscribed,
         suspicious_ids=suspicious_ids,
         suspicious_count=len(suspicious_ids),
+        q=q,
     )
 
 
@@ -459,6 +545,85 @@ def _parse_import_rows(file_storage, text_blob):
             })
 
     return rows
+
+
+@admin_subscribers_bp.route('/<int:subscriber_id>')
+@admin_required
+def show_subscriber(subscriber_id):
+    """One subscriber: what they were sent, and what they opened or clicked.
+
+    Opens and clicks only exist from the day the SendGrid webhook was switched
+    on — it does not replay the past — so an old delivery with no event means
+    "not recorded", not "not read". The page says so rather than showing a
+    silent blank.
+    """
+    from articles.models import Article
+    from tiktok.models import TikTokPost
+
+    sub = db.session.get(Subscriber, subscriber_id) or abort(404)
+
+    events = (
+        EmailEvent.query
+        .filter(db.or_(EmailEvent.subscriber_id == sub.id,
+                       EmailEvent.email == sub.email))
+        .order_by(EmailEvent.occurred_at.desc())
+        .all()
+    )
+    par_article = {}
+    for ev in events:
+        entry = par_article.setdefault(ev.article_id, {'opens': 0, 'clicks': 0, 'last': None})
+        if ev.event == 'click':
+            entry['clicks'] += 1
+        else:
+            entry['opens'] += 1
+        if entry['last'] is None or (ev.occurred_at and ev.occurred_at > entry['last']):
+            entry['last'] = ev.occurred_at
+
+    lignes = []
+    for d in (Delivery.query.filter_by(subscriber_id=sub.id)
+              .order_by(Delivery.sent_at.desc()).all()):
+        article = db.session.get(Article, d.article_id)
+        stats = par_article.get(d.article_id, {})
+        lignes.append({
+            'kind': 'article', 'sent_at': d.sent_at,
+            'title': article.title if article else '(article supprimé)',
+            'url': (url_for('articles.public_show', slug=article.slug)
+                    if article else None),
+            'opens': stats.get('opens', 0), 'clicks': stats.get('clicks', 0),
+            'last': stats.get('last'),
+        })
+    for d in (MinuteDelivery.query.filter_by(subscriber_id=sub.id)
+              .order_by(MinuteDelivery.sent_at.desc()).all()):
+        post = db.session.get(TikTokPost, d.post_id)
+        lignes.append({
+            'kind': 'minute', 'sent_at': d.sent_at,
+            'title': post.title if post else '(clip supprimé)',
+            'url': url_for('minute.minute_landing'),
+            'opens': 0, 'clicks': 0, 'last': None,
+        })
+    for d in (AnnouncementDelivery.query.filter_by(subscriber_id=sub.id)
+              .order_by(AnnouncementDelivery.sent_at.desc()).all()):
+        ann = db.session.get(Announcement, d.announcement_id)
+        lignes.append({
+            'kind': 'annonce', 'sent_at': d.sent_at,
+            'title': ann.subject if ann else '(message supprimé)',
+            'url': None, 'opens': 0, 'clicks': 0, 'last': None,
+        })
+    lignes.sort(key=lambda l: l['sent_at'] or datetime.min, reverse=True)
+
+    # Les événements sans article rattaché (ouverture d'une annonce, par
+    # exemple) ne se rangent dans aucune ligne : on les compte à part plutôt
+    # que de les perdre.
+    orphelins = sum(1 for ev in events if ev.article_id is None)
+
+    return render_template(
+        'subscriber_admin_show.html', sub=sub, lignes=lignes,
+        total_opens=sum(1 for e in events if e.event != 'click'),
+        total_clicks=sum(1 for e in events if e.event == 'click'),
+        orphelins=orphelins,
+        premier_event=(min((e.occurred_at for e in events if e.occurred_at), default=None)),
+        listes=LISTES,
+    )
 
 
 @admin_subscribers_bp.route('/import', methods=['POST'])
@@ -978,7 +1143,8 @@ def _build_payload(article, recipients):
             site_url=site_url,
             site_name=current_app.config['SITE_NAME'],
             site_tagline=current_app.config['SITE_TAGLINE'],
-            unsubscribe_url=url_for('newsletter.unsubscribe', token=sub.token, _external=True),
+            unsubscribe_url=url_for('newsletter.unsubscribe', token=sub.token,
+                                    liste='lettre', _external=True),
         )
         payload.append({
             'subscriber_id': sub.id,
@@ -1047,7 +1213,7 @@ def enqueue_article_send(article, sent_by=None):
             try:
                 # Refresh SendGrid suppressions first, then drop anyone freshly
                 # bounced/unsubscribed so this send never hits a bad address.
-                to_send = _suppress_before_send(payload)
+                to_send = _suppress_before_send(payload, 'lettre')
                 _send_payload(article_id, campaign_id, to_send)
             except Exception:
                 log.exception("background newsletter send failed (campaign %s)", campaign_id)
@@ -1058,17 +1224,22 @@ def enqueue_article_send(article, sent_by=None):
     return campaign
 
 
-def _suppress_before_send(payload):
+def _suppress_before_send(payload, liste='lettre'):
     """Sync SendGrid suppressions (best-effort) and return the payload items
-    whose subscriber is still mailable. Runs inside the send task so pulling
-    the account-wide bounce list never slows the admin request."""
+    whose subscriber is still mailable *for this letter*.
+
+    The list has to be passed in: someone who left la lettre but kept La Minute
+    is still mailable in general, and checking that alone would send them the
+    very thing they unsubscribed from. Runs inside the send task so pulling the
+    account-wide bounce list never slows the admin request.
+    """
     try:
         n = sync_bounces_from_sendgrid()
         if n:
             log.info("pre-send SendGrid sync suppressed %s address(es)", n)
     except Exception:
         log.exception("pre-send SendGrid bounce sync failed")
-    mailable_ids = {s.id for s in _mailable_query().all()}
+    mailable_ids = {s.id for s in _mailable_query(liste).all()}
     kept = [p for p in payload if p['subscriber_id'] in mailable_ids]
     dropped = len(payload) - len(kept)
     if dropped:
@@ -1083,7 +1254,7 @@ def send_article_to_subscribers(article, sent_by=None):
     campaign = _create_campaign(article, recipients, skipped, sent_by)
     if recipients:
         payload = _build_payload(article, recipients)
-        payload = _suppress_before_send(payload)
+        payload = _suppress_before_send(payload, 'lettre')
         _send_payload(article.id, campaign.id, payload)
     return campaign
 
@@ -1101,7 +1272,7 @@ def announcement_category(announcement_id):
 def _announcement_recipients(announcement):
     """Mailable subscribers who have not already received this announcement,
     plus the number skipped because they have."""
-    subscribers = _mailable_query().all()
+    subscribers = _mailable_query('tous').all()
     already = {
         d.subscriber_id
         for d in AnnouncementDelivery.query.filter_by(announcement_id=announcement.id).all()
@@ -1190,7 +1361,7 @@ def enqueue_announcement_send(announcement, sent_by=None):
     def _worker():
         with app.app_context():
             try:
-                to_send = _suppress_before_send(payload)
+                to_send = _suppress_before_send(payload, 'tous')
                 _send_announcement_payload(announcement_id, to_send)
             except Exception:
                 log.exception("background announcement send failed (id %s)", announcement_id)
@@ -1209,7 +1380,7 @@ def list_announcements():
     return render_template(
         'announcements_admin.html',
         announcements=announcements,
-        mailable=_mailable_query().count(),
+        mailable=_mailable_query('tous').count(),
         mail_ok=mail_is_configured(),
         editing=None,
     )
@@ -1225,7 +1396,7 @@ def edit_announcement(announcement_id):
     return render_template(
         'announcements_admin.html',
         announcements=announcements,
-        mailable=_mailable_query().count(),
+        mailable=_mailable_query('tous').count(),
         mail_ok=mail_is_configured(),
         editing=editing,
     )
@@ -1324,3 +1495,110 @@ def delete_announcement(announcement_id):
     db.session.commit()
     flash("Brouillon supprimé.", 'success')
     return redirect(url_for('admin_sends.list_announcements'))
+
+
+# --------------------------------------------------------------------------
+# La Minute : l'envoi d'un clip aux abonnés de la seconde lettre.
+# --------------------------------------------------------------------------
+
+def minute_category(post_id):
+    """SendGrid category for a Minute mailing, so its opens and clicks can be
+    read the same way an article's are."""
+    return f'minute-{post_id}'
+
+
+def minute_recipients(post):
+    """Minute subscribers who have not already received this clip."""
+    subscribers = _mailable_query('minute').all()
+    already = {
+        d.subscriber_id
+        for d in MinuteDelivery.query.filter_by(post_id=post.id).all()
+    }
+    recipients = [s for s in subscribers if s.id not in already]
+    return recipients, len(subscribers) - len(recipients)
+
+
+def _build_minute_payload(post, recipients, intro=None):
+    site_url = url_for('articles.public_list', _external=True)
+    minute_url = url_for('minute.minute_landing', _external=True)
+    subject = post.title
+    payload = []
+    for sub in recipients:
+        html = render_template(
+            'email/newsletter_minute.html',
+            post=post, intro=intro, minute_url=minute_url, site_url=site_url,
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+            # Le lien porte « minute » : se désinscrire ici ne doit retirer que
+            # cette lettre, pas celle des articles.
+            unsubscribe_url=url_for('newsletter.unsubscribe', token=sub.token,
+                                    liste='minute', _external=True),
+        )
+        payload.append({
+            'subscriber_id': sub.id,
+            'email': sub.email,
+            'name': ' '.join(p for p in (sub.prenom, sub.nom) if p) or None,
+            'subject': subject,
+            'html': html,
+        })
+    return payload
+
+
+def _send_minute_payload(post_id, send_id, payload):
+    categories = ['newsletter', 'minute', minute_category(post_id)]
+    successes, errors = 0, 0
+    for item in payload:
+        ok = send_email(
+            to_email=item['email'], to_name=item['name'],
+            subject=item['subject'], html=item['html'], categories=categories,
+        )
+        if ok:
+            successes += 1
+            db.session.add(MinuteDelivery(
+                post_id=post_id, subscriber_id=item['subscriber_id'],
+                email=item['email'],
+            ))
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        else:
+            errors += 1
+
+    send = db.session.get(MinuteSend, send_id)
+    if send is not None:
+        send.success_count = successes
+        send.error_count = errors
+        db.session.commit()
+    return successes, errors
+
+
+def enqueue_minute_send(post, sent_by=None, intro=None):
+    """Send a clip to the Minute subscribers, in the background."""
+    recipients, _skipped = minute_recipients(post)
+    # Rendu avant l'enregistrement de l'envoi, comme pour les annonces : sinon
+    # un échec de rendu laisserait une trace d'envoi que personne n'a reçu.
+    payload = _build_minute_payload(post, recipients, intro=intro) if recipients else []
+
+    send = MinuteSend(post_id=post.id, sent_by_id=getattr(sent_by, 'id', None),
+                      recipient_count=len(recipients), intro=intro or None)
+    db.session.add(send)
+    db.session.commit()
+    if not recipients:
+        return send
+
+    app = current_app._get_current_object()
+    post_id, send_id = post.id, send.id
+
+    def _worker():
+        with app.app_context():
+            try:
+                to_send = _suppress_before_send(payload, 'minute')
+                _send_minute_payload(post_id, send_id, to_send)
+            except Exception:
+                log.exception("background Minute send failed (send %s)", send_id)
+            finally:
+                db.session.remove()
+
+    threading.Thread(target=_worker, name=f'minute-send-{send_id}', daemon=True).start()
+    return send

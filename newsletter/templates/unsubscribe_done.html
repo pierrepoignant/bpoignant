@@ -1,15 +1,27 @@
 {% extends 'base.html' %}
-{% block title %}Désinscription effectuée{% endblock %}
+{% block title %}Désinscription{% endblock %}
 
 {% block content %}
 <section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 4rem 2rem; text-align: center; color: white;">
-    <h1 style="font-size: 2rem; font-weight: 800;"><i class="fas fa-check-circle" style="color: var(--vert);"></i> Désinscription effectuée</h1>
+    <h1 style="font-size: 2rem; font-weight: 800;">C'est fait</h1>
 </section>
 
-<div class="form-container">
-    <p style="text-align: center;">
-        L'adresse <strong>{{ email }}</strong> ne recevra plus de notifications.
+<div class="form-container" style="text-align: center;">
+    <p>
+        L'adresse <strong>{{ email }}</strong> ne recevra plus
+        {% for cle in quitte %}{{ listes[cle] }}{% if not loop.last %} ni {% endif %}{% endfor %}.
     </p>
+
+    {# Ce qui reste, dit explicitement : sans cela on ne sait pas si l'autre
+       lettre continue, et on se désinscrit une seconde fois par précaution. #}
+    {% if subscriber and (subscriber.wants_lettre or subscriber.wants_minute) %}
+    <p style="color: var(--gris); font-size: 0.92rem;">
+        Vous recevez toujours
+        {% if subscriber.wants_lettre %}<strong>{{ listes['lettre'] }}</strong>{% endif %}
+        {%- if subscriber.wants_minute %}{% if subscriber.wants_lettre %} et {% endif %}<strong>{{ listes['minute'] }}</strong>{% endif %}.
+    </p>
+    {% endif %}
+
     <a href="{{ url_for('articles.public_list') }}" class="btn btn-primary" style="margin-top: 1rem;">
         <i class="fas fa-arrow-left"></i> Retour au site
     </a>

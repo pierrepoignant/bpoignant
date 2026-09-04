@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}La Minute{% endblock %}
+{% block meta_description %}La Minute de Bernard Poignant : plusieurs fois par semaine, son opinion en vidéo sur un sujet d'actualité.{% endblock %}
+
+{% block content %}
+<section style="background: linear-gradient(135deg, var(--noir), #16213E); padding: 3.5rem 2rem; color: white;">
+    <div style="max-width: 820px; margin: 0 auto;">
+        <h1 style="font-size: 2.3rem; font-weight: 800; margin: 0 0 0.7rem;">La Minute</h1>
+        <p style="color: rgba(255,255,255,0.85); margin: 0; font-size: 1.08rem; line-height: 1.65; max-width: 60ch;">
+            Plusieurs fois par semaine, Bernard Poignant donne son opinion sur un sujet
+            d'actualité. Une minute, pas davantage.
+        </p>
+        <p style="color: rgba(255,255,255,0.6); margin: 0.9rem 0 0; font-size: 0.9rem;">
+            {{ videos|length }} vidéo{{ 's' if videos|length > 1 else '' }}
+        </p>
+    </div>
+</section>
+
+<section class="section section-tight">
+    {% if videos %}
+    {# Une grille de vignettes qui joue sur place. Le format est vertical et se
+       regarde au téléphone : les colonnes se réduisent à deux sur mobile, et la
+       vidéo n'est chargée qu'au moment où on la lance — une page de vingt
+       clips ne doit pas coûter vingt téléchargements. #}
+    <div class="minute-grid">
+        {% for v in videos %}
+        <figure class="minute-item" data-src="{{ v.video_url }}">
+            <div class="minute-vignette">
+                {% if v.poster_url %}
+                <img src="{{ v.poster_url }}" alt="{{ v.title }}" loading="lazy">
+                {% else %}
+                <div class="minute-sans-image"><i class="fas fa-video"></i></div>
+                {% endif %}
+                <button type="button" class="minute-play" aria-label="Lire : {{ v.title }}">
+                    <i class="fas fa-play"></i>
+                </button>
+                {% if v.duration_seconds %}
+                <span class="minute-duree">{{ '%.0f'|format(v.duration_seconds) }} s</span>
+                {% endif %}
+            </div>
+            <figcaption>
+                <h2>{{ v.title|truncate(80) }}</h2>
+                <time datetime="{{ v.posted_at.isoformat() if v.posted_at }}">
+                    {{ v.posted_at.strftime('%d/%m/%Y') if v.posted_at else '' }}
+                </time>
+            </figcaption>
+        </figure>
+
+        <script type="application/ld+json">
+        {{ {
+            '@context': 'https://schema.org',
+            '@type': 'VideoObject',
+            'name': v.title,
+            'description': (v.caption or v.transcript or v.title)|truncate(500),
+            'thumbnailUrl': [v.poster_url] if v.poster_url else [],
+            'uploadDate': (v.posted_at or v.created_at).isoformat(),
+            'duration': 'PT%dS'|format(v.duration_seconds|round|int) if v.duration_seconds else None,
+            'contentUrl': v.video_url,
+            'url': v.posted_url or None,
+            'transcript': v.transcript or None,
+        }|tojson }}
+        </script>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris);">
+        <p>Aucune vidéo pour l'instant.</p>
+    </div>
+    {% endif %}
+</section>
+
+{# Lecteur plein écran : au téléphone c'est la seule façon de voir un format
+   vertical en grand ; sur ordinateur cela évite d'ouvrir un onglet. #}
+<div id="minute-lecteur" role="dialog" aria-modal="true" aria-label="Lecture">
+    <button type="button" id="minute-fermer" aria-label="Fermer"><i class="fas fa-xmark"></i></button>
+    <video id="minute-video" controls playsinline preload="auto"></video>
+</div>
+
+{% include '_newsletter_form.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var lecteur = document.getElementById('minute-lecteur');
+    var video = document.getElementById('minute-video');
+
+    function ouvrir(src) {
+        video.src = src;
+        lecteur.classList.add('ouvert');
+        document.body.style.overflow = 'hidden';
+        // La lecture peut être refusée (économie de données, réglage iOS) :
+        // les contrôles restent là, l'utilisateur appuie lui-même.
+        var p = video.play();
+        if (p && p.catch) p.catch(function () {});
+    }
+
+    function fermer() {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();                 // libère le téléchargement en cours
+        lecteur.classList.remove('ouvert');
+        document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('.minute-item').forEach(function (el) {
+        el.addEventListener('click', function () { ouvrir(el.dataset.src); });
+    });
+    document.getElementById('minute-fermer').addEventListener('click', fermer);
+    lecteur.addEventListener('click', function (e) { if (e.target === lecteur) fermer(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && lecteur.classList.contains('ouvert')) fermer();
+    });
+})();
+</script>
+{% endblock %}

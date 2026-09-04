@@ -21,6 +21,15 @@ class Subscriber(db.Model):
     # link in the confirmation e-mail. Existing rows are backfilled as
     # confirmed by the schema migration.
     confirmed_at = db.Column(db.DateTime, nullable=True)
+    # Deux lettres, un seul abonnement : on s'inscrit aux deux d'un coup, on se
+    # désabonne de l'une sans perdre l'autre. `unsubscribed_at` reste le retrait
+    # global — quand les deux sont refusées, il est posé, et l'adresse n'est
+    # plus jamais sollicitée.
+    wants_lettre = db.Column(db.Boolean, default=True, nullable=False)
+    wants_minute = db.Column(db.Boolean, default=True, nullable=False)
+    lettre_unsub_at = db.Column(db.DateTime, nullable=True)
+    minute_unsub_at = db.Column(db.DateTime, nullable=True)
+
     # Set when SendGrid reports a hard bounce / block / spam-report for this
     # address — such rows are never e-mailed again.
     bounced_at = db.Column(db.DateTime, nullable=True)
@@ -40,6 +49,13 @@ class Subscriber(db.Model):
     @property
     def is_bounced(self):
         return self.bounced_at is not None
+
+    def wants(self, liste):
+        return self.wants_minute if liste == 'minute' else self.wants_lettre
+
+    def mailable_for(self, liste):
+        """True when this subscriber may receive that particular letter."""
+        return self.is_mailable and self.wants(liste)
 
     @property
     def is_mailable(self):
@@ -192,4 +208,50 @@ class AnnouncementDelivery(db.Model):
     )
 
     announcement = db.relationship('Announcement')
+    subscriber = db.relationship('Subscriber')
+
+
+class MinuteSend(db.Model):
+    """One mailing of La Minute: a clip sent to the Minute subscribers.
+
+    Kept apart from Campaign, which keys on a non-null article_id. A clip is
+    not an article and never will be.
+    """
+
+    __tablename__ = 'newsletter_minute_sends'
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('tiktok_posts.id'),
+                        nullable=False, index=True)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    sent_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    recipient_count = db.Column(db.Integer, default=0, nullable=False)
+    success_count = db.Column(db.Integer, default=0, nullable=False)
+    error_count = db.Column(db.Integer, default=0, nullable=False)
+    intro = db.Column(db.Text, nullable=True)
+
+    post = db.relationship('TikTokPost')
+    sent_by = db.relationship('User')
+
+
+class MinuteDelivery(db.Model):
+    """One row per (clip, subscriber) successfully emailed, so a re-send skips
+    anyone already served."""
+
+    __tablename__ = 'newsletter_minute_deliveries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('tiktok_posts.id'),
+                        nullable=False, index=True)
+    subscriber_id = db.Column(db.Integer, db.ForeignKey('subscribers.id'),
+                              nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('post_id', 'subscriber_id',
+                            name='uq_minute_delivery_post_subscriber'),
+    )
+
+    post = db.relationship('TikTokPost')
     subscriber = db.relationship('Subscriber')

@@ -102,10 +102,11 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_authors_bp)
 
     from newsletter.models import Subscriber  # noqa: F401
-    from newsletter import (newsletter_bp, lettre_bp, admin_subscribers_bp,
+    from newsletter import (newsletter_bp, lettre_bp, minute_bp, admin_subscribers_bp,
                             admin_sends_bp)
     app.register_blueprint(newsletter_bp)
     app.register_blueprint(lettre_bp)
+    app.register_blueprint(minute_bp)
     app.register_blueprint(admin_subscribers_bp)
     app.register_blueprint(admin_sends_bp)
 
@@ -371,6 +372,18 @@ def _migrate_schema():
             # them as already confirmed (as of when they subscribed).
             db.session.execute(text("UPDATE subscribers SET confirmed_at = subscribed_at WHERE confirmed_at IS NULL"))
             db.session.commit()
+        if 'wants_lettre' not in cols:
+            # Tous les abonnés actuels reçoivent les deux : ils se sont inscrits
+            # à la lettre, La Minute leur est ajoutée, et chacun peut se retirer
+            # de l'une des deux séparément.
+            for col in ('wants_lettre', 'wants_minute'):
+                db.session.execute(text(
+                    f"ALTER TABLE subscribers ADD COLUMN {col} BOOLEAN NOT NULL DEFAULT 1"))
+            for col in ('lettre_unsub_at', 'minute_unsub_at'):
+                db.session.execute(text(
+                    f"ALTER TABLE subscribers ADD COLUMN {col} DATETIME NULL"))
+            db.session.commit()
+
         if 'bounced_at' not in cols:
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN bounced_at DATETIME NULL"))
             db.session.commit()

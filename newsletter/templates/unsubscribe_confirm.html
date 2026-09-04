@@ -15,12 +15,45 @@
             <i class="fas fa-arrow-left"></i> Retour au site
         </a>
     {% else %}
-        <p style="text-align: center;">
-            Confirmer la désinscription de <strong>{{ subscriber.email }}</strong> ?
+        {# Deux lettres, deux décisions : le bouton principal ne retire que
+           celle dont le lien vient, l'autre se quitte séparément. Quitter tout
+           reste possible, mais ce n'est plus ce qui arrive par défaut. #}
+        <p style="text-align: center; margin-bottom: 0.4rem;">
+            Pour l'adresse <strong>{{ subscriber.email }}</strong>.
         </p>
+        <p style="text-align: center; color: var(--gris); font-size: 0.92rem;">
+            Choisissez ce que vous ne souhaitez plus recevoir.
+        </p>
+
         <form method="POST" style="margin-top: 1.5rem;">
+            <div style="background: white; border: 1px solid #e6e6e6; border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1.2rem;">
+                {% for cle, nom in listes.items() %}
+                {% if subscriber.wants(cle) %}
+                <label style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem 0; cursor: pointer;">
+                    <input type="checkbox" name="listes" value="{{ cle }}"
+                           {{ 'checked' if cle == liste }} style="margin-top: 0.25rem;">
+                    <span>
+                        <strong>{{ nom }}</strong><br>
+                        <span style="color: var(--gris); font-size: 0.86rem;">
+                            {% if cle == 'lettre' %}Chaque article, une fois, par e-mail.
+                            {% else %}Les vidéos, plusieurs fois par semaine.{% endif %}
+                        </span>
+                    </span>
+                </label>
+                {% else %}
+                <p style="color: var(--gris); font-size: 0.86rem; padding: 0.5rem 0; margin: 0;">
+                    <i class="fas fa-check"></i> {{ nom }} — déjà désinscrit.
+                </p>
+                {% endif %}
+                {% endfor %}
+            </div>
+
             <button type="submit" class="btn btn-primary">
                 <i class="fas fa-check"></i> Confirmer
+            </button>
+            <button type="submit" name="tout" value="1" class="btn btn-outline"
+                    style="margin-left: 0.5rem; color: var(--noir); border-color: #e0e0e0;">
+                Tout arrêter
             </button>
             <a href="{{ url_for('articles.public_list') }}" class="btn btn-vert" style="margin-left: 0.5rem;">
                 Annuler

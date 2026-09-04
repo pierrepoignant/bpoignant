@@ -16,6 +16,8 @@ from flask import (
 from sqlalchemy.exc import IntegrityError
 
 from init_db import db
+from flask_login import current_user
+
 from auth import admin_required
 from tiktok.models import TikTokPost
 
@@ -42,7 +44,10 @@ def list_posts():
     local_videos = video.local_renders()
 
     from articles.models import Theme
+    from newsletter.models import MinuteSend
+    envois = {m.post_id for m in MinuteSend.query.all()}
     return render_template('tiktok_admin_list.html', posts=posts,
+                           minute_sent=envois,
                            all_themes=Theme.query.order_by(Theme.name).all(),
                            storage_ok=storage.is_configured(),
                            apify_ok=apify.is_configured(),
@@ -468,6 +473,34 @@ def update(post_id):
 
     db.session.commit()
     flash("Post enregistré.", 'success')
+    return redirect(url_for('admin_tiktok.list_posts'))
+
+
+@admin_tiktok_bp.route('/<int:post_id>/minute', methods=['POST'])
+@admin_required
+def send_minute(post_id):
+    """Send this clip to the Minute subscribers."""
+    from newsletter import enqueue_minute_send, minute_recipients
+    from mail import is_configured as mail_is_configured
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    if not post.video_url:
+        flash("Ce post n'a pas de vidéo à envoyer.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+    if not mail_is_configured():
+        flash("SendGrid n'est pas configuré — envoi impossible.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    recipients, skipped = minute_recipients(post)
+    if not recipients:
+        flash("Tous les abonnés de La Minute ont déjà reçu ce clip." if skipped
+              else "Aucun abonné à La Minute.", 'info')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    send = enqueue_minute_send(post, sent_by=current_user,
+                               intro=(request.form.get('intro') or '').strip() or None)
+    flash(f"Envoi en cours à {send.recipient_count} abonné(s) de La Minute."
+          + (f" {skipped} l'avaient déjà reçu." if skipped else ""), 'success')
     return redirect(url_for('admin_tiktok.list_posts'))
 
 

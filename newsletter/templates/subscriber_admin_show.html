@@ -1,0 +1,106 @@
+{% extends 'admin_base.html' %}
+{% block title %}{{ sub.email }}{% endblock %}
+
+{% block admin_title %}<i class="far fa-user" style="color: var(--vert);"></i> {{ sub.display_name or sub.email }}{% endblock %}
+{% block admin_subtitle %}<p>{{ sub.email }}{% if sub.ville %} · {{ sub.ville }}{% endif %}</p>{% endblock %}
+
+{% block admin_content %}
+    <p style="margin: 0 0 1.2rem;">
+        <a href="{{ url_for('admin_subscribers.list_subscribers') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Tous les abonnés
+        </a>
+    </p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.6rem;">
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Reçus</div>
+            <div style="font-size: 2rem; font-weight: 800;">{{ lignes|length }}</div>
+        </div>
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Ouvertures</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--vert-fonce);">{{ total_opens }}</div>
+        </div>
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Clics</div>
+            <div style="font-size: 2rem; font-weight: 800; color: var(--rouge);">{{ total_clicks }}</div>
+        </div>
+    </div>
+
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem; margin-bottom: 1.6rem;">
+        <h2 style="font-size: 1.05rem; margin: 0 0 0.8rem;">Abonnements</h2>
+        <div style="display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: 0.92rem;">
+            {% for cle, nom in listes.items() %}
+            <span>
+                {% if sub.wants(cle) %}
+                <i class="fas fa-circle-check" style="color: var(--vert);"></i> {{ nom }}
+                {% else %}
+                <i class="fas fa-circle-xmark" style="color: var(--gris);"></i>
+                <span style="color: var(--gris);">{{ nom }} — désinscrit
+                    {%- set quand = sub.minute_unsub_at if cle == 'minute' else sub.lettre_unsub_at %}
+                    {%- if quand %} le {{ quand.strftime('%d/%m/%Y') }}{% endif %}</span>
+                {% endif %}
+            </span>
+            {% endfor %}
+        </div>
+        <div style="color: var(--gris); font-size: 0.85rem; margin-top: 0.7rem;">
+            Inscrit le {{ sub.subscribed_at.strftime('%d/%m/%Y') }}
+            {%- if sub.bounced_at %} · <span style="color: var(--rouge);">rebond le {{ sub.bounced_at.strftime('%d/%m/%Y') }}{% if sub.bounce_reason %} — {{ sub.bounce_reason|truncate(90) }}{% endif %}</span>{% endif %}
+            {%- if sub.unsubscribed_at %} · désinscrit de tout le {{ sub.unsubscribed_at.strftime('%d/%m/%Y') }}{% endif %}
+        </div>
+    </div>
+
+    {# SendGrid ne rejoue pas le passé : avant la mise en service du webhook,
+       aucune ouverture n'a été enregistrée. Sans cette phrase, un envoi ancien
+       sans ouverture se lit comme « il ne l'a pas lu ». #}
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 1.4rem; line-height: 1.6;">
+        Les ouvertures et les clics sont enregistrés
+        {% if premier_event %}depuis le {{ premier_event.strftime('%d/%m/%Y') }}{% else %}depuis la mise en service du suivi{% endif %} :
+        un envoi antérieur sans ouverture n'a pas été mesuré, ce n'est pas une non-lecture.
+        Une ouverture ne se détecte que si les images sont chargées, ce que beaucoup de messageries bloquent.
+        {% if orphelins %}<br>{{ orphelins }} événement(s) non rattaché(s) à un article — ouvertures d'un message d'annonce, comptés dans les totaux ci-dessus.{% endif %}
+    </div>
+
+    {% if lignes %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--gris-clair);">
+                <tr style="font-size: 0.85rem;">
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Envoyé</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Objet</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Ouvertures</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;">Clics</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in lignes %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td data-label="Envoyé" style="padding: 0.7rem 1rem; color: var(--gris); white-space: nowrap;">
+                        {{ l.sent_at.strftime('%d/%m/%Y') if l.sent_at else '—' }}
+                    </td>
+                    <td data-label="Objet" style="padding: 0.7rem 1rem;">
+                        <span style="display: inline-block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gris); margin-right: 0.4rem;">
+                            {{ {'article': 'Lettre', 'minute': 'Minute', 'annonce': 'Message'}[l.kind] }}
+                        </span>
+                        {% if l.url %}
+                        <a href="{{ l.url }}" target="_blank" style="color: var(--noir); font-weight: 600;">{{ l.title|truncate(70) }}</a>
+                        {% else %}{{ l.title|truncate(70) }}{% endif %}
+                    </td>
+                    <td data-label="Ouvertures" style="padding: 0.7rem 1rem; text-align: right; {% if l.opens %}font-weight: 700;{% else %}color: var(--gris);{% endif %}">
+                        {{ l.opens or '—' }}
+                    </td>
+                    <td data-label="Clics" style="padding: 0.7rem 1rem; text-align: right; {% if l.clicks %}font-weight: 700; color: var(--rouge);{% else %}color: var(--gris);{% endif %}">
+                        {{ l.clicks or '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
+        <p style="margin: 0;">Cette adresse n'a encore rien reçu.</p>
+    </div>
+    {% endif %}
+{% endblock %}

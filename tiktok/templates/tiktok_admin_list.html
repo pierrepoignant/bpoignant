@@ -154,6 +154,22 @@
                             {{ 'Sponsorisé' if p.boosted else 'Organique' }}
                         </button>
                     </form>
+                    {% if p.has_video %}
+                    {# La Minute : le clip part aux abonnés de la seconde lettre.
+                       Une seule fois — les destinataires déjà servis sont
+                       ignorés au second clic. #}
+                    <form method="POST" action="{{ url_for('admin_tiktok.send_minute', post_id=p.id) }}"
+                          style="margin: 0;"
+                          onsubmit="return confirm('Envoyer ce clip aux abonnés de La Minute ?')">
+                        <button type="submit" class="btn btn-sm"
+                                style="padding: 4px 12px; border-radius: 50px; border: 1px solid #e0e0e0;
+                                       background: {{ 'var(--gris-clair)' if p.id in minute_sent else 'none' }};
+                                       color: {{ 'var(--gris)' if p.id in minute_sent else 'var(--noir)' }};">
+                            <i class="far fa-envelope"></i>
+                            {{ 'Renvoyer dans La Minute' if p.id in minute_sent else 'Envoyer dans La Minute' }}
+                        </button>
+                    </form>
+                    {% endif %}
                     <form method="POST" action="{{ url_for('admin_tiktok.delete', post_id=p.id) }}"
                           style="margin: 0 0 0 auto;"
                           onsubmit="return confirm('Supprimer ce post ? La vidéo reste dans le stockage.')">

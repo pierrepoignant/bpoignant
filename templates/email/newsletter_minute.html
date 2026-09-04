@@ -1,0 +1,43 @@
+{% extends 'email/_base.html' %}
+{% block subject %}{{ post.title }}{% endblock %}
+
+{% block content %}
+    <div style="font-size:12px;color:#6C757D;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;">
+        La Minute
+    </div>
+    <h1 style="font-size:22px;line-height:1.3;margin:0 0 8px;color:#1A1A2E;">
+        {{ post.title }}
+    </h1>
+    <div style="font-size:13px;color:#6C757D;margin-bottom:20px;">
+        {{ post.posted_at.strftime('%d/%m/%Y') if post.posted_at }}
+        {% if post.duration_seconds %} · {{ '%.0f'|format(post.duration_seconds) }} secondes{% endif %}
+    </div>
+
+    {% if intro %}
+    <div style="font-style:italic;font-size:15px;line-height:1.6;color:#1A1A2E;margin:0 0 20px;white-space:pre-line;">
+        {{ intro }}
+    </div>
+    {% endif %}
+
+    {# Aucun client de messagerie ne lit une balise <video> : on montre l'image
+       d'attente, et le clic emmène sur le site où la vidéo se lit vraiment. #}
+    {% if post.poster_url %}
+    <a href="{{ minute_url }}" style="display:block;text-decoration:none;">
+        <img src="{{ post.poster_url }}" alt="{{ post.title }}" width="280"
+             style="display:block;margin:0 auto;border-radius:12px;max-width:100%;height:auto;">
+    </a>
+    {% endif %}
+
+    <div style="margin:24px 0 8px;text-align:center;">
+        <a href="{{ minute_url }}"
+           style="display:inline-block;background:#E6003E;color:#ffffff;padding:12px 28px;border-radius:50px;text-decoration:none;font-weight:600;font-size:14px;">
+            Regarder la vidéo →
+        </a>
+    </div>
+{% endblock %}
+
+{% block footer %}
+    Vous recevez cet e-mail car vous êtes inscrit à La Minute de
+    <a href="{{ site_url }}" style="color:#E6003E;text-decoration:none;">bernardpoignant.fr</a>.<br>
+    <a href="{{ unsubscribe_url }}" style="color:#6C757D;">Ne plus recevoir La Minute</a>.
+{% endblock %}
