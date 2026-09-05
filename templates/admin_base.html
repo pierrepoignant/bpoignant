@@ -135,7 +135,7 @@
     {% if _p.startswith('/admin/subscribers') or _p.startswith('/admin/sends') %}
     <nav class="admin-tabs" aria-label="Newsletter" style="margin-top: -0.4rem;">
         <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/subscribers') %}btn-vert{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers') and not _p.startswith('/admin/subscribers/gmail') %}btn-vert{% else %}btn-outline{% endif %}">
             Abonnés
         </a>
         <a href="{{ url_for('admin_sends.list_sends') }}"
@@ -145,6 +145,10 @@
         <a href="{{ url_for('admin_sends.newsletter_stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             Statistiques
+        </a>
+        <a href="{{ url_for('admin_subscribers.gmail_contacts_page') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers/gmail') %}btn-vert{% else %}btn-outline{% endif %}">
+            Contacts Gmail
         </a>
         <a href="{{ url_for('admin_sends.list_announcements') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/messages') %}btn-vert{% else %}btn-outline{% endif %}">

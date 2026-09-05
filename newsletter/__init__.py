@@ -1701,3 +1701,151 @@ def enqueue_minute_send(post, sent_by=None, intro=None):
 
     threading.Thread(target=_worker, name=f'minute-send-{send_id}', daemon=True).start()
     return send
+
+
+# --------------------------------------------------------------------------
+# Contacts Gmail : inviter les correspondants, jamais les inscrire d'office.
+# --------------------------------------------------------------------------
+
+_GMAIL_STATE = 'gmail_oauth_state'
+
+
+@admin_subscribers_bp.route('/gmail')
+@admin_required
+def gmail_contacts_page():
+    """The people Bernard corresponds with, and what can be done about them.
+
+    Nothing is imported by reading this page: it lists addresses and their
+    status, and every one of them has to be invited and accept before being
+    mailed anything.
+    """
+    import gmail_contacts
+
+    contacts, erreur = [], None
+    if gmail_contacts.is_connected() and request.args.get('lire'):
+        try:
+            contacts = gmail_contacts.recent_contacts(
+                limit=request.args.get('n', 100, type=int) or 100)
+        except gmail_contacts.GmailError as exc:
+            erreur = str(exc)
+
+    # État de chacun : déjà abonné, en attente, désinscrit, en rebond.
+    connus = {s.email.lower(): s for s in Subscriber.query.all()} if contacts else {}
+    for c in contacts:
+        s = connus.get(c['email'])
+        if s is None:
+            c['statut'] = 'nouveau'
+        elif s.bounced_at:
+            c['statut'] = 'rebond'
+        elif s.unsubscribed_at:
+            c['statut'] = 'désinscrit'
+        elif s.confirmed_at is None:
+            c['statut'] = 'invité'
+        else:
+            c['statut'] = 'abonné'
+
+    return render_template(
+        'gmail_contacts_admin.html',
+        contacts=contacts, erreur=erreur,
+        connected=gmail_contacts.is_connected(),
+        adresse=gmail_contacts.address(),
+        has_client=gmail_contacts.has_client_credentials(),
+        lu=bool(request.args.get('lire')),
+        nouveaux=len([c for c in contacts if c['statut'] == 'nouveau']),
+    )
+
+
+@admin_subscribers_bp.route('/gmail/connect')
+@admin_required
+def gmail_connect():
+    import gmail_contacts
+    from flask import session
+
+    etat = secrets.token_urlsafe(24)
+    session[_GMAIL_STATE] = etat
+    try:
+        url = gmail_contacts.authorization_url(
+            url_for('admin_subscribers.gmail_callback', _external=True), etat)
+    except gmail_contacts.GmailError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+    return redirect(url)
+
+
+@admin_subscribers_bp.route('/gmail/callback')
+@admin_required
+def gmail_callback():
+    import gmail_contacts
+    from flask import session
+
+    attendu = session.pop(_GMAIL_STATE, None)
+    if not attendu or request.args.get('state') != attendu:
+        flash("Réponse Google inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+    if request.args.get('error'):
+        flash(f"Connexion refusée : {request.args['error']}", 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+    try:
+        gmail_contacts.exchange_code(
+            request.args.get('code'),
+            url_for('admin_subscribers.gmail_callback', _external=True))
+    except gmail_contacts.GmailError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+    flash(f"Boîte {gmail_contacts.address() or 'Gmail'} connectée.", 'success')
+    return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))
+
+
+@admin_subscribers_bp.route('/gmail/disconnect', methods=['POST'])
+@admin_required
+def gmail_disconnect():
+    import gmail_contacts
+    gmail_contacts.disconnect()
+    flash("Boîte Gmail déconnectée.", 'success')
+    return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+
+
+@admin_subscribers_bp.route('/gmail/invite', methods=['POST'])
+@admin_required
+def gmail_invite():
+    """Invite the selected addresses to subscribe.
+
+    They are created unconfirmed and sent the ordinary double opt-in e-mail:
+    nothing reaches them afterwards unless they click the link themselves.
+    Someone who wrote to Bernard once has not asked for his newsletter, and
+    the difference between inviting and enrolling is the whole point.
+    """
+    emails = [e.strip().lower() for e in request.form.getlist('emails') if e.strip()]
+    noms = {e.split('|', 1)[0]: e.split('|', 1)[1] if '|' in e else ''
+            for e in request.form.getlist('noms')}
+    if not emails:
+        flash("Aucune adresse sélectionnée.", 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))
+
+    invites = ignores = 0
+    for adresse in emails:
+        if not _EMAIL_RE.match(adresse):
+            ignores += 1
+            continue
+        existant = Subscriber.query.filter(
+            db.func.lower(Subscriber.email) == adresse).first()
+        if existant is not None:
+            # Déjà abonné, déjà invité, désinscrit ou en rebond : on ne
+            # réinvite pas — surtout pas quelqu'un qui est parti.
+            ignores += 1
+            continue
+
+        nom = (noms.get(adresse) or '').strip()
+        prenom = nom.split(' ')[0] if nom else None
+        famille = ' '.join(nom.split(' ')[1:]) or None
+        sub = Subscriber(email=adresse, prenom=prenom, nom=famille,
+                         token=secrets.token_urlsafe(32), confirmed_at=None)
+        db.session.add(sub)
+        db.session.commit()
+        _send_confirmation_email(sub)
+        invites += 1
+
+    flash(f"{invites} invitation(s) envoyée(s)."
+          + (f" {ignores} adresse(s) ignorée(s) — déjà connues ou invalides." if ignores else ""),
+          'success')
+    return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))

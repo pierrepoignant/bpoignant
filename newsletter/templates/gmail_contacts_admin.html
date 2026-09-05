@@ -1,0 +1,137 @@
+{% extends 'admin_base.html' %}
+{% block title %}Contacts Gmail{% endblock %}
+
+{% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Contacts Gmail{% endblock %}
+{% block admin_subtitle %}<p>Les personnes avec qui Bernard a récemment échangé, pour leur proposer la lettre.</p>{% endblock %}
+
+{% block admin_content %}
+    {# Ce qui se passe ici est une invitation, pas une inscription. Le dire en
+       tête de page, parce que c'est la seule chose qu'il ne faut pas se
+       tromper à comprendre. #}
+    <div style="background: rgba(255,165,0,0.10); border: 1px solid rgba(255,165,0,0.35); color:#7a5c00; border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; line-height: 1.65; margin-bottom: 1.5rem;">
+        <strong>Ces personnes sont invitées, pas inscrites.</strong>
+        Chacune reçoit un e-mail lui proposant la lettre, et ne recevra rien d'autre
+        tant qu'elle n'a pas cliqué pour confirmer. Quelqu'un qui a écrit à Bernard
+        n'a pas demandé sa newsletter : l'inscrire d'office serait contraire au RGPD,
+        et le meilleur moyen de faire classer le domaine comme indésirable.
+        Seuls les en-têtes des messages sont lus — expéditeur, destinataires, date —
+        jamais leur contenu.
+    </div>
+
+    {% if not has_client %}
+    <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Les identifiants OAuth Google ne sont pas renseignés — voir
+        <a href="{{ url_for('admin_settings.index') }}" style="color: inherit; text-decoration: underline;">Réglages</a>.
+    </div>
+    {% elif not connected %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.6rem; text-align: center; margin-bottom: 1.5rem;">
+        <p style="margin: 0 0 1rem; color: var(--gris);">
+            Connectez la boîte de Bernard pour lire la liste de ses correspondants récents.
+            L'accès demandé est en <strong>lecture seule</strong>.
+        </p>
+        <a href="{{ url_for('admin_subscribers.gmail_connect') }}" class="btn btn-primary">
+            <i class="fab fa-google"></i> Connecter Gmail
+        </a>
+    </div>
+    {% else %}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+        <p style="margin: 0; font-size: 0.9rem;">
+            <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+            Connecté à <strong>{{ adresse or 'la boîte' }}</strong>
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('admin_subscribers.gmail_contacts_page', lire=1) }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-rotate"></i> {{ 'Relire les contacts' if lu else 'Lire les 100 derniers contacts' }}
+            </a>
+            <form method="POST" action="{{ url_for('admin_subscribers.gmail_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Déconnecter la boîte Gmail ?')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    Déconnecter
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if erreur %}
+    <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+        {{ erreur }}
+    </div>
+    {% endif %}
+
+    {% if contacts %}
+    <form method="POST" action="{{ url_for('admin_subscribers.gmail_invite') }}">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem;">
+            <h2 style="font-size: 1.1rem; margin: 0;">
+                {{ contacts|length }} correspondant{{ 's' if contacts|length > 1 else '' }}
+                <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">
+                    · {{ nouveaux }} encore inconnu{{ 's' if nouveaux > 1 else '' }} de la lettre
+                </span>
+            </h2>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="cocherNouveaux()">Cocher les inconnus</button>
+                <button type="submit" class="btn btn-sm btn-vert"
+                        onclick="return confirm('Envoyer une invitation aux adresses cochées ?')">
+                    <i class="far fa-paper-plane"></i> Inviter les sélectionnés
+                </button>
+            </div>
+        </div>
+
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+            <div class="admin-table-wrap">
+            <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+                <thead style="background: var(--gris-clair);">
+                    <tr style="font-size: 0.85rem;">
+                        <th style="width: 36px; padding: 0.8rem 0.6rem;"></th>
+                        <th style="text-align: left; padding: 0.8rem 1rem;">Personne</th>
+                        <th style="text-align: left; padding: 0.8rem 1rem;">Dernier échange</th>
+                        <th style="text-align: left; padding: 0.8rem 1rem;">État</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in contacts %}
+                    {% set nouveau = c.statut == 'nouveau' %}
+                    <tr style="border-top: 1px solid var(--gris-clair); {% if not nouveau %}opacity: 0.6;{% endif %}">
+                        <td style="padding: 0.7rem 0.6rem; text-align: center;">
+                            {# Seuls les inconnus sont proposables : réinviter un
+                               désinscrit serait ignorer sa décision. #}
+                            {% if nouveau %}
+                            <input type="checkbox" name="emails" value="{{ c.email }}" class="contact-neuf">
+                            <input type="hidden" name="noms" value="{{ c.email }}|{{ c.name }}">
+                            {% endif %}
+                        </td>
+                        <td data-label="Personne" style="padding: 0.7rem 1rem;">
+                            {% if c.name %}<strong>{{ c.name }}</strong><br>{% endif %}
+                            <span style="word-break: break-all; {% if c.name %}color: var(--gris); font-size: 0.88rem;{% endif %}">{{ c.email }}</span>
+                        </td>
+                        <td data-label="Dernier échange" style="padding: 0.7rem 1rem; white-space: nowrap; color: var(--gris); font-size: 0.88rem;">
+                            {{ c.last.strftime('%d/%m/%Y') if c.last else '—' }}
+                            · {{ c.direction }}
+                        </td>
+                        <td data-label="État" style="padding: 0.7rem 1rem; font-size: 0.85rem;">
+                            {% if nouveau %}<span style="color: var(--vert-fonce);">à inviter</span>
+                            {% elif c.statut == 'abonné' %}<i class="fas fa-circle-check" style="color: var(--vert);"></i> abonné
+                            {% elif c.statut == 'invité' %}invitation en attente
+                            {% elif c.statut == 'désinscrit' %}<span style="color: var(--gris);">désinscrit</span>
+                            {% else %}<span style="color: var(--rouge);">rebond</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </form>
+
+    <script>
+        function cocherNouveaux() {
+            document.querySelectorAll('.contact-neuf').forEach(function (c) { c.checked = true; });
+        }
+    </script>
+    {% elif connected and lu %}
+    <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
+        <p style="margin: 0;">Aucun correspondant trouvé.</p>
+    </div>
+    {% endif %}
+{% endblock %}
