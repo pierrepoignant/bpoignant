@@ -255,3 +255,43 @@ class MinuteDelivery(db.Model):
 
     post = db.relationship('TikTokPost')
     subscriber = db.relationship('Subscriber')
+
+
+class GmailContact(db.Model):
+    """Someone Bernard has corresponded with, and what was decided about them.
+
+    Stored rather than recomputed on each read: the decisions are the point.
+    Without them every scan would present the same hundred people again, and
+    an address already dismissed would be offered forever.
+
+    `status` is one of:
+      nouveau — vu dans la boîte, rien de décidé
+      ignoré  — écarté à la main, ne réapparaît plus dans les propositions
+      invité  — a reçu l'e-mail de double opt-in, libre de ne pas répondre
+      ajouté  — inscrit directement, sur la foi d'un consentement recueilli
+                hors ligne. Qui l'a fait et quand est conservé : le RGPD
+                demande de pouvoir prouver le consentement, et une case cochée
+                sans trace ne prouve rien.
+    """
+
+    __tablename__ = 'gmail_contacts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=True)
+    last_exchange_at = db.Column(db.DateTime, nullable=True, index=True)
+    # « reçu » ou « envoyé » : le sens du dernier échange.
+    direction = db.Column(db.String(10), nullable=True)
+
+    status = db.Column(db.String(12), default='nouveau', nullable=False, index=True)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    decided_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    decided_by = db.relationship('User')
+
+    @property
+    def is_pending(self):
+        return self.status == 'nouveau'

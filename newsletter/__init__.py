@@ -13,7 +13,7 @@ from flask import (
 from init_db import db
 from newsletter.models import (
     Subscriber, Campaign, Delivery, EmailEvent, Announcement, AnnouncementDelivery,
-    MinuteSend, MinuteDelivery,
+    MinuteSend, MinuteDelivery, GmailContact,
 )
 from newsletter.antispam import score_signup, is_suspicious, CONFIRM_THRESHOLD
 from auth import admin_required
@@ -1704,59 +1704,164 @@ def enqueue_minute_send(post, sent_by=None, intro=None):
 
 
 # --------------------------------------------------------------------------
-# Contacts Gmail : inviter les correspondants, jamais les inscrire d'office.
+# Contacts Gmail : ce que Bernard décide de chaque correspondant.
 # --------------------------------------------------------------------------
 
 _GMAIL_STATE = 'gmail_oauth_state'
+GMAIL_STATUTS = ('nouveau', 'ignoré', 'invité', 'ajouté')
+
+
+def sync_gmail_contacts(limit=100):
+    """Read the mailbox and record the correspondents found.
+
+    Upserts on the address: a contact already decided keeps its decision and
+    only has its name and last exchange refreshed. Returns (créés, revus).
+    """
+    import gmail_contacts
+
+    trouves = gmail_contacts.recent_contacts(limit=limit)
+    maintenant = datetime.utcnow()
+    crees = revus = 0
+    for c in trouves:
+        row = GmailContact.query.filter_by(email=c['email']).first()
+        if row is None:
+            row = GmailContact(email=c['email'], status='nouveau',
+                               first_seen_at=maintenant)
+            db.session.add(row)
+            crees += 1
+        else:
+            revus += 1
+        # Le nom peut arriver vide d'un message et rempli d'un autre.
+        if c.get('name'):
+            row.name = c['name']
+        if c.get('last') and (row.last_exchange_at is None
+                              or c['last'] > row.last_exchange_at):
+            row.last_exchange_at = c['last']
+            row.direction = c.get('direction')
+        row.last_seen_at = maintenant
+    db.session.commit()
+    return crees, revus
+
+
+def _decide(contact, statut, par=None):
+    contact.status = statut
+    contact.decided_at = datetime.utcnow()
+    contact.decided_by_id = getattr(par, 'id', None)
+
+
+def _invite_contact(contact, par=None):
+    """Create an unconfirmed subscriber and send the double opt-in e-mail."""
+    existant = Subscriber.query.filter(
+        db.func.lower(Subscriber.email) == contact.email).first()
+    if existant is None:
+        nom = (contact.name or '').strip()
+        sub = Subscriber(
+            email=contact.email,
+            prenom=nom.split(' ')[0] if nom else None,
+            nom=' '.join(nom.split(' ')[1:]) or None,
+            token=secrets.token_urlsafe(32), confirmed_at=None)
+        db.session.add(sub)
+        db.session.commit()
+        _send_confirmation_email(sub)
+    _decide(contact, 'invité', par)
+
+
+def _add_contact(contact, par=None):
+    """Subscribe directly, without the confirmation step.
+
+    Reserved for people whose agreement Bernard already has — he knows them,
+    and the consent was given off-line. Who decided it and when is recorded on
+    the contact, because the obligation is to be able to show consent, and an
+    address that simply appears in the list shows nothing.
+    """
+    existant = Subscriber.query.filter(
+        db.func.lower(Subscriber.email) == contact.email).first()
+    if existant is None:
+        nom = (contact.name or '').strip()
+        db.session.add(Subscriber(
+            email=contact.email,
+            prenom=nom.split(' ')[0] if nom else None,
+            nom=' '.join(nom.split(' ')[1:]) or None,
+            token=secrets.token_urlsafe(32),
+            confirmed_at=datetime.utcnow()))
+    elif existant.confirmed_at is None:
+        existant.confirmed_at = datetime.utcnow()
+    _decide(contact, 'ajouté', par)
 
 
 @admin_subscribers_bp.route('/gmail')
 @admin_required
 def gmail_contacts_page():
-    """The people Bernard corresponds with, and what can be done about them.
-
-    Nothing is imported by reading this page: it lists addresses and their
-    status, and every one of them has to be invited and accept before being
-    mailed anything.
-    """
+    """The stored correspondents and what was decided about each."""
     import gmail_contacts
 
-    contacts, erreur = [], None
-    if gmail_contacts.is_connected() and request.args.get('lire'):
-        try:
-            contacts = gmail_contacts.recent_contacts(
-                limit=request.args.get('n', 100, type=int) or 100)
-        except gmail_contacts.GmailError as exc:
-            erreur = str(exc)
+    filtre = request.args.get('statut') or 'nouveau'
+    q = GmailContact.query
+    if filtre in GMAIL_STATUTS:
+        q = q.filter_by(status=filtre)
+    contacts = q.order_by(GmailContact.last_exchange_at.desc()).limit(300).all()
 
-    # État de chacun : déjà abonné, en attente, désinscrit, en rebond.
-    connus = {s.email.lower(): s for s in Subscriber.query.all()} if contacts else {}
+    # L'état côté abonnés, qui peut avoir changé depuis la décision.
+    connus = {s.email.lower(): s for s in Subscriber.query.all()}
     for c in contacts:
-        s = connus.get(c['email'])
-        if s is None:
-            c['statut'] = 'nouveau'
-        elif s.bounced_at:
-            c['statut'] = 'rebond'
-        elif s.unsubscribed_at:
-            c['statut'] = 'désinscrit'
-        elif s.confirmed_at is None:
-            c['statut'] = 'invité'
-        else:
-            c['statut'] = 'abonné'
+        c.abonne = connus.get(c.email)
+
+    compte = dict(db.session.query(GmailContact.status, db.func.count(GmailContact.id))
+                  .group_by(GmailContact.status).all())
 
     return render_template(
         'gmail_contacts_admin.html',
-        contacts=contacts, erreur=erreur,
-        # L'URI exacte que Google doit connaître : elle dépend du domaine par
-        # lequel on arrive, et une différence d'un caractère donne
-        # redirect_uri_mismatch. Mieux vaut la donner à copier que la décrire.
-        redirect_uri=url_for('admin_subscribers.gmail_callback', _external=True),
+        contacts=contacts, compte=compte, filtre=filtre,
+        total=sum(compte.values()),
         connected=gmail_contacts.is_connected(),
         adresse=gmail_contacts.address(),
         has_client=gmail_contacts.has_client_credentials(),
-        lu=bool(request.args.get('lire')),
-        nouveaux=len([c for c in contacts if c['statut'] == 'nouveau']),
+        erreur=request.args.get('erreur'),
+        redirect_uri=url_for('admin_subscribers.gmail_callback', _external=True),
     )
+
+
+@admin_subscribers_bp.route('/gmail/sync', methods=['POST'])
+@admin_required
+def gmail_sync():
+    import gmail_contacts
+    try:
+        crees, revus = sync_gmail_contacts(
+            limit=request.form.get('n', 100, type=int) or 100)
+    except gmail_contacts.GmailError as exc:
+        return redirect(url_for('admin_subscribers.gmail_contacts_page', erreur=str(exc)))
+    flash(f"{crees} nouveau(x) correspondant(s), {revus} déjà connu(s).", 'success')
+    return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+
+
+@admin_subscribers_bp.route('/gmail/decider', methods=['POST'])
+@admin_required
+def gmail_decide():
+    """Apply one decision to one contact, or the same to a selection."""
+    action = request.form.get('action')
+    ids = request.form.getlist('ids', type=int)
+    if request.form.get('id', type=int):
+        ids = [request.form.get('id', type=int)]
+    if action not in ('ignorer', 'inviter', 'ajouter') or not ids:
+        flash("Rien à faire.", 'danger')
+        return redirect(url_for('admin_subscribers.gmail_contacts_page'))
+
+    fait = 0
+    for contact in GmailContact.query.filter(GmailContact.id.in_(ids)).all():
+        if action == 'ignorer':
+            _decide(contact, 'ignoré', current_user)
+        elif action == 'inviter':
+            _invite_contact(contact, current_user)
+        else:
+            _add_contact(contact, current_user)
+        fait += 1
+    db.session.commit()
+
+    libelle = {'ignorer': 'ignoré(s)', 'inviter': 'invité(s)',
+               'ajouter': 'inscrit(s) directement'}[action]
+    flash(f"{fait} contact(s) {libelle}.", 'success')
+    return redirect(url_for('admin_subscribers.gmail_contacts_page',
+                            statut=request.form.get('retour') or 'nouveau'))
 
 
 @admin_subscribers_bp.route('/gmail/connect')
@@ -1797,7 +1902,7 @@ def gmail_callback():
         flash(str(exc), 'danger')
         return redirect(url_for('admin_subscribers.gmail_contacts_page'))
     flash(f"Boîte {gmail_contacts.address() or 'Gmail'} connectée.", 'success')
-    return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))
+    return redirect(url_for('admin_subscribers.gmail_contacts_page'))
 
 
 @admin_subscribers_bp.route('/gmail/disconnect', methods=['POST'])
@@ -1805,51 +1910,5 @@ def gmail_callback():
 def gmail_disconnect():
     import gmail_contacts
     gmail_contacts.disconnect()
-    flash("Boîte Gmail déconnectée.", 'success')
+    flash("Boîte Gmail déconnectée. Les contacts déjà lus restent en place.", 'success')
     return redirect(url_for('admin_subscribers.gmail_contacts_page'))
-
-
-@admin_subscribers_bp.route('/gmail/invite', methods=['POST'])
-@admin_required
-def gmail_invite():
-    """Invite the selected addresses to subscribe.
-
-    They are created unconfirmed and sent the ordinary double opt-in e-mail:
-    nothing reaches them afterwards unless they click the link themselves.
-    Someone who wrote to Bernard once has not asked for his newsletter, and
-    the difference between inviting and enrolling is the whole point.
-    """
-    emails = [e.strip().lower() for e in request.form.getlist('emails') if e.strip()]
-    noms = {e.split('|', 1)[0]: e.split('|', 1)[1] if '|' in e else ''
-            for e in request.form.getlist('noms')}
-    if not emails:
-        flash("Aucune adresse sélectionnée.", 'danger')
-        return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))
-
-    invites = ignores = 0
-    for adresse in emails:
-        if not _EMAIL_RE.match(adresse):
-            ignores += 1
-            continue
-        existant = Subscriber.query.filter(
-            db.func.lower(Subscriber.email) == adresse).first()
-        if existant is not None:
-            # Déjà abonné, déjà invité, désinscrit ou en rebond : on ne
-            # réinvite pas — surtout pas quelqu'un qui est parti.
-            ignores += 1
-            continue
-
-        nom = (noms.get(adresse) or '').strip()
-        prenom = nom.split(' ')[0] if nom else None
-        famille = ' '.join(nom.split(' ')[1:]) or None
-        sub = Subscriber(email=adresse, prenom=prenom, nom=famille,
-                         token=secrets.token_urlsafe(32), confirmed_at=None)
-        db.session.add(sub)
-        db.session.commit()
-        _send_confirmation_email(sub)
-        invites += 1
-
-    flash(f"{invites} invitation(s) envoyée(s)."
-          + (f" {ignores} adresse(s) ignorée(s) — déjà connues ou invalides." if ignores else ""),
-          'success')
-    return redirect(url_for('admin_subscribers.gmail_contacts_page', lire=1))

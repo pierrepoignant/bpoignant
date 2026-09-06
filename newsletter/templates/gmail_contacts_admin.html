@@ -2,22 +2,9 @@
 {% block title %}Contacts Gmail{% endblock %}
 
 {% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Contacts Gmail{% endblock %}
-{% block admin_subtitle %}<p>Les personnes avec qui Bernard a récemment échangé, pour leur proposer la lettre.</p>{% endblock %}
+{% block admin_subtitle %}<p>Les personnes avec qui Bernard a échangé, et ce qui a été décidé pour chacune.</p>{% endblock %}
 
 {% block admin_content %}
-    {# Ce qui se passe ici est une invitation, pas une inscription. Le dire en
-       tête de page, parce que c'est la seule chose qu'il ne faut pas se
-       tromper à comprendre. #}
-    <div style="background: rgba(255,165,0,0.10); border: 1px solid rgba(255,165,0,0.35); color:#7a5c00; border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; line-height: 1.65; margin-bottom: 1.5rem;">
-        <strong>Ces personnes sont invitées, pas inscrites.</strong>
-        Chacune reçoit un e-mail lui proposant la lettre, et ne recevra rien d'autre
-        tant qu'elle n'a pas cliqué pour confirmer. Quelqu'un qui a écrit à Bernard
-        n'a pas demandé sa newsletter : l'inscrire d'office serait contraire au RGPD,
-        et le meilleur moyen de faire classer le domaine comme indésirable.
-        Seuls les en-têtes des messages sont lus — expéditeur, destinataires, date —
-        jamais leur contenu.
-    </div>
-
     {% if not has_client %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
         Les identifiants OAuth Google ne sont pas renseignés — voir
@@ -26,49 +13,31 @@
     {% elif not connected %}
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.6rem; text-align: center; margin-bottom: 1.5rem;">
         <p style="margin: 0 0 1rem; color: var(--gris);">
-            Connectez la boîte de Bernard pour lire la liste de ses correspondants récents.
-            L'accès demandé est en <strong>lecture seule</strong>.
+            Connectez la boîte de Bernard pour lire ses correspondants récents.
+            L'accès demandé est en <strong>lecture seule</strong>, et seuls les en-têtes
+            des messages sont lus — expéditeur, destinataires, date — jamais le contenu.
         </p>
         <a href="{{ url_for('admin_subscribers.gmail_connect') }}" class="btn btn-primary">
             <i class="fab fa-google"></i> Connecter Gmail
         </a>
-
-        {# Google refuse la connexion (« redirect_uri_mismatch ») tant que cette
-           adresse exacte n'est pas déclarée dans la console. Elle dépend du
-           domaine par lequel on arrive, d'où l'affichage plutôt qu'une consigne. #}
-        <details style="margin-top: 1.4rem; text-align: left;">
-            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">
-                Google refuse la connexion ?
-            </summary>
-            <p style="font-size: 0.85rem; line-height: 1.65; color: var(--noir); margin: 0.7rem 0 0.5rem;">
-                Dans la console Google Cloud, sur le client OAuth du site, ajoutez cette
-                adresse aux <em>URI de redirection autorisés</em>, puis le scope
-                <code>gmail.readonly</code> à l'écran de consentement :
-            </p>
-            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                <code id="uri-redirection" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ redirect_uri }}</code>
-                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                        onclick="navigator.clipboard.writeText(document.getElementById('uri-redirection').textContent.trim()); this.textContent = 'Copié';">
-                    Copier
-                </button>
-            </div>
-        </details>
     </div>
     {% else %}
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
         <p style="margin: 0; font-size: 0.9rem;">
             <i class="fas fa-circle-check" style="color: var(--vert);"></i>
             Connecté à <strong>{{ adresse or 'la boîte' }}</strong>
         </p>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <a href="{{ url_for('admin_subscribers.gmail_contacts_page', lire=1) }}" class="btn btn-sm btn-primary">
-                <i class="fas fa-rotate"></i> {{ 'Relire les contacts' if lu else 'Lire les 100 derniers contacts' }}
-            </a>
-            <form method="POST" action="{{ url_for('admin_subscribers.gmail_disconnect') }}" style="margin: 0;"
-                  onsubmit="return confirm('Déconnecter la boîte Gmail ?')">
-                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
-                    Déconnecter
+            <form method="POST" action="{{ url_for('admin_subscribers.gmail_sync') }}" style="margin: 0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true;
+                            b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture en cours…';">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-rotate"></i> Lire la boîte
                 </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_subscribers.gmail_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Déconnecter la boîte Gmail ? Les contacts déjà lus restent en place.')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Déconnecter</button>
             </form>
         </div>
     </div>
@@ -81,45 +50,55 @@
     {% endif %}
 
     {% if connected %}
-    {# La connexion aboutit avant que l'API soit activée et avant que le scope
-       soit accordé : le rappel reste accessible une fois connecté. #}
-    <details style="margin-bottom: 1.5rem;">
-        <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">
-            Réglages Google nécessaires
-        </summary>
+    {# L'autorisation aboutit avant que l'API soit activée : « connecté » et
+       « fonctionne » ne sont pas le même état, d'où ce rappel disponible. #}
+    <details style="margin-bottom: 1.4rem;">
+        <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">Réglages Google nécessaires</summary>
         <p style="font-size: 0.85rem; line-height: 1.65; margin: 0.7rem 0 0.5rem;">
-            Dans la console Google Cloud, sur le projet du site : l'API Gmail doit être
-            <em>activée</em>, cette adresse doit figurer dans les <em>URI de redirection
-            autorisés</em> du client OAuth, et le scope <code>gmail.readonly</code> sur
-            l'écran de consentement.
+            Sur le projet Google du site : l'API Gmail <em>activée</em>, cette adresse dans les
+            <em>URI de redirection autorisés</em>, et le scope <code>gmail.readonly</code>
+            sur l'écran de consentement.
         </p>
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             <code id="uri-redirection" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ redirect_uri }}</code>
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                    onclick="navigator.clipboard.writeText(document.getElementById('uri-redirection').textContent.trim()); this.textContent = 'Copié';">
-                Copier
-            </button>
+                    onclick="navigator.clipboard.writeText(document.getElementById('uri-redirection').textContent.trim()); this.textContent='Copié';">Copier</button>
         </div>
     </details>
     {% endif %}
 
+    {# Ce que font les trois décisions, en une phrase chacune : « Ajouter »
+       inscrit sans confirmation, ce qui ne se devine pas d'un bouton. #}
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.7; margin-bottom: 1.5rem;">
+        <strong>Ignorer</strong> : la personne ne sera plus proposée. ·
+        <strong>Inviter</strong> : elle reçoit un e-mail lui proposant la lettre et ne recevra
+        rien d'autre tant qu'elle n'a pas confirmé. ·
+        <strong>Ajouter</strong> : elle est inscrite sans confirmation — à réserver aux personnes
+        dont Bernard a déjà l'accord, la décision étant enregistrée avec son auteur et sa date.
+    </div>
+
+    <nav class="admin-tabs" style="margin-bottom: 1.2rem;">
+        {% for cle, nom in [('nouveau', 'À traiter'), ('invité', 'Invités'), ('ajouté', 'Ajoutés'), ('ignoré', 'Ignorés'), ('tous', 'Tous')] %}
+        <a href="{{ url_for('admin_subscribers.gmail_contacts_page', statut=cle) }}"
+           class="btn btn-sm {% if filtre == cle %}btn-vert{% else %}btn-outline{% endif %}"
+           {% if filtre != cle %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>
+            {{ nom }}
+            <span style="opacity: 0.7;">{{ total if cle == 'tous' else compte.get(cle, 0) }}</span>
+        </a>
+        {% endfor %}
+    </nav>
+
     {% if contacts %}
-    <form method="POST" action="{{ url_for('admin_subscribers.gmail_invite') }}">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem;">
-            <h2 style="font-size: 1.1rem; margin: 0;">
-                {{ contacts|length }} correspondant{{ 's' if contacts|length > 1 else '' }}
-                <span style="font-weight: 400; color: var(--gris); font-size: 0.9rem;">
-                    · {{ nouveaux }} encore inconnu{{ 's' if nouveaux > 1 else '' }} de la lettre
-                </span>
-            </h2>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                        onclick="cocherNouveaux()">Cocher les inconnus</button>
-                <button type="submit" class="btn btn-sm btn-vert"
-                        onclick="return confirm('Envoyer une invitation aux adresses cochées ?')">
-                    <i class="far fa-paper-plane"></i> Inviter les sélectionnés
-                </button>
-            </div>
+    <form method="POST" action="{{ url_for('admin_subscribers.gmail_decide') }}">
+        <input type="hidden" name="retour" value="{{ filtre }}">
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.9rem;">
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="document.querySelectorAll('.coche').forEach(c => c.checked = true);">Tout cocher</button>
+            <span style="color: var(--gris); font-size: 0.85rem;">puis&nbsp;:</span>
+            <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Ignorer</button>
+            <button type="submit" name="action" value="inviter" class="btn btn-sm btn-primary">Inviter</button>
+            <button type="submit" name="action" value="ajouter" class="btn btn-sm btn-vert"
+                    onclick="return confirm('Inscrire les personnes cochées sans confirmation ? À ne faire que si Bernard a déjà leur accord.')">Ajouter</button>
         </div>
 
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
@@ -127,38 +106,51 @@
             <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
                 <thead style="background: var(--gris-clair);">
                     <tr style="font-size: 0.85rem;">
-                        <th style="width: 36px; padding: 0.8rem 0.6rem;"></th>
+                        <th style="width: 34px; padding: 0.8rem 0.6rem;"></th>
                         <th style="text-align: left; padding: 0.8rem 1rem;">Personne</th>
                         <th style="text-align: left; padding: 0.8rem 1rem;">Dernier échange</th>
                         <th style="text-align: left; padding: 0.8rem 1rem;">État</th>
+                        <th style="text-align: right; padding: 0.8rem 1rem;">Décider</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for c in contacts %}
-                    {% set nouveau = c.statut == 'nouveau' %}
-                    <tr style="border-top: 1px solid var(--gris-clair); {% if not nouveau %}opacity: 0.6;{% endif %}">
+                    <tr style="border-top: 1px solid var(--gris-clair);">
                         <td style="padding: 0.7rem 0.6rem; text-align: center;">
-                            {# Seuls les inconnus sont proposables : réinviter un
-                               désinscrit serait ignorer sa décision. #}
-                            {% if nouveau %}
-                            <input type="checkbox" name="emails" value="{{ c.email }}" class="contact-neuf">
-                            <input type="hidden" name="noms" value="{{ c.email }}|{{ c.name }}">
-                            {% endif %}
+                            <input type="checkbox" name="ids" value="{{ c.id }}" class="coche">
                         </td>
                         <td data-label="Personne" style="padding: 0.7rem 1rem;">
                             {% if c.name %}<strong>{{ c.name }}</strong><br>{% endif %}
                             <span style="word-break: break-all; {% if c.name %}color: var(--gris); font-size: 0.88rem;{% endif %}">{{ c.email }}</span>
                         </td>
                         <td data-label="Dernier échange" style="padding: 0.7rem 1rem; white-space: nowrap; color: var(--gris); font-size: 0.88rem;">
-                            {{ c.last.strftime('%d/%m/%Y') if c.last else '—' }}
-                            · {{ c.direction }}
+                            {{ c.last_exchange_at.strftime('%d/%m/%Y') if c.last_exchange_at else '—' }}
+                            {% if c.direction %} · {{ c.direction }}{% endif %}
                         </td>
                         <td data-label="État" style="padding: 0.7rem 1rem; font-size: 0.85rem;">
-                            {% if nouveau %}<span style="color: var(--vert-fonce);">à inviter</span>
-                            {% elif c.statut == 'abonné' %}<i class="fas fa-circle-check" style="color: var(--vert);"></i> abonné
-                            {% elif c.statut == 'invité' %}invitation en attente
-                            {% elif c.statut == 'désinscrit' %}<span style="color: var(--gris);">désinscrit</span>
-                            {% else %}<span style="color: var(--rouge);">rebond</span>{% endif %}
+                            {% if c.status == 'nouveau' %}<span style="color: var(--gris);">à traiter</span>
+                            {% elif c.status == 'invité' %}invité{% if c.decided_at %} le {{ c.decided_at.strftime('%d/%m') }}{% endif %}
+                            {% elif c.status == 'ajouté' %}<span style="color: var(--vert-fonce);">ajouté{% if c.decided_at %} le {{ c.decided_at.strftime('%d/%m') }}{% endif %}</span>
+                            {% else %}<span style="color: var(--gris);">ignoré</span>{% endif %}
+                            {% if c.abonne %}
+                            <br><span style="font-size: 0.78rem; color: var(--gris);">
+                                {% if c.abonne.bounced_at %}rebond
+                                {% elif c.abonne.unsubscribed_at %}désinscrit
+                                {% elif c.abonne.confirmed_at %}abonné confirmé
+                                {% else %}confirmation en attente{% endif %}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td style="padding: 0.7rem 1rem; text-align: right; white-space: nowrap;">
+                            <button type="submit" name="action" value="ignorer" formnovalidate
+                                    onclick="this.form.querySelector('#seul').value={{ c.id }}"
+                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">Ignorer</button>
+                            <button type="submit" name="action" value="inviter"
+                                    onclick="this.form.querySelector('#seul').value={{ c.id }}"
+                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid var(--rouge); color: var(--rouge); border-radius: 50px;">Inviter</button>
+                            <button type="submit" name="action" value="ajouter"
+                                    onclick="if (!confirm('Inscrire {{ (c.name or c.email)|e }} sans confirmation ?')) return false; this.form.querySelector('#seul').value={{ c.id }}"
+                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid var(--vert-fonce); color: var(--vert-fonce); border-radius: 50px;">Ajouter</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -166,16 +158,16 @@
             </table>
             </div>
         </div>
+        {# Une action sur une seule ligne passe par ce champ ; laissé vide, ce
+           sont les cases cochées qui s'appliquent. #}
+        <input type="hidden" name="id" id="seul" value="">
     </form>
-
-    <script>
-        function cocherNouveaux() {
-            document.querySelectorAll('.contact-neuf').forEach(function (c) { c.checked = true; });
-        }
-    </script>
-    {% elif connected and lu %}
+    {% else %}
     <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
-        <p style="margin: 0;">Aucun correspondant trouvé.</p>
+        <p style="margin: 0;">
+            {% if filtre == 'nouveau' %}Rien à traiter. Lisez la boîte pour en trouver.
+            {% else %}Aucun contact dans cet état.{% endif %}
+        </p>
     </div>
     {% endif %}
 {% endblock %}
