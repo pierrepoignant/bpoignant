@@ -1460,8 +1460,23 @@ a:hover { color: var(--rouge-fonce); }
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
+    align-items: stretch;
     padding-top: 0.6rem;
     border-top: 1px solid #f2f2f2;
+}
+
+/* Une rangée d'actions mêle des <a> et des <button>, les seconds dans un
+   <form> : trois boîtes que le navigateur ne dimensionne pas pareil, d'où des
+   hauteurs inégales. On impose donc la même à toutes, et le formulaire
+   s'étire au lieu de border son bouton. */
+.fiche-actions form { display: flex; }
+.fiche-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 36px;
+    line-height: 1;
 }
 
 @media (min-width: 900px) {
@@ -1487,7 +1502,8 @@ a:hover { color: var(--rouge-fonce); }
         grid-template-columns: repeat(3, 1fr);
         gap: 0.4rem;
     }
-    .fiche-actions form { display: contents; }     /* le bouton devient l'élément de grille */
+    /* En grille, le formulaire s'efface pour que son bouton soit la cellule. */
+    .fiche-actions form { display: contents; }
     .fiche-actions .btn {
         width: 100%;
         min-height: 40px;                          /* cible tactile fiable */
