@@ -1,0 +1,114 @@
+{% extends 'admin_base.html' %}
+{% block title %}{{ p.title|truncate(40) }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-chart-line" style="color: var(--vert);"></i> {{ p.title|truncate(60) }}{% endblock %}
+{% block admin_subtitle %}<p>{{ p.posted_at.strftime('%d/%m/%Y') if p.posted_at }}{% if p.duration_seconds %} · {{ '%.0f'|format(p.duration_seconds) }} s{% endif %}</p>{% endblock %}
+
+{% block admin_content %}
+    <p style="margin: 0 0 1.2rem;">
+        <a href="{{ url_for('admin_tiktok.videos') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Les vidéos
+        </a>
+        · <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" style="color: var(--gris);">modifier</a>
+    </p>
+
+    {# Quatre sources qui ne se comparent pas : une vue TikTok, une vue X et une
+       lecture sur le site ne mesurent pas la même chose. Elles sont donc côte à
+       côte et datées, jamais additionnées. #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.8rem;">
+        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                <i class="fa-brands fa-tiktok"></i> TikTok
+            </div>
+            {% if p.views is not none %}
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ '{:,}'.format(p.views).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">
+                {{ p.likes }} j'aime · {{ p.comments_count }} commentaires · {{ p.shares }} partages
+            </div>
+            {% if p.scraped_at %}<div style="color: #bbb; font-size: 0.75rem; margin-top: 0.3rem;">relevé le {{ p.scraped_at.strftime('%d/%m/%Y') }}</div>{% endif %}
+            {% else %}
+            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Pas encore récupéré.</div>
+            {% endif %}
+        </div>
+
+        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                <i class="fa-brands fa-x-twitter"></i> X
+            </div>
+            {% if p.x_view_count is not none %}
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ '{:,}'.format(p.x_view_count).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">
+                {{ p.x_like_count }} j'aime · {{ p.x_retweet_count }} retweets · {{ p.x_reply_count }} réponses
+            </div>
+            {% if p.x_metrics_at %}<div style="color: #bbb; font-size: 0.75rem; margin-top: 0.3rem;">relevé le {{ p.x_metrics_at.strftime('%d/%m/%Y') }}</div>{% endif %}
+            {% elif p.x_post_id %}
+            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Publié, chiffres pas encore relevés.</div>
+            {% else %}
+            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Pas publié sur X.</div>
+            {% endif %}
+        </div>
+
+        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                <i class="far fa-eye"></i> Sur le site
+            </div>
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ vues_site }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">
+                {{ vues_site_fenetre }} sur {{ jours }} jours · une par visiteur et par jour
+            </div>
+        </div>
+
+        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                <i class="far fa-envelope"></i> La Minute
+            </div>
+            <div style="font-size: 1.9rem; font-weight: 800; color: var(--rouge);">{{ destinataires }}</div>
+            <div style="color: var(--gris); font-size: 0.8rem;">
+                {% if envois %}{{ envois|length }} envoi{{ 's' if envois|length > 1 else '' }},
+                le dernier le {{ envois[0].sent_at.strftime('%d/%m/%Y') }}{% else %}pas encore envoyé{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap;">
+        {% for d in [7, 30, 90, 365] %}
+        <a href="{{ url_for('admin_tiktok.post_stats', post_id=p.id, days=d) }}"
+           class="btn btn-sm {% if jours == d %}btn-vert{% else %}btn-outline{% endif %}"
+           {% if jours != d %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>{{ d }} j</a>
+        {% endfor %}
+    </div>
+
+    {# La seule série dont nous ayons l'historique : les lectures sur le site.
+       TikTok et X ne donnent qu'un total actuel, impossible à étaler dans le
+       temps sans relevés qu'on ne conserve pas. #}
+    <div style="background: white; padding: 1.4rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.6rem;">
+        <h2 style="font-size: 1.05rem; margin: 0 0 1rem;">
+            <i class="fas fa-chart-bar" style="color: var(--rouge);"></i> Lectures sur le site
+        </h2>
+        {% set maxi = (serie|map(attribute='lectures')|max) or 1 %}
+        <div style="display: flex; align-items: flex-end; gap: 2px; height: 140px; border-bottom: 1px solid var(--gris-clair); padding-bottom: 4px;">
+            {% for j in serie %}
+            <div title="{{ j.complet }} — {{ j.lectures }} lecture(s)"
+                 style="flex: 1; min-width: 2px; height: {{ (j.lectures / maxi * 100)|round(1) }}%;
+                        background: linear-gradient(180deg, var(--rouge), var(--rouge-fonce));
+                        border-radius: 2px 2px 0 0; opacity: {{ '0.35' if not j.lectures else '1' }};"></div>
+            {% endfor %}
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--gris); margin-top: 6px;">
+            <span>{{ serie[0].complet if serie }}</span><span>{{ serie[-1].complet if serie }}</span>
+        </div>
+    </div>
+
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.65;">
+        <strong>LinkedIn</strong> :
+        {% if p.linkedin_posted_at %}
+        publié le {{ p.linkedin_posted_at.strftime('%d/%m/%Y') }}
+        {% if p.linkedin_url %}— <a href="{{ p.linkedin_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>{% endif %}.
+        LinkedIn ne publie aucun chiffre pour la publication d'un membre : les vues
+        et réactions se lisent sur le post lui-même.
+        {% else %}pas encore publié.{% endif %}
+        <br>
+        Les chiffres ci-dessus viennent de quatre sources différentes et ne s'additionnent pas :
+        une vue TikTok, une vue X et une lecture sur le site ne mesurent pas la même chose.
+    </div>
+{% endblock %}

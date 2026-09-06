@@ -87,6 +87,10 @@
                            color: {{ 'var(--gris)' if minute_sends.get(c.id) else 'var(--noir)' }};">
                 <i class="far fa-envelope"></i> {{ 'Renvoyer' if minute_sends.get(c.id) else 'La Minute' }}
             </button>
+            <a href="{{ url_for('admin_tiktok.post_stats', post_id=c.id) }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                <i class="fas fa-chart-line"></i> Stats
+            </a>
             <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="btn btn-sm btn-outline"
                style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
                 <i class="fas fa-pen"></i> Modifier

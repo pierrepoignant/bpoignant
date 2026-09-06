@@ -126,7 +126,70 @@
     </script>
 
     {# ── Newsletter ── #}
-    <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
+        {# Ce que l'article a fait ailleurs. Les chiffres de X viennent de l'API,
+       relevés chaque matin ; LinkedIn n'en publie aucun pour un membre, donc
+       la case dit où c'est parti et renvoie au post plutôt que d'afficher des
+       tirets qu'on prendrait pour des zéros. #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.5rem; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
+            <i class="fas fa-share-nodes" style="color: var(--rouge);"></i> Réseaux sociaux
+        </h2>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+            <div style="border: 1px solid var(--gris-clair); border-radius: 10px; padding: 1rem 1.1rem;">
+                <div style="font-weight: 700; margin-bottom: 0.5rem;">
+                    <i class="fa-brands fa-x-twitter"></i> X
+                </div>
+                {% if article.x_posted_at %}
+                <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.7rem;">
+                    Partagé le {{ article.x_posted_at.strftime('%d/%m/%Y') }}
+                    {% if article.x_post_url %}
+                    · <a href="{{ article.x_post_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
+                    {% endif %}
+                </div>
+                <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem;">
+                    <span><strong>{{ article.x_view_count if article.x_view_count is not none else '—' }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">vues</span></span>
+                    <span><strong>{{ article.x_like_count if article.x_like_count is not none else '—' }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">j'aime</span></span>
+                    <span><strong>{{ article.x_retweet_count if article.x_retweet_count is not none else '—' }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">retweets</span></span>
+                    <span><strong>{{ article.x_reply_count if article.x_reply_count is not none else '—' }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">réponses</span></span>
+                </div>
+                {% if article.x_metrics_at %}
+                <div style="font-size: 0.76rem; color: #bbb; margin-top: 0.6rem;">
+                    relevé le {{ article.x_metrics_at.strftime('%d/%m/%Y') }}
+                </div>
+                {% endif %}
+                {% else %}
+                <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">Pas encore partagé sur X.</p>
+                {% endif %}
+            </div>
+
+            <div style="border: 1px solid var(--gris-clair); border-radius: 10px; padding: 1rem 1.1rem;">
+                <div style="font-weight: 700; margin-bottom: 0.5rem;">
+                    <i class="fa-brands fa-linkedin-in" style="color: #0A66C2;"></i> LinkedIn
+                </div>
+                {% if article.linkedin_posted_at %}
+                <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.5rem;">
+                    Partagé le {{ article.linkedin_posted_at.strftime('%d/%m/%Y') }}
+                    {% if article.linkedin_post_url %}
+                    · <a href="{{ article.linkedin_post_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
+                    {% endif %}
+                </div>
+                <p style="font-size: 0.82rem; color: var(--gris); margin: 0; line-height: 1.55;">
+                    LinkedIn ne publie aucun chiffre pour la publication d'un membre :
+                    les vues et réactions se lisent sur le post lui-même.
+                </p>
+                {% else %}
+                <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">Pas encore partagé sur LinkedIn.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+<div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem;">
         <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-paper-plane" style="color: var(--vert-fonce);"></i> Newsletter</h2>
         {% if email_stats.campaigns %}
         {% set sg = email_stats.sendgrid %}

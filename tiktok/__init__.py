@@ -315,6 +315,51 @@ def videos():
     )
 
 
+@admin_tiktok_bp.route('/<int:post_id>/stats')
+@admin_required
+def post_stats(post_id):
+    """Tout ce qu'on sait d'un clip, plateforme par plateforme.
+
+    Les chiffres viennent de quatre sources qui ne se comparent pas : TikTok
+    par le scrapeur, X par son API, le site par nos propres lectures, la
+    lettre par les envois. Ils sont donc présentés côte à côte et datés, plutôt
+    que additionnés en un total qui ne voudrait rien dire.
+    """
+    from datetime import timedelta
+    from newsletter.models import MinuteSend, MinuteDelivery
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+
+    jours = request.args.get('days', 30, type=int) or 30
+    jours = max(7, min(jours, 365))
+    depuis = datetime.utcnow() - timedelta(days=jours)
+
+    # Lectures sur le site, jour par jour : la seule série dont nous ayons
+    # l'historique — les autres plateformes ne donnent qu'un total actuel.
+    par_jour = dict(
+        db.session.query(db.func.date(VideoView.created_at), db.func.count(VideoView.id))
+        .filter(VideoView.post_id == post.id, VideoView.created_at >= depuis)
+        .group_by(db.func.date(VideoView.created_at)).all()
+    )
+    serie, curseur = [], depuis.date()
+    fin = datetime.utcnow().date()
+    while curseur <= fin:
+        serie.append({'jour': curseur.strftime('%d/%m'),
+                      'complet': curseur.strftime('%d/%m/%Y'),
+                      'lectures': par_jour.get(curseur, 0)})
+        curseur += timedelta(days=1)
+
+    envois = (MinuteSend.query.filter_by(post_id=post.id)
+              .order_by(MinuteSend.sent_at.desc()).all())
+    return render_template(
+        'tiktok_admin_post_stats.html', p=post, jours=jours, serie=serie,
+        vues_site=VideoView.query.filter_by(post_id=post.id).count(),
+        vues_site_fenetre=sum(x['lectures'] for x in serie),
+        envois=envois,
+        destinataires=MinuteDelivery.query.filter_by(post_id=post.id).count(),
+    )
+
+
 @admin_tiktok_bp.route('/stats')
 @admin_required
 def stats():

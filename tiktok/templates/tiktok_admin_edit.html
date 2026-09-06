@@ -6,9 +6,10 @@
 
 {% block admin_content %}
     <p style="margin: 0 0 1.2rem;">
-        <a href="{{ url_for('admin_tiktok.list_posts') }}" style="color: var(--gris);">
-            <i class="fas fa-arrow-left"></i> Tous les clips
+        <a href="{{ url_for('admin_tiktok.videos') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Les vidéos
         </a>
+        · <a href="{{ url_for('admin_tiktok.post_stats', post_id=p.id) }}" style="color: var(--gris);">statistiques</a>
     </p>
 
     <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1.4rem; align-items: start;">
