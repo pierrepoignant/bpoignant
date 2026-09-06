@@ -1528,21 +1528,7 @@ a:hover { color: var(--rouge-fonce); }
     .admin-table-wrap table.admin-stack-table { min-width: 0; }
 }
 
-/* Séparateur de groupe dans la barre d'administration : un trait vertical
-   entre deux familles d'entrées. Il disparaît en début de ligne, où il ne
-   séparerait rien. */
-.admin-tabs-sep {
-    width: 1px;
-    align-self: stretch;
-    min-height: 24px;
-    background: var(--gris-clair);
-    margin: 0 0.35rem;
-}
-@media (max-width: 768px) {
-    /* Sur téléphone la barre fait plusieurs lignes : un trait vertical au
-       hasard d'un retour à la ligne n'aide plus, on l'efface. */
-    .admin-tabs-sep { display: none; }
-}
+
 
 /* ── Fiche d'édition d'un clip ──────────────────────────────
    Deux colonnes sur grand écran, une seule au téléphone : la colonne de droite
