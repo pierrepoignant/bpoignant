@@ -40,12 +40,12 @@
 </div>
 {% endmacro %}
 
-{% macro dashboard(points, totals, group, l_likes='J\'aime', l_shares='Retweets') %}
+{% macro dashboard(points, totals, group, l_likes='J\'aime', l_shares='Retweets', l_views='Vues') %}
 {% set unite = {'day': 'jour', 'week': 'semaine', 'month': 'mois'}[group] %}
 <div class="analytics-kpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
     <div class="kpi-card active" data-metric="views" role="button" tabindex="0" aria-pressed="true"
          style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer;">
-        <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Vues</div>
+        <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ l_views }}</div>
         <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: var(--noir); margin-top: 0.3rem;">{{ '{:,}'.format(totals.views).replace(',', ' ') }}</div>
         <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ totals.per_post }} par post</div>
     </div>
@@ -82,7 +82,7 @@
 (function () {
     var data = JSON.parse(document.getElementById('chart-data').textContent || '[]');
     var METRICS = {
-        views: { label: 'Vues',          unit: 'vues',  grad: ['var(--rouge)', 'var(--rouge-fonce)'] },
+        views: { label: {{ l_views|tojson }}, unit: {{ l_views|lower|tojson }}, grad: ['var(--rouge)', 'var(--rouge-fonce)'] },
         likes: { label: {{ l_likes|tojson }}, unit: 'j’aime', grad: ['var(--vert)', 'var(--vert-fonce)'] },
         posts: { label: 'Publications',  unit: 'post(s)', grad: ['#16213E', '#0d1526'] }
     };

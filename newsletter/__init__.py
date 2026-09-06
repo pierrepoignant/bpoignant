@@ -1007,8 +1007,11 @@ def newsletter_stats():
             opens_by_week[monday] = opens_by_week.get(monday, 0) + row['unique_opens']
             clicks_by_week[monday] = clicks_by_week.get(monday, 0) + row['unique_clicks']
 
+    # La semaine la plus récente en tête : c'est celle qu'on vient lire, et
+    # sur un an de lettres elle se trouvait tout en bas.
     weeks = []
-    for wk in sorted(set(sends_by_week) | set(opens_by_week) | set(clicks_by_week)):
+    for wk in sorted(set(sends_by_week) | set(opens_by_week) | set(clicks_by_week),
+                     reverse=True):
         sent = sends_by_week.get(wk, 0)
         opened = opens_by_week.get(wk, 0)
         clicked = clicks_by_week.get(wk, 0)

@@ -38,6 +38,24 @@
     </div>
     {% endif %}
 
+    {# Trois lectures d'une même chose, mises en onglets : empilées, il fallait
+       traverser un an de semaines pour atteindre les lecteurs. Le basculement
+       est local — les trois jeux de données sont déjà dans la page. #}
+    <nav class="admin-tabs" style="margin-bottom: 1.4rem;">
+        <button type="button" class="btn btn-sm btn-vert onglet-stat" data-cible="stat-semaine">
+            <i class="fas fa-calendar-week"></i> Par semaine
+        </button>
+        <button type="button" class="btn btn-sm btn-outline onglet-stat" data-cible="stat-article"
+                style="color: var(--noir); border-color: #e0e0e0;">
+            <i class="fas fa-table"></i> Par article
+        </button>
+        <button type="button" class="btn btn-sm btn-outline onglet-stat" data-cible="stat-lecteur"
+                style="color: var(--noir); border-color: #e0e0e0;">
+            <i class="fas fa-user-check"></i> Par lecteur
+        </button>
+    </nav>
+
+    <section id="stat-semaine" class="volet-stat">
     {# ── 1. Par semaine ── #}
     <h2 style="font-size: 1.2rem; margin: 0 0 0.3rem;"><i class="fas fa-calendar-week" style="color: var(--rouge);"></i> Par semaine</h2>
     <p style="color: var(--gris); font-size: 0.82rem; margin: 0 0 0.8rem;">
@@ -80,6 +98,9 @@
     </div>
 
     {# ── 2. Par article ── #}
+    </section>
+
+    <section id="stat-article" class="volet-stat" style="display:none;">
     <h2 style="font-size: 1.2rem; margin: 0 0 0.8rem;"><i class="fas fa-table" style="color: var(--rouge);"></i> Par article</h2>
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2rem;">
         <div class="admin-table-wrap">
@@ -127,6 +148,9 @@
     </div>
 
     {# ── 3. Lecteurs les plus engagés ── #}
+    </section>
+
+    <section id="stat-lecteur" class="volet-stat" style="display:none;">
     <h2 style="font-size: 1.2rem; margin: 0 0 0.4rem;"><i class="fas fa-user-check" style="color: var(--rouge);"></i> Lecteurs les plus engagés</h2>
     {% if not events_total %}
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem; color: var(--gris); font-size: 0.9rem;">
@@ -176,4 +200,36 @@
         avec des envois mais sans engagement.
     </p>
 {% endif %}
+    </section>
+
+
+<script>
+(function () {
+    var onglets = document.querySelectorAll('.onglet-stat');
+    onglets.forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.volet-stat').forEach(function (v) {
+                v.style.display = v.id === b.dataset.cible ? '' : 'none';
+            });
+            onglets.forEach(function (o) {
+                var actif = o === b;
+                o.classList.toggle('btn-vert', actif);
+                o.classList.toggle('btn-outline', !actif);
+                o.style.color = actif ? '' : 'var(--noir)';
+                o.style.borderColor = actif ? '' : '#e0e0e0';
+            });
+            // Retenir l'onglet : on revient sur cette page pour la même raison.
+            try { sessionStorage.setItem('stat-newsletter', b.dataset.cible); } catch (e) {}
+        });
+    });
+    try {
+        var garde = sessionStorage.getItem('stat-newsletter');
+        if (garde) {
+            var b = document.querySelector('.onglet-stat[data-cible="' + garde + '"]');
+            if (b) b.click();
+        }
+    } catch (e) {}
+})();
+</script>
+
 {% endblock %}

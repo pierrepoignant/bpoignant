@@ -736,3 +736,66 @@ def import_stats():
                     "ne correspondent à rien ici — publiées hors du site ?")
     flash(message + '.', 'success')
     return redirect(url_for('admin_linkedin.index'))
+
+
+@admin_linkedin_bp.route('/stats')
+@admin_required
+def stats():
+    """Impressions et interactions par période, d'après l'export.
+
+    Même présentation que les autres réseaux, à une différence près : les
+    chiffres ne viennent pas d'une API mais d'un fichier déposé à la main, donc
+    ils s'arrêtent au dernier import. La page le dit plutôt que de laisser
+    croire à un creux d'audience.
+    """
+    from datetime import timedelta
+    from articles.models import Article
+    from tiktok.models import TikTokPost
+    from tweets import RANGES, GROUPS, _stats_args, _bucket_start, _bucket_next, _bucket_labels
+
+    jours, groupe = _stats_args()
+    today = datetime.utcnow().date()
+    premier = today - timedelta(days=jours - 1) if jours > 1 else today - timedelta(days=1)
+    dernier = today if jours > 1 else today - timedelta(days=1)
+
+    # Toutes les périodes de la fenêtre, vides comprises : une série trouée se
+    # lit comme une chute, alors qu'elle ne dit que l'absence de relevé.
+    seaux, debut = {}, _bucket_start(premier, groupe)
+    while debut <= dernier:
+        seaux[debut] = {'posts': 0, 'views': 0, 'likes': 0, 'replies': 0, 'shares': 0}
+        debut = _bucket_next(debut, groupe)
+
+    for ligne in DailyStat.query.filter(DailyStat.day >= premier,
+                                        DailyStat.day <= dernier).all():
+        seau = seaux.get(_bucket_start(ligne.day, groupe))
+        if seau is None:
+            continue
+        seau['views'] += ligne.impressions or 0
+        seau['likes'] += ligne.interactions or 0
+        seau['shares'] += ligne.new_followers or 0
+
+    # Les publications, comptées le jour où elles sont parties.
+    for quand in ([a.linkedin_posted_at for a in Article.query
+                   .filter(Article.linkedin_posted_at.isnot(None)).all()]
+                  + [c.linkedin_posted_at for c in TikTokPost.query
+                     .filter(TikTokPost.linkedin_posted_at.isnot(None)).all()]):
+        seau = seaux.get(_bucket_start(quand.date(), groupe))
+        if seau is not None:
+            seau['posts'] += 1
+
+    points = []
+    for debut in sorted(seaux):
+        p = dict(seaux[debut])
+        court, complet = _bucket_labels(debut, groupe)
+        p.update(label=court, full=complet,
+                 per_post=round(p['views'] / p['posts']) if p['posts'] else 0)
+        points.append(p)
+    totaux = {k: sum(p[k] for p in points)
+              for k in ('posts', 'views', 'likes', 'replies', 'shares')}
+    totaux['per_post'] = (round(totaux['views'] / totaux['posts'])
+                          if totaux['posts'] else 0)
+
+    dernier_jour = db.session.query(db.func.max(DailyStat.day)).scalar()
+    return render_template('linkedin_stats.html', points=points, totals=totaux,
+                           days=jours, group=groupe, ranges=RANGES, groups=GROUPS,
+                           dernier_jour=dernier_jour)

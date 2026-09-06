@@ -96,7 +96,7 @@
             <i class="fa-brands fa-x-twitter"></i> Twitter
         </a>
         <a href="{{ url_for('admin_linkedin.index') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/linkedin') %}btn-primary{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/linkedin') and not _p.startswith('/admin/linkedin/stats') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fa-brands fa-linkedin-in"></i> LinkedIn
         </a>
 
@@ -104,7 +104,8 @@
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') or _p.startswith('/seo')
                                  or _p.startswith('/admin/tweets/stats') or _p.startswith('/admin/tiktok/stats')
-                                 or _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
+                                 or _p.startswith('/admin/sends/stats')
+                                 or _p.startswith('/admin/linkedin/stats') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-chart-line"></i> Statistiques
         </a>
 
@@ -159,7 +160,7 @@
        plateforme. #}
     {% if _p.startswith('/admin/analytics') or _p.startswith('/admin/tweets/stats')
           or _p.startswith('/admin/tiktok/stats') or _p.startswith('/admin/sends/stats')
-          or _p.startswith('/seo') %}
+          or _p.startswith('/admin/linkedin/stats') or _p.startswith('/seo') %}
     <nav class="admin-tabs" aria-label="Statistiques" style="margin-top: -0.4rem;">
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-vert{% else %}btn-outline{% endif %}">
@@ -172,6 +173,10 @@
         <a href="{{ url_for('admin_tiktok.stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             TikTok
+        </a>
+        <a href="{{ url_for('admin_linkedin.stats') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/linkedin/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            LinkedIn
         </a>
         <a href="{{ url_for('admin_sends.newsletter_stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
