@@ -108,7 +108,7 @@
 
     {% if contacts %}
     <div id="liste-contacts" data-url="{{ url_for('admin_subscribers.gmail_decide') }}">
-        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.9rem;">
+        <div class="barre-groupee" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.9rem;">
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
                     onclick="document.querySelectorAll('.coche').forEach(c => c.checked = true);">Tout cocher</button>
             <span style="color: var(--gris); font-size: 0.85rem;">puis&nbsp;:</span>
@@ -132,7 +132,7 @@
                 <tbody>
                     {% for c in contacts %}
                     <tr data-ligne="{{ c.id }}" style="border-top: 1px solid var(--gris-clair);">
-                        <td style="padding: 0.7rem 0.6rem; text-align: center;">
+                        <td data-label="Sélectionner" style="padding: 0.7rem 0.6rem; text-align: center;">
                             <input type="checkbox" value="{{ c.id }}" class="coche">
                         </td>
                         <td data-label="Personne" style="padding: 0.7rem 1rem;">
@@ -157,7 +157,7 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td style="padding: 0.7rem 1rem; text-align: right; white-space: nowrap;">
+                        <td class="actions decisions" style="padding: 0.7rem 1rem; text-align: right; white-space: nowrap;">
                             {# Pas de fenêtre de confirmation : à cent contacts à
                                trier, elle double le nombre de clics. Le filet est
                                l'annulation proposée après coup. #}

@@ -1372,3 +1372,48 @@ a:hover { color: var(--rouge-fonce); }
     .minute-nav { display: none; }
 }
 
+
+/* ── Contacts Gmail au téléphone ────────────────────────────
+   La fiche empilée convient au reste de l'administration, mais pas à une page
+   dont chaque ligne porte trois décisions : au pouce, trois boutons alignés à
+   droite deviennent trois cibles de quelques millimètres. */
+@media (max-width: 768px) {
+    /* Les trois décisions occupent leur propre rangée, à parts égales. */
+    .admin-stack-table td.decisions {
+        display: flex;
+        gap: 0.4rem;
+        padding-top: 0.7rem !important;
+        margin-top: 0.5rem;
+        border-top: 1px solid #f2f2f2;
+    }
+    .admin-stack-table td.decisions button {
+        flex: 1;
+        min-height: 40px;              /* cible tactile fiable */
+        font-size: 0.85rem;
+        padding: 0 4px !important;
+    }
+
+    /* La case de sélection revient à gauche de son libellé plutôt que seule. */
+    .admin-stack-table td[data-label="Sélectionner"] {
+        justify-content: flex-start;
+        gap: 0.6rem;
+    }
+    .admin-stack-table td[data-label="Sélectionner"] input { width: 20px; height: 20px; }
+
+    /* Les actions groupées passent sur deux rangées lisibles. */
+    .barre-groupee { gap: 0.4rem; }
+    .barre-groupee .btn { flex: 1 1 auto; min-height: 38px; }
+    .barre-groupee span { flex-basis: 100%; }
+
+    /* Le retour d'action tient la largeur, au-dessus de la barre du système. */
+    #bandeau-action {
+        left: 12px; right: 12px;
+        transform: none;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        text-align: center;
+    }
+
+    /* L'adresse est longue et doit pouvoir se couper. */
+    .admin-stack-table td[data-label="Personne"] { display: block; }
+    .admin-stack-table td[data-label="Personne"]::before { display: block; }
+}
