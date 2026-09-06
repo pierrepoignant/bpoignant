@@ -1,0 +1,111 @@
+{% extends 'admin_base.html' %}
+{% block title %}Vidéos{% endblock %}
+
+{% block admin_title %}<i class="fas fa-film" style="color: var(--vert);"></i> Vidéos{% endblock %}
+{% block admin_subtitle %}<p>Les vidéos de La Minute, et où chacune est passée.</p>{% endblock %}
+
+{% macro pastille(actif, icone, libelle, url=None, couleur='var(--vert-fonce)') %}
+{# Une pastille par plateforme : allumée quand c'est publié, éteinte sinon.
+   Lisible d'un coup d'œil, et sur téléphone elle reste une cible de 32 px. #}
+{% if actif and url %}
+<a href="{{ url }}" target="_blank" rel="noopener" title="{{ libelle }}"
+   style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:{{ couleur }}; color:#fff; text-decoration:none;">
+    <i class="{{ icone }}"></i>
+</a>
+{% elif actif %}
+<span title="{{ libelle }}"
+      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:{{ couleur }}; color:#fff;">
+    <i class="{{ icone }}"></i>
+</span>
+{% else %}
+<span title="{{ libelle }}"
+      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--gris-clair); color:#bbb;">
+    <i class="{{ icone }}"></i>
+</span>
+{% endif %}
+{% endmacro %}
+
+{% block admin_content %}
+    {% if clips %}
+    <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1.2rem;">
+        {{ clips|length }} vidéo{{ 's' if clips|length > 1 else '' }} ·
+        {{ clips|selectattr('x_post_id')|list|length }} sur X ·
+        {{ clips|selectattr('linkedin_post_id')|list|length }} sur LinkedIn ·
+        {{ minute_sends|length }} envoyée{{ 's' if minute_sends|length > 1 else '' }} dans La Minute
+    </p>
+
+    {% for c in clips %}
+    <div class="video-carte">
+        <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="video-vignette">
+            {% if c.poster_url %}
+            <img src="{{ c.poster_url }}" alt="" loading="lazy">
+            {% else %}<i class="fas fa-video"></i>{% endif %}
+        </a>
+
+        <div class="video-corps">
+            <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="video-titre">{{ c.title|truncate(90) }}</a>
+            <div class="video-meta">
+                {{ c.posted_at.strftime('%d/%m/%Y') if c.posted_at else '—' }}
+                {% if c.duration_seconds %} · {{ '%.0f'|format(c.duration_seconds) }} s{% endif %}
+                · <i class="far fa-eye"></i> {{ site_views.get(c.id, 0) }} sur le site
+                {% if c.views is not none %} · <i class="fa-brands fa-tiktok"></i> {{ c.views }}{% endif %}
+                {% if c.x_view_count is not none %} · <i class="fa-brands fa-x-twitter"></i> {{ c.x_view_count }}{% endif %}
+            </div>
+
+            <div class="video-pastilles">
+                {{ pastille(c.posted_url, 'fa-brands fa-tiktok', 'TikTok', c.posted_url, '#000') }}
+                {{ pastille(c.x_post_id, 'fa-brands fa-x-twitter', 'X', c.x_url, '#000') }}
+                {{ pastille(c.linkedin_post_id, 'fa-brands fa-linkedin-in', 'LinkedIn', c.linkedin_url, '#0A66C2') }}
+                {% set envoi = minute_sends.get(c.id) %}
+                {{ pastille(envoi, 'far fa-envelope',
+                            'La Minute — %s destinataires le %s'|format(envoi.success_count, envoi.sent_at.strftime('%d/%m/%Y')) if envoi else 'Pas encore envoyé dans La Minute',
+                            None, 'var(--rouge)') }}
+            </div>
+        </div>
+
+        <div class="video-actions">
+            {% if not c.x_post_id %}
+            <form method="POST" action="{{ url_for('admin_tiktok.post_to_x', post_id=c.id) }}" style="margin:0;"
+                  onsubmit="return confirm('Publier cette vidéo sur X ?')">
+                <button type="submit" class="btn btn-sm" style="background:#000; color:#fff; border:none; border-radius:50px; padding:6px 14px;">
+                    <i class="fa-brands fa-x-twitter"></i> Publier
+                </button>
+            </form>
+            {% endif %}
+            {% if not c.linkedin_post_id and linkedin_ok %}
+            <form method="POST" action="{{ url_for('admin_tiktok.post_to_linkedin', post_id=c.id) }}" style="margin:0;"
+                  onsubmit="return confirm('Publier cette vidéo sur LinkedIn ?')">
+                <button type="submit" class="btn btn-sm" style="background:#0A66C2; color:#fff; border:none; border-radius:50px; padding:6px 14px;">
+                    <i class="fa-brands fa-linkedin-in"></i> Publier
+                </button>
+            </form>
+            {% endif %}
+            {# L'envoi de La Minute vit ici : c'est la page des vidéos, donc
+               c'est d'ici qu'on les envoie aux abonnés. #}
+            <button type="button" class="btn btn-sm bouton-minute"
+                    data-titre="{{ c.title }}"
+                    data-test="{{ url_for('admin_tiktok.send_minute_test', post_id=c.id) }}"
+                    data-envoi="{{ url_for('admin_tiktok.send_minute', post_id=c.id) }}"
+                    style="border-radius:50px; padding:6px 14px; border:1px solid #e0e0e0;
+                           background: {{ 'var(--gris-clair)' if minute_sends.get(c.id) else 'none' }};
+                           color: {{ 'var(--gris)' if minute_sends.get(c.id) else 'var(--noir)' }};">
+                <i class="far fa-envelope"></i> {{ 'Renvoyer' if minute_sends.get(c.id) else 'La Minute' }}
+            </button>
+            <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                <i class="fas fa-pen"></i> Modifier
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="text-align:center; padding:3rem; color:var(--gris); background:white; border-radius:12px;">
+        <i class="fas fa-film" style="font-size:3rem; margin-bottom:1rem;"></i>
+        <p>Aucune vidéo rattachée pour l'instant.<br>
+           Montez un clip, publiez-le sur TikTok, puis rattachez-le depuis
+           <a href="{{ url_for('admin_tiktok.list_posts') }}">les posts</a>.</p>
+    </div>
+    {% endif %}
+
+{% include 'tiktok_minute_overlay.html' %}
+{% endblock %}

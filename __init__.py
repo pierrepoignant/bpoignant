@@ -141,6 +141,8 @@ def create_app(db_name='ovh'):
     from tiktok import admin_tiktok_bp, public_tiktok_bp
     app.register_blueprint(admin_tiktok_bp)
     app.register_blueprint(public_tiktok_bp)
+    from linkedin import admin_linkedin_bp
+    app.register_blueprint(admin_linkedin_bp)
 
     # Veilleur d'enchaînement après montage : uniquement là où les fichiers
     # sont, c'est-à-dire sur la machine de développement.

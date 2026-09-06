@@ -274,6 +274,43 @@ def update_themes(post_id):
     return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
+@admin_tiktok_bp.route('/videos')
+@admin_required
+def videos():
+    """Les vidéos de La Minute et ce qui en a été fait.
+
+    Distincte de la liste des posts TikTok : celle-ci recense ce qui a été
+    scrapé, y compris des posts sans fichier. Ici on ne montre que les vidéos
+    montées, et pour chacune où elle est passée — TikTok, X, LinkedIn, et
+    l'envoi de La Minute.
+    """
+    import linkedin
+    import video as video_mod
+    from newsletter import _mailable_query
+    from newsletter.models import MinuteSend
+
+    clips = (
+        TikTokPost.query
+        .filter(TikTokPost.video_url.isnot(None))
+        .order_by(TikTokPost.posted_at.desc())
+        .all()
+    )
+    envois = {}
+    for m in MinuteSend.query.order_by(MinuteSend.sent_at.desc()).all():
+        envois.setdefault(m.post_id, m)
+    vues = dict(
+        db.session.query(VideoView.post_id, db.func.count(VideoView.id))
+        .group_by(VideoView.post_id).all()
+    )
+    return render_template(
+        'tiktok_admin_videos.html', clips=clips, minute_sends=envois,
+        site_views=vues, minute_count=_mailable_query('minute').count(),
+        linkedin_ok=linkedin.is_configured(),
+        video_enabled=video_mod.is_enabled(),
+        mon_email=getattr(current_user, 'email', '') or '',
+    )
+
+
 @admin_tiktok_bp.route('/stats')
 @admin_required
 def stats():

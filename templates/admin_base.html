@@ -76,9 +76,13 @@
            class="btn btn-sm {% if _p.startswith('/admin/tweets') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fa-brands fa-x-twitter"></i> Twitter
         </a>
-        <a href="{{ url_for('admin_tiktok.list_posts') }}"
+        <a href="{{ url_for('admin_tiktok.videos') }}"
            class="btn btn-sm {% if _p.startswith('/admin/tiktok') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fa-brands fa-tiktok"></i> TikTok
+            <i class="fas fa-film"></i> Vidéos
+        </a>
+        <a href="{{ url_for('admin_linkedin.index') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/linkedin') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fa-brands fa-linkedin-in"></i> LinkedIn
         </a>
         {% if video_tools %}
         <a href="{{ url_for('admin_video.index') }}"
@@ -105,10 +109,14 @@
     </nav>
 
     {% if _p.startswith('/admin/tiktok') %}
-    <nav class="admin-tabs" aria-label="TikTok" style="margin-top: -0.4rem;">
+    <nav class="admin-tabs" aria-label="Vidéos" style="margin-top: -0.4rem;">
+        <a href="{{ url_for('admin_tiktok.videos') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok/videos') %}btn-vert{% else %}btn-outline{% endif %}">
+            Vidéos
+        </a>
         <a href="{{ url_for('admin_tiktok.list_posts') }}"
-           class="btn btn-sm {% if not _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">
-            Posts
+           class="btn btn-sm {% if _p == '/admin/tiktok/' or _p.startswith('/admin/tiktok/' ) and not _p.startswith('/admin/tiktok/videos') and not _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">
+            Posts TikTok
         </a>
         <a href="{{ url_for('admin_tiktok.stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/tiktok/stats') %}btn-vert{% else %}btn-outline{% endif %}">

@@ -131,14 +131,14 @@
         <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-fire" style="color: var(--rouge);"></i> Pages les plus vues</h2>
             {% if top_pages %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for p in top_pages %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.5rem 0; word-break: break-all;"><code style="background: var(--gris-clair); padding: 1px 6px; border-radius: 4px; font-size: 0.8rem;">{{ p.path }}</code></td>
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ p.n }}</td>
                 </tr>
                 {% endfor %}
-            </table>
+            </table></div>
             {% else %}
             <p style="color: var(--gris); margin: 0;">Aucune donnée.</p>
             {% endif %}
@@ -147,14 +147,14 @@
         <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-external-link-alt" style="color: var(--vert-fonce);"></i> Sources de trafic</h2>
             {% if top_referrers %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for r in top_referrers %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.5rem 0; word-break: break-all;"><a href="{{ r.referrer }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ r.referrer }}</a></td>
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
                 </tr>
                 {% endfor %}
-            </table>
+            </table></div>
             {% else %}
             <p style="color: var(--gris); margin: 0;">Aucun lien entrant pour le moment.</p>
             {% endif %}
@@ -169,7 +169,7 @@
                 <span style="font-weight: 400; color: var(--gris); font-size: 0.85rem;">({{ total_searches }})</span>
             </h2>
             {% if top_searches %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for r in top_searches %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.5rem 0; word-break: break-word;">
@@ -184,7 +184,7 @@
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
                 </tr>
                 {% endfor %}
-            </table>
+            </table></div>
             {% else %}
             <p style="color: var(--gris); margin: 0;">Aucune recherche sur cette période.</p>
             {% endif %}
@@ -199,14 +199,14 @@
                 ou des mots absents des articles existants.
             </p>
             {% if empty_searches %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for r in empty_searches %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.5rem 0; word-break: break-word;">{{ r.term }}</td>
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
                 </tr>
                 {% endfor %}
-            </table>
+            </table></div>
             {% else %}
             <p style="color: var(--gris); margin: 0;">Toutes les recherches ont donné des résultats.</p>
             {% endif %}

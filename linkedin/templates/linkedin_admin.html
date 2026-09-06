@@ -1,0 +1,100 @@
+{% extends 'admin_base.html' %}
+{% block title %}LinkedIn{% endblock %}
+
+{% block admin_title %}<i class="fa-brands fa-linkedin" style="color: var(--vert);"></i> LinkedIn{% endblock %}
+{% block admin_subtitle %}<p>Ce qui est publié sur le profil de Bernard.</p>{% endblock %}
+
+{% block admin_content %}
+    {% if not connected %}
+    <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.4rem;">
+        LinkedIn n'est pas connecté — la publication est à l'arrêt.
+        <a href="{{ url_for('admin_settings.index') }}#linkedin" style="color: inherit; text-decoration: underline;">Connecter</a>
+    </div>
+    {% else %}
+    {# L'autorisation expire au bout de soixante jours sans se renouveler :
+       c'est la seule chose qui puisse arrêter les publications en silence. #}
+    <div style="background: {{ '#FDECEA' if jours is not none and jours < 7 else 'var(--gris-clair)' }}; border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.4rem;">
+        Connecté en tant que <strong>{{ nom or 'ce compte' }}</strong>.
+        {% if jours is not none %}
+        Autorisation valable encore <strong>{{ jours }} jour{{ 's' if jours > 1 else '' }}</strong>
+        {%- if expire %}, jusqu'au {{ expire.strftime('%d/%m/%Y') }}{% endif %} —
+        elle ne se renouvelle pas toute seule.
+        <a href="{{ url_for('admin_settings.index') }}#linkedin" style="color: var(--rouge);">Renouveler</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.6rem;">
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Publiés</div>
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ lignes|length }}</div>
+        </div>
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">En attente</div>
+            <div style="font-size: 1.9rem; font-weight: 800; color: var(--rouge);">{{ attente }}</div>
+            <div style="color: var(--gris); font-size: 0.78rem;">soit {{ attente }} jour{{ 's' if attente > 1 else '' }}</div>
+        </div>
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Aujourd'hui</div>
+            <div style="font-size: 1.05rem; font-weight: 700; margin-top: 0.4rem;">
+                {{ 'Déjà publié' if aujourdhui else 'Rien encore' }}
+            </div>
+            <div style="color: var(--gris); font-size: 0.78rem;">un article par jour, à 9 h</div>
+        </div>
+    </div>
+
+    {% if prochain %}
+    <p style="font-size: 0.88rem; color: var(--gris); margin: 0 0 1.4rem;">
+        Prochain automatiquement : <strong style="color: var(--noir);">{{ prochain.title|truncate(70) }}</strong>
+        <span style="color: #bbb;">({{ prochain.created_at.strftime('%d/%m/%Y') }})</span>
+    </p>
+    {% endif %}
+
+    {# Aucune statistique n'est affichée, et c'est volontaire : LinkedIn n'en
+       publie pas pour un membre, une colonne vide vaudrait moins que rien. #}
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.4rem;">
+        LinkedIn ne publie ni vues ni réactions pour les publications d'un membre —
+        seules les pages d'organisation en ont. Les chiffres se lisent donc sur LinkedIn même.
+    </div>
+
+    {% if lignes %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
+            <thead style="background: var(--gris-clair);">
+                <tr style="font-size: 0.85rem;">
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Publié</th>
+                    <th style="text-align: left; padding: 0.8rem 1rem;">Contenu</th>
+                    <th style="text-align: right; padding: 0.8rem 1rem;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in lignes %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td data-label="Publié" style="padding: 0.7rem 1rem; color: var(--gris); white-space: nowrap;">
+                        {{ l.at.strftime('%d/%m/%Y') if l.at else '—' }}
+                    </td>
+                    <td data-label="Contenu" style="padding: 0.7rem 1rem;">
+                        <span style="display:inline-block; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--gris); margin-right:0.4rem;">
+                            {{ 'Vidéo' if l.kind == 'video' else 'Article' }}
+                        </span>
+                        {{ l.title|truncate(80) }}
+                    </td>
+                    <td class="actions" style="padding: 0.7rem 1rem; text-align: right;">
+                        {% if l.url %}
+                        <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                           style="color: var(--noir); border-color: #e0e0e0;">Voir</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
+        <p style="margin: 0;">Rien de publié sur LinkedIn pour l'instant.</p>
+    </div>
+    {% endif %}
+{% endblock %}

@@ -446,3 +446,51 @@ def auto_post():
     db.session.commit()
     log.info("auto_post LinkedIn : article %s partagé", article.id)
     return {'status': 'posted', 'article': article, 'text': texte}
+
+
+# ─── Écran d'administration ─────────────────────────────────
+
+from flask import Blueprint, render_template  # noqa: E402
+
+from auth import admin_required  # noqa: E402
+
+admin_linkedin_bp = Blueprint('admin_linkedin', __name__,
+                              url_prefix='/admin/linkedin',
+                              template_folder='templates')
+
+
+@admin_linkedin_bp.route('/')
+@admin_required
+def index():
+    """Ce qui est parti sur LinkedIn, et l'état de l'autorisation.
+
+    Pas de chiffres : LinkedIn n'en publie aucun pour les publications d'un
+    membre. La page dit donc ce qui a été publié et quand, et surveille la date
+    d'expiration — la seule chose qui puisse arrêter les publications sans
+    prévenir.
+    """
+    from articles.models import Article
+    from tiktok.models import TikTokPost
+
+    articles = (Article.query.filter(Article.linkedin_posted_at.isnot(None))
+                .order_by(Article.linkedin_posted_at.desc()).all())
+    clips = (TikTokPost.query.filter(TikTokPost.linkedin_post_id.isnot(None))
+             .order_by(TikTokPost.linkedin_posted_at.desc()).all())
+    lignes = [{'kind': 'article', 'title': a.title, 'at': a.linkedin_posted_at,
+               'url': a.linkedin_post_url} for a in articles]
+    lignes += [{'kind': 'video', 'title': c.title, 'at': c.linkedin_posted_at,
+                'url': c.linkedin_url} for c in clips]
+    lignes.sort(key=lambda l: l['at'] or datetime.min, reverse=True)
+
+    return render_template(
+        'linkedin_admin.html',
+        lignes=lignes,
+        connected=is_configured(),
+        nom=display_name(),
+        jours=days_left(),
+        expire=expires_at(),
+        attente=Article.query.filter(Article.published == True,  # noqa: E712
+                                     Article.linkedin_posted_at.is_(None)).count(),
+        prochain=next_article_to_post(),
+        aujourdhui=already_posted_today(),
+    )

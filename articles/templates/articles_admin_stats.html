@@ -147,7 +147,7 @@
             <i class="fas fa-circle-info"></i> Aucune donnée d'ouverture/clic pour cet article dans SendGrid (envoi antérieur au marquage par catégorie, ou suivi désactivé).
         </p>
         {% endif %}
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
             <thead><tr style="font-size: 0.8rem; color: var(--gris); text-align: left;">
                 <th style="padding: 0.4rem 0;">Envoi</th><th>Destinataires</th><th>Réussis</th><th>Erreurs</th>
             </tr></thead>
@@ -161,7 +161,7 @@
                 </tr>
             {% endfor %}
             </tbody>
-        </table>
+        </table></div>
         {% else %}
         <p style="color: var(--gris);">Cet article n'a pas encore été envoyé par newsletter.</p>
         {% endif %}
@@ -171,14 +171,14 @@
     <div style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
         <h2 style="font-size: 1.1rem; margin: 0 0 1rem;"><i class="fas fa-sign-in-alt" style="color: var(--rouge);"></i> Sources de trafic ({{ days }} j)</h2>
         {% if top_referrers %}
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
             {% for r in top_referrers %}
             <tr style="border-top: 1px solid var(--gris-clair);">
                 <td style="padding: 0.5rem 0; word-break: break-all;"><a href="{{ r.referrer }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ r.referrer }}</a></td>
                 <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
             </tr>
             {% endfor %}
-        </table>
+        </table></div>
         {% else %}
         <p style="color: var(--gris);">Aucune source externe sur la période (accès directs ou navigation interne).</p>
         {% endif %}

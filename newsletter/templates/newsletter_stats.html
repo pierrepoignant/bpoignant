@@ -147,7 +147,7 @@
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem;">
             <h3 style="font-size: 1rem; margin: 0 0 0.8rem;">{{ title }}</h3>
             {% if rows %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for r in rows %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.45rem 0;">
@@ -160,7 +160,7 @@
                     </td>
                 </tr>
                 {% endfor %}
-            </table>
+            </table></div>
             {% else %}
             <p style="color: var(--gris); margin: 0;">Rien encore.</p>
             {% endif %}

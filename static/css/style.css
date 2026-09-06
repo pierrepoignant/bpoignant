@@ -1417,3 +1417,68 @@ a:hover { color: var(--rouge-fonce); }
     .admin-stack-table td[data-label="Personne"] { display: block; }
     .admin-stack-table td[data-label="Personne"]::before { display: block; }
 }
+
+/* ── Vidéos : une fiche par vidéo ───────────────────────────
+   Pensée pour le téléphone d'abord : la vignette et le texte sur une ligne,
+   les actions sur la suivante, en cibles pleine largeur. */
+.video-carte {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 0.7rem;
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    grid-template-areas: "vignette corps" "actions actions";
+    gap: 0.5rem 1rem;
+    align-items: start;
+}
+.video-vignette {
+    grid-area: vignette;
+    width: 64px; height: 96px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--gris-clair);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--gris);
+}
+.video-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-corps { grid-area: corps; min-width: 0; }
+.video-titre { font-weight: 700; color: var(--noir); display: block; margin-bottom: 0.2rem; }
+.video-meta { font-size: 0.78rem; color: var(--gris); line-height: 1.6; }
+.video-pastilles { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+
+.video-actions {
+    grid-area: actions;
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    padding-top: 0.6rem;
+    border-top: 1px solid #f2f2f2;
+}
+
+@media (min-width: 900px) {
+    /* Au-delà, les actions retrouvent leur place à droite. */
+    .video-carte {
+        grid-template-columns: 64px 1fr auto;
+        grid-template-areas: "vignette corps actions";
+        align-items: center;
+    }
+    .video-actions { border-top: none; padding-top: 0; }
+}
+
+@media (max-width: 768px) {
+    /* Les actions occupent toute la largeur, deux par rangée. */
+    .video-actions .btn, .video-actions form { flex: 1 1 45%; }
+    .video-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+    .video-actions form .btn { width: 100%; }
+
+    /* Les outils d'entretien des articles, en bas de page, sur toute la largeur. */
+    .admin-entretien form { flex: 1 1 100%; }
+    .admin-entretien .btn { width: 100%; min-height: 40px; }
+
+    /* Un tableau dense défile dans son cadre ; la page, jamais. */
+    .admin-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .admin-table-wrap table { min-width: 520px; }
+    .admin-table-wrap table.admin-stack-table { min-width: 0; }
+}
