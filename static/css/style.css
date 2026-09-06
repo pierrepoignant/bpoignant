@@ -1433,6 +1433,13 @@ a:hover { color: var(--rouge-fonce); }
     gap: 0.5rem 1rem;
     align-items: start;
 }
+/* Sans image, la colonne de vignette disparaît : le titre prend toute la
+   largeur au lieu de laisser un carré gris. */
+.fiche.sans-image {
+    grid-template-columns: 1fr;
+    grid-template-areas: "corps" "actions";
+}
+
 .fiche-vignette {
     grid-area: vignette;
     width: 64px; height: 96px;
@@ -1464,14 +1471,36 @@ a:hover { color: var(--rouge-fonce); }
         grid-template-areas: "vignette corps actions";
         align-items: center;
     }
+    .fiche.sans-image {
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "corps actions";
+    }
     .fiche-actions { border-top: none; padding-top: 0; }
 }
 
-@media (max-width: 768px) {
-    /* Les actions occupent toute la largeur, deux par rangée. */
-    .fiche-actions .btn, .fiche-actions form { flex: 1 1 45%; }
-    .fiche-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
-    .fiche-actions form .btn { width: 100%; }
+@media (max-width: 900px) {
+    /* Trois actions par rangée, en colonnes égales. Une grille plutôt qu'un
+       flex : les boutons n'ont pas la même longueur de libellé, et en flex ils
+       s'alignaient sur leur texte au lieu de la colonne. */
+    .fiche-actions {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.4rem;
+    }
+    .fiche-actions form { display: contents; }     /* le bouton devient l'élément de grille */
+    .fiche-actions .btn {
+        width: 100%;
+        min-height: 40px;                          /* cible tactile fiable */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
+        padding: 6px 8px !important;
+        font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 
     /* Les outils d'entretien des articles, en bas de page, sur toute la largeur. */
     .admin-entretien form { flex: 1 1 100%; }

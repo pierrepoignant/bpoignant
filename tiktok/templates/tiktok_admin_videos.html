@@ -31,12 +31,12 @@
     </p>
 
     {% for c in clips %}
-    <div class="fiche">
+    <div class="fiche{% if not c.poster_url %} sans-image{% endif %}">
+        {% if c.poster_url %}
         <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="fiche-vignette">
-            {% if c.poster_url %}
             <img src="{{ c.poster_url }}" alt="" loading="lazy">
-            {% else %}<i class="fas fa-video"></i>{% endif %}
         </a>
+        {% endif %}
 
         <div class="fiche-corps">
             <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="fiche-titre">{{ c.title|truncate(90) }}</a>

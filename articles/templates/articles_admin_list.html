@@ -19,14 +19,14 @@
 
     {% if articles %}
         {% for a in articles %}
-        <div class="fiche">
+        {# Sans image, pas de vignette : un cadre gris vide n'apprend rien et
+           mange la largeur du titre, qui est ce qu'on vient lire. #}
+        <div class="fiche{% if not a.image_url %} sans-image{% endif %}">
+            {% if a.image_url %}
             <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}" class="fiche-vignette">
-                {% if a.image_url %}
                 <img src="{{ a.image_url }}" alt="" loading="lazy">
-                {% else %}
-                <i class="fas fa-newspaper"></i>
-                {% endif %}
             </a>
+            {% endif %}
 
             <div class="fiche-corps">
                 <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}" class="fiche-titre">
