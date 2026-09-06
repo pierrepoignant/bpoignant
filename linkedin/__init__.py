@@ -35,9 +35,21 @@ API = 'https://api.linkedin.com'
 # sans validation dans la console LinkedIn.
 SCOPE = 'openid profile w_member_social'
 
-# LinkedIn exige un en-tête de version daté sur ses API récentes. Réglable :
-# les versions sont retirées au bout d'un an environ.
-DEFAULT_VERSION = '202401'
+# LinkedIn exige un en-tête de version daté (AAAAMM) et retire ses versions au
+# bout d'un an environ. Une constante écrite en dur pourrit donc toute seule :
+# la valeur par défaut suit le calendrier, et une version refusée est
+# rattrapée plus bas en reculant de mois en mois.
+def _default_version():
+    # Le mois précédent : la version du mois courant n'est pas toujours
+    # publiée le premier jour.
+    aujourdhui = datetime.utcnow()
+    annee, mois = aujourdhui.year, aujourdhui.month - 1
+    if mois == 0:
+        annee, mois = annee - 1, 12
+    return f'{annee}{mois:02d}'
+
+
+DEFAULT_VERSION = _default_version()
 
 KEY_CLIENT_ID = 'linkedin_client_id'
 KEY_CLIENT_SECRET = 'linkedin_client_secret'
@@ -68,7 +80,49 @@ def _client_secret():
 
 
 def _version():
-    return (get_config(KEY_VERSION) or DEFAULT_VERSION).strip()
+    return (get_config(KEY_VERSION) or _default_version()).strip()
+
+
+def _version_precedente(version):
+    """The month before `version`, for walking back to one LinkedIn still
+    accepts."""
+    try:
+        annee, mois = int(version[:4]), int(version[4:6])
+    except (ValueError, IndexError):
+        return None
+    mois -= 1
+    if mois == 0:
+        annee, mois = annee - 1, 12
+    return f'{annee}{mois:02d}'
+
+
+def _appeler(methode, url, **kw):
+    """Send a request, stepping the API version back if LinkedIn has retired it.
+
+    LinkedIn answers 426 NONEXISTENT_VERSION for a version older than about a
+    year, and a version that worked in January is refused the following spring.
+    The call is retried a month earlier at a time, and the version that answers
+    is stored — so this heals itself once instead of failing every time.
+
+    A 426 means the request was refused outright, so retrying it cannot
+    duplicate anything.
+    """
+    version = _version()
+    for _ in range(18):
+        entetes = dict(kw.pop('headers', {}) or {})
+        entetes['LinkedIn-Version'] = version
+        r = requests.request(methode, url, headers=entetes, **kw)
+        if r.status_code != 426 or 'NONEXISTENT_VERSION' not in (r.text or ''):
+            if version != (get_config(KEY_VERSION) or ''):
+                set_config(KEY_VERSION, version)
+            return r
+        precedente = _version_precedente(version)
+        if not precedente:
+            return r
+        log.info('LinkedIn: version %s retirée, essai avec %s', version, precedente)
+        version = precedente
+        kw['headers'] = entetes
+    return r
 
 
 def has_client_credentials():
@@ -229,8 +283,8 @@ def _publier(commentary, media=None):
     if media:
         corps['content'] = {'media': media}
 
-    r = requests.post(f'{API}/rest/posts', headers=_headers(),
-                      data=json.dumps(corps), timeout=_TIMEOUT)
+    r = _appeler('POST', f'{API}/rest/posts', headers=_headers(),
+                 data=json.dumps(corps), timeout=_TIMEOUT)
     if r.status_code not in (200, 201):
         return False, f"LinkedIn a refusé la publication ({r.status_code}) : {r.text[:200]}"
     # L'identifiant du post arrive dans un en-tête, pas dans le corps.
@@ -254,8 +308,8 @@ def post_video(path, text, titre=None):
     upload, with different names.
     """
     taille = os.path.getsize(path)
-    init = requests.post(
-        f'{API}/rest/videos?action=initializeUpload', headers=_headers(),
+    init = _appeler(
+        'POST', f'{API}/rest/videos?action=initializeUpload', headers=_headers(),
         data=json.dumps({'initializeUploadRequest': {
             'owner': person_urn(), 'fileSizeBytes': taille,
             'uploadCaptions': False, 'uploadThumbnail': False,
@@ -285,8 +339,8 @@ def post_video(path, text, titre=None):
                 return False, "LinkedIn n'a pas confirmé la réception d'un fragment."
             etags.append(etag.strip('"'))
 
-    fin_up = requests.post(
-        f'{API}/rest/videos?action=finalizeUpload', headers=_headers(),
+    fin_up = _appeler(
+        'POST', f'{API}/rest/videos?action=finalizeUpload', headers=_headers(),
         data=json.dumps({'finalizeUploadRequest': {
             'video': video_urn, 'uploadToken': '', 'uploadedPartIds': etags,
         }}), timeout=_TIMEOUT)
