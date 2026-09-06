@@ -28,6 +28,14 @@ KEY_PROFILE = 'apify_tiktok_profile'
 # code change.
 DEFAULT_ACTOR = 'clockworks~tiktok-scraper'
 
+# Acteurs LinkedIn. Ils lisent un profil ou une page d'entreprise — abonnés,
+# intitulé, localisation — et non les publications : LinkedIn n'expose les
+# chiffres d'un post de membre à personne, pas davantage à un scrapeur.
+DEFAULT_ACTOR_LINKEDIN = 'harvestapi~linkedin-profile-scraper'
+DEFAULT_ACTOR_LINKEDIN_COMPANY = 'pratikdani~linkedin-company-profile-scraper'
+KEY_ACTOR_LINKEDIN = 'apify_actor_linkedin'
+KEY_ACTOR_LINKEDIN_COMPANY = 'apify_actor_linkedin_company'
+
 _TIMEOUT = 30
 # An actor run is not instant; this is the ceiling for the synchronous call
 # that starts a run and waits for its dataset.
@@ -179,3 +187,73 @@ def normalise(item):
         'shares': pick('shareCount', 'shares'),
         'author': (item.get('authorMeta') or {}).get('name') or pick('authorName'),
     }
+
+
+def linkedin_actor():
+    return (get_config(KEY_ACTOR_LINKEDIN)
+            or os.environ.get('APIFY_ACTOR_LINKEDIN')
+            or DEFAULT_ACTOR_LINKEDIN).strip()
+
+
+def linkedin_company_actor():
+    return (get_config(KEY_ACTOR_LINKEDIN_COMPANY)
+            or os.environ.get('APIFY_ACTOR_LINKEDIN_COMPANY')
+            or DEFAULT_ACTOR_LINKEDIN_COMPANY).strip()
+
+
+def scrape_linkedin_profile(url):
+    """Read one LinkedIn profile: followers, connections, headline, location.
+
+    Not the posts — no scraper reaches a member's post figures, because
+    LinkedIn does not publish them. What this gives is the audience, which is
+    worth following over time even when each post's reach stays invisible.
+    """
+    items = run_actor({'profileUrls': [url], 'urls': [url]},
+                      actor_id=linkedin_actor())
+    return items[0] if items else None
+
+
+def normalise_linkedin(item):
+    """Flatten one profile result. Actors rename fields between versions, so
+    every value is read through a list of candidates."""
+    def pick(*noms):
+        for n in noms:
+            v = item.get(n)
+            if v not in (None, '', []):
+                return v
+        return None
+
+    def nombre(v):
+        if isinstance(v, (int, float)):
+            return int(v)
+        if isinstance(v, str):
+            chiffres = ''.join(c for c in v if c.isdigit())
+            return int(chiffres) if chiffres else None
+        return None
+
+    def texte(v):
+        """Certains champs arrivent en objet plutôt qu'en chaîne : `location`
+        est un dictionnaire avec un libellé et une version analysée."""
+        if isinstance(v, dict):
+            return (v.get('linkedinText') or v.get('text')
+                    or (v.get('parsed') or {}).get('text') or v.get('url'))
+        return v
+
+    return {
+        # `followerCount` au singulier : c'est le nom que rend l'acteur, et
+        # chercher « followersCount » renvoyait toujours vide.
+        'followers': nombre(pick('followerCount', 'followersCount', 'followers',
+                                 'numFollowers')),
+        'connections': nombre(pick('connectionsCount', 'connections')),
+        'headline': texte(pick('headline', 'occupation', 'subtitle')),
+        'location': texte(pick('location', 'locationName', 'geoLocationName')),
+        'photo': texte(pick('profilePicture', 'photoUrl', 'pictureUrl', 'avatar')),
+        'name': texte(pick('fullName', 'name', 'firstName')),
+    }
+
+
+def save_linkedin_actors(profil, societe=None):
+    set_config(KEY_ACTOR_LINKEDIN, (profil or '').strip() or DEFAULT_ACTOR_LINKEDIN)
+    if societe is not None:
+        set_config(KEY_ACTOR_LINKEDIN_COMPANY,
+                   (societe or '').strip() or DEFAULT_ACTOR_LINKEDIN_COMPANY)

@@ -60,6 +60,8 @@ def index():
         linkedin_days_left=linkedin.days_left(),
         linkedin_version=linkedin._version(),
         linkedin_redirect_uri=url_for('admin_settings.linkedin_callback', _external=True),
+        linkedin_profile_url=__import__('linkedin').profile_url(),
+        linkedin_actor=apify.linkedin_actor(),
         apify_configured=apify.is_configured(),
         apify_actor=apify.actor(),
         apify_profile=apify.profile(),
@@ -79,6 +81,19 @@ def linkedin_credentials():
                            request.form.get('client_secret'),
                            request.form.get('version'))
     flash("Identifiants LinkedIn enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index') + '#linkedin')
+
+
+@admin_settings_bp.route('/linkedin/profil', methods=['POST'])
+@admin_required
+def linkedin_profile_settings():
+    """The profile to read, and the actor that reads it."""
+    import apify
+    import linkedin
+
+    linkedin.set_profile_url(request.form.get('profile_url'))
+    apify.save_linkedin_actors(request.form.get('actor'))
+    flash("Profil LinkedIn enregistré.", 'success')
     return redirect(url_for('admin_settings.index') + '#linkedin')
 
 

@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% from 'admin_pastille.html' import pastille %}
 {% block title %}LinkedIn{% endblock %}
 
 {% block admin_title %}<i class="fa-brands fa-linkedin" style="color: var(--vert);"></i> LinkedIn{% endblock %}
@@ -11,8 +12,6 @@
         <a href="{{ url_for('admin_settings.index') }}#linkedin" style="color: inherit; text-decoration: underline;">Connecter</a>
     </div>
     {% else %}
-    {# L'autorisation expire au bout de soixante jours sans se renouveler :
-       c'est la seule chose qui puisse arrêter les publications en silence. #}
     <div style="background: {{ '#FDECEA' if jours is not none and jours < 7 else 'var(--gris-clair)' }}; border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.4rem;">
         Connecté en tant que <strong>{{ nom or 'ce compte' }}</strong>.
         {% if jours is not none %}
@@ -24,7 +23,24 @@
     </div>
     {% endif %}
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.6rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.4rem;">
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Abonnés</div>
+            <div style="font-size: 1.9rem; font-weight: 800;">
+                {{ '{:,}'.format(snapshot.followers).replace(',', ' ') if snapshot and snapshot.followers else '—' }}
+            </div>
+            <div style="color: var(--gris); font-size: 0.78rem;">
+                {% if variations %}
+                {% for n, libelle in [('1', 'hier'), ('7', '7 j'), ('30', '30 j')] %}
+                {% if n in variations %}
+                <span style="color: {{ 'var(--vert-fonce)' if variations[n] > 0 else ('var(--rouge)' if variations[n] < 0 else 'var(--gris)') }};">
+                    {{ '+' if variations[n] > 0 }}{{ variations[n] }} {{ libelle }}
+                </span>{% if not loop.last %} · {% endif %}
+                {% endif %}
+                {% endfor %}
+                {% elif snapshot %}premier relevé{% else %}pas encore relevé{% endif %}
+            </div>
+        </div>
         <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Publiés</div>
             <div style="font-size: 1.9rem; font-weight: 800;">{{ lignes|length }}</div>
@@ -32,66 +48,72 @@
         <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">En attente</div>
             <div style="font-size: 1.9rem; font-weight: 800; color: var(--rouge);">{{ attente }}</div>
-            <div style="color: var(--gris); font-size: 0.78rem;">soit {{ attente }} jour{{ 's' if attente > 1 else '' }}</div>
-        </div>
-        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Aujourd'hui</div>
-            <div style="font-size: 1.05rem; font-weight: 700; margin-top: 0.4rem;">
-                {{ 'Déjà publié' if aujourdhui else 'Rien encore' }}
+            <div style="color: var(--gris); font-size: 0.78rem;">
+                {{ 'déjà publié aujourd’hui' if aujourdhui else 'un par jour, à 9 h' }}
             </div>
-            <div style="color: var(--gris); font-size: 0.78rem;">un article par jour, à 9 h</div>
         </div>
     </div>
 
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+        <p style="margin: 0; font-size: 0.84rem; color: var(--gris); max-width: 62ch; line-height: 1.6;">
+            Les abonnés sont relevés par Apify sur
+            <a href="{{ profil }}" target="_blank" rel="noopener" style="color: var(--gris);">le profil</a> :
+            LinkedIn ne publie aucun chiffre pour les publications d'un membre, l'audience
+            est donc la seule chose mesurable ici.
+        </p>
+        <form method="POST" action="{{ url_for('admin_linkedin.refresh_profile') }}" style="margin: 0;">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-rotate"></i> Relever le profil
+            </button>
+        </form>
+    </div>
+
     {% if prochain %}
-    <p style="font-size: 0.88rem; color: var(--gris); margin: 0 0 1.4rem;">
+    <p style="font-size: 0.88rem; color: var(--gris); margin: 0 0 1.2rem;">
         Prochain automatiquement : <strong style="color: var(--noir);">{{ prochain.title|truncate(70) }}</strong>
         <span style="color: #bbb;">({{ prochain.created_at.strftime('%d/%m/%Y') }})</span>
     </p>
     {% endif %}
 
-    {# Aucune statistique n'est affichée, et c'est volontaire : LinkedIn n'en
-       publie pas pour un membre, une colonne vide vaudrait moins que rien. #}
-    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.4rem;">
-        LinkedIn ne publie ni vues ni réactions pour les publications d'un membre —
-        seules les pages d'organisation en ont. Les chiffres se lisent donc sur LinkedIn même.
-    </div>
-
+    {# Mêmes fiches que les articles et les vidéos : vignette, titre, pastilles,
+       actions. Une publication LinkedIn est un contenu de plus, pas une ligne
+       de tableau. #}
     {% if lignes %}
-    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
-        <div class="admin-table-wrap">
-        <table class="admin-stack-table" style="width: 100%; border-collapse: collapse;">
-            <thead style="background: var(--gris-clair);">
-                <tr style="font-size: 0.85rem;">
-                    <th style="text-align: left; padding: 0.8rem 1rem;">Publié</th>
-                    <th style="text-align: left; padding: 0.8rem 1rem;">Contenu</th>
-                    <th style="text-align: right; padding: 0.8rem 1rem;"></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for l in lignes %}
-                <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td data-label="Publié" style="padding: 0.7rem 1rem; color: var(--gris); white-space: nowrap;">
-                        {{ l.at.strftime('%d/%m/%Y') if l.at else '—' }}
-                    </td>
-                    <td data-label="Contenu" style="padding: 0.7rem 1rem;">
-                        <span style="display:inline-block; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--gris); margin-right:0.4rem;">
-                            {{ 'Vidéo' if l.kind == 'video' else 'Article' }}
-                        </span>
-                        {{ l.title|truncate(80) }}
-                    </td>
-                    <td class="actions" style="padding: 0.7rem 1rem; text-align: right;">
-                        {% if l.url %}
-                        <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
-                           style="color: var(--noir); border-color: #e0e0e0;">Voir</a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    {% for l in lignes %}
+    <div class="fiche{% if not l.image %} sans-image{% endif %}">
+        {% if l.image %}
+        <a href="{{ l.edit }}" class="fiche-vignette"><img src="{{ l.image }}" alt="" loading="lazy"></a>
+        {% endif %}
+        <div class="fiche-corps">
+            <a href="{{ l.edit }}" class="fiche-titre">{{ l.title|truncate(90) }}</a>
+            <div class="fiche-meta">
+                {{ 'Vidéo' if l.kind == 'video' else 'Article' }} ·
+                publié sur LinkedIn le {{ l.at.strftime('%d/%m/%Y') if l.at else '—' }}
+            </div>
+            <div class="fiche-pastilles">
+                {{ pastille(true, 'fa-brands fa-linkedin-in', 'Voir sur LinkedIn', l.url, '#0A66C2') }}
+                {{ pastille(l.x, 'fa-brands fa-x-twitter', 'Sur X' if l.x else 'Pas sur X', l.x, '#000') }}
+                {{ pastille(l.site, 'fas fa-globe', 'En ligne' if l.site else 'Pas en ligne', l.site, 'var(--vert-fonce)') }}
+            </div>
+        </div>
+        <div class="fiche-actions">
+            {% if l.url %}
+            <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn-sm"
+               style="background:#0A66C2; color:#fff; border:none; border-radius:50px; padding:6px 14px;">
+                <i class="fa-brands fa-linkedin-in"></i> Voir
+            </a>
+            {% endif %}
+            <a href="{{ l.stats }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                <i class="fas fa-chart-line"></i> Stats
+            </a>
+            <a href="{{ l.edit }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                <i class="fas fa-pen"></i> Modifier
+            </a>
         </div>
     </div>
+    {% endfor %}
     {% else %}
     <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
         <p style="margin: 0;">Rien de publié sur LinkedIn pour l'instant.</p>

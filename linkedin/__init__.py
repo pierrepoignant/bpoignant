@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 
 import requests
 
+from init_db import db
 from settings.models import get_config, set_config, delete_config
 
 log = logging.getLogger(__name__)
@@ -58,6 +59,8 @@ KEY_EXPIRES = 'linkedin_expires_at'
 KEY_PERSON = 'linkedin_person_urn'
 KEY_NAME = 'linkedin_name'
 KEY_VERSION = 'linkedin_version'
+KEY_PROFILE_URL = 'linkedin_profile_url'
+DEFAULT_PROFILE_URL = 'https://www.linkedin.com/in/bernardpoignant/'
 
 _TIMEOUT = 30
 POST_LIMIT = 3000          # LinkedIn accepte 3000 caractères de commentaire
@@ -450,7 +453,7 @@ def auto_post():
 
 # ─── Écran d'administration ─────────────────────────────────
 
-from flask import Blueprint, render_template  # noqa: E402
+from flask import Blueprint, flash, redirect, render_template, url_for  # noqa: E402
 
 from auth import admin_required  # noqa: E402
 
@@ -477,14 +480,25 @@ def index():
     clips = (TikTokPost.query.filter(TikTokPost.linkedin_post_id.isnot(None))
              .order_by(TikTokPost.linkedin_posted_at.desc()).all())
     lignes = [{'kind': 'article', 'title': a.title, 'at': a.linkedin_posted_at,
-               'url': a.linkedin_post_url} for a in articles]
+               'url': a.linkedin_post_url, 'image': a.image_url,
+               'stats': url_for('admin_articles.article_stats', article_id=a.id),
+               'edit': url_for('admin_articles.edit_article', article_id=a.id),
+               'x': a.x_post_url, 'site': (url_for('articles.public_show', slug=a.slug)
+                                           if a.published else None)}
+              for a in articles]
     lignes += [{'kind': 'video', 'title': c.title, 'at': c.linkedin_posted_at,
-                'url': c.linkedin_url} for c in clips]
+                'url': c.linkedin_url, 'image': c.poster_url,
+                'stats': url_for('admin_tiktok.post_stats', post_id=c.id),
+                'edit': url_for('admin_tiktok.edit', post_id=c.id),
+                'x': c.x_url, 'site': c.posted_url}
+               for c in clips]
     lignes.sort(key=lambda l: l['at'] or datetime.min, reverse=True)
 
+    dernier, variations = follower_trend()
     return render_template(
         'linkedin_admin.html',
-        lignes=lignes,
+        lignes=lignes, snapshot=dernier, variations=variations,
+        profil=profile_url(),
         connected=is_configured(),
         nom=display_name(),
         jours=days_left(),
@@ -494,3 +508,102 @@ def index():
         prochain=next_article_to_post(),
         aujourdhui=already_posted_today(),
     )
+
+
+
+class ProfileSnapshot(db.Model):
+    """One row per day of the profile's own figures.
+
+    LinkedIn publishes nothing about a member's posts, so the audience is the
+    only thing measurable — and a follower count means little on its own. A
+    daily row is what turns it into a trend; `day` is unique so re-running the
+    scrape overwrites the day instead of stacking duplicates.
+
+    Read by an Apify actor rather than the API, since the API exposes this only
+    to organisation pages.
+    """
+
+    __tablename__ = 'linkedin_profile_snapshots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Date, unique=True, nullable=False, index=True)
+    followers = db.Column(db.Integer, nullable=True)
+    connections = db.Column(db.Integer, nullable=True)
+    headline = db.Column(db.String(300), nullable=True)
+    location = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+def profile_url():
+    return (get_config(KEY_PROFILE_URL) or DEFAULT_PROFILE_URL).strip()
+
+
+def set_profile_url(url):
+    set_config(KEY_PROFILE_URL, (url or '').strip() or DEFAULT_PROFILE_URL)
+
+
+def sync_profile():
+    """Read the profile through Apify and record today's figures.
+
+    Returns the snapshot, or None when Apify is not configured. One actor run
+    per call, so it is worth once a day and not once a page load.
+    """
+    import apify
+
+    if not apify.is_configured():
+        return None
+    brut = apify.scrape_linkedin_profile(profile_url())
+    if not brut:
+        return None
+    infos = apify.normalise_linkedin(brut)
+
+    aujourdhui = datetime.utcnow().date()
+    snap = ProfileSnapshot.query.filter_by(day=aujourdhui).first()
+    if snap is None:
+        snap = ProfileSnapshot(day=aujourdhui)
+        db.session.add(snap)
+    snap.followers = infos.get('followers') or snap.followers
+    snap.connections = infos.get('connections') or snap.connections
+    snap.headline = (infos.get('headline') or snap.headline or '')[:300] or None
+    snap.location = (infos.get('location') or snap.location or '')[:200] or None
+    db.session.commit()
+    return snap
+
+
+def follower_trend(jours=30):
+    """(dernier instantané, {jours: variation}) — comme pour X."""
+    from datetime import timedelta
+
+    dernier = ProfileSnapshot.query.order_by(ProfileSnapshot.day.desc()).first()
+    if dernier is None or dernier.followers is None:
+        return None, {}
+    variations = {}
+    for n in (1, 7, 30):
+        cible = dernier.day - timedelta(days=n)
+        # Le plus récent instantané à cette date ou avant : les relevés peuvent
+        # manquer un jour sans que la comparaison devienne fausse.
+        ancien = (ProfileSnapshot.query
+                  .filter(ProfileSnapshot.day <= cible,
+                          ProfileSnapshot.followers.isnot(None))
+                  .order_by(ProfileSnapshot.day.desc()).first())
+        if ancien is not None:
+            variations[str(n)] = dernier.followers - ancien.followers
+    return dernier, variations
+
+
+@admin_linkedin_bp.route('/profil', methods=['POST'])
+@admin_required
+def refresh_profile():
+    """Read the profile through Apify and record today's figures."""
+    import apify
+
+    try:
+        snap = sync_profile()
+    except apify.ApifyError as exc:
+        flash(f"Lecture du profil impossible : {exc}", 'danger')
+        return redirect(url_for('admin_linkedin.index'))
+    if snap is None:
+        flash("Apify n'est pas configuré, ou le profil n'a rien renvoyé.", 'danger')
+    else:
+        flash(f"Profil relevé : {snap.followers or '—'} abonnés.", 'success')
+    return redirect(url_for('admin_linkedin.index'))
