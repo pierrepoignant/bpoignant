@@ -302,8 +302,12 @@ def videos():
         db.session.query(VideoView.post_id, db.func.count(VideoView.id))
         .group_by(VideoView.post_id).all()
     )
+    # Combien de posts scrapés attendent encore leur fichier : c'est ce qui
+    # justifie d'aller voir la liste des posts.
+    a_rattacher = TikTokPost.query.filter(TikTokPost.video_url.is_(None)).count()
     return render_template(
         'tiktok_admin_videos.html', clips=clips, minute_sends=envois,
+        a_rattacher=a_rattacher,
         site_views=vues, minute_count=_mailable_query('minute').count(),
         linkedin_ok=linkedin.is_configured(),
         video_enabled=video_mod.is_enabled(),

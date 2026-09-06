@@ -26,6 +26,20 @@
 {% endmacro %}
 
 {% block admin_content %}
+    {# Récupérer les posts et rattacher un fichier sont des gestes d'atelier,
+       pas une section : ils vivent ici, en tête de la page qu'ils servent,
+       plutôt qu'en onglet de même rang que les vidéos elles-mêmes. #}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
+        <p style="color: var(--gris); font-size: 0.86rem; margin: 0; max-width: 58ch; line-height: 1.6;">
+            Publiez depuis l'application TikTok, puis récupérez les posts pour leur
+            rattacher le montage{% if not video_enabled %} (depuis le serveur de développement){% endif %}.
+        </p>
+        <a href="{{ url_for('admin_tiktok.list_posts') }}" class="btn btn-sm btn-outline"
+           style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;">
+            <i class="fa-brands fa-tiktok"></i> Posts TikTok{% if a_rattacher %} · {{ a_rattacher }} à rattacher{% endif %}
+        </a>
+    </div>
+
     {% if clips %}
     <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1.2rem;">
         {{ clips|length }} vidéo{{ 's' if clips|length > 1 else '' }} ·

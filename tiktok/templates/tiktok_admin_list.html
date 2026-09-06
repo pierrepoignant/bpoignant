@@ -5,6 +5,11 @@
 {% block admin_subtitle %}<p>Les clips publiés, leurs chiffres, et ce qui en a été fait.</p>{% endblock %}
 
 {% block admin_content %}
+    <p style="margin: 0 0 1.2rem;">
+        <a href="{{ url_for('admin_tiktok.videos') }}" style="color: var(--gris);">
+            <i class="fas fa-arrow-left"></i> Les vidéos
+        </a>
+    </p>
     {% if not apify_ok %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
         Apify n'est pas configuré — renseignez le jeton dans
