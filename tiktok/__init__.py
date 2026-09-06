@@ -307,38 +307,28 @@ def toggle_boosted(post_id):
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
-@admin_tiktok_bp.route('/<int:post_id>/attach', methods=['POST'])
-@admin_required
-def attach_video(post_id):
-    """Attach one of the renders sitting on the dev machine to a scraped post.
+def attach_render(post, path):
+    """Attach a local render to a scraped post: upload it, take its poster,
+    and carry over what the montage knows.
 
-    Only possible where the files are — the production server never sees them,
-    which is why this route exists solely when the video tool is enabled.
+    Factored out of the route so the automatic flow can do exactly the same
+    thing as a click, rather than a near-copy that drifts from it.
+    Returns None on success, an error message otherwise.
     """
-    import video
-    if not video.is_enabled():
-        abort(404)
     import storage
-
-    post = db.session.get(TikTokPost, post_id) or abort(404)
-    name = (request.form.get('filename') or '').strip()
-    path = os.path.join(video.WORKDIR, os.path.basename(name))
-    if not name or not os.path.isfile(path):
-        flash("Fichier introuvable sur le serveur.", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
+    import video
 
     try:
         with open(path, 'rb') as fh:
             post.video_url = storage.upload_video(fh, os.path.basename(path), 'video/mp4')
     except storage.StorageError as exc:
-        flash(f"Envoi impossible : {exc}", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
+        return f"Envoi impossible : {exc}"
 
     post.duration_seconds = video.probe_duration(path)
 
-    # La transcription vit dans le job de montage, sur cette machine
-    # uniquement : si elle n'est pas recopiée ici au moment du rattachement,
-    # elle n'existe nulle part côté production.
+    # La transcription et le bandeau vivent dans le job de montage, sur cette
+    # machine uniquement : sans recopie ici, ils n'existent nulle part côté
+    # production.
     job = video.job_for_render(path) or {}
     if job.get('transcript') and not post.transcript:
         post.transcript = job['transcript']
@@ -360,15 +350,35 @@ def attach_video(post_id):
         post.themes = _auto_themes(post)
 
     db.session.commit()
-    flash("Vidéo attachée au post."
-          + (" Transcription enregistrée." if job.get('transcript') else ""), 'success')
-    return redirect(url_for('admin_tiktok.list_posts'))
+    return None
 
 
-def tweet_text_for(post, limit=280):
-    """The text that would go to X: the one already sent if there is one,
-    otherwise the caption condensed to fit."""
-    return post.x_text or _tweet_text(post, limit=limit)
+@admin_tiktok_bp.route('/<int:post_id>/attach', methods=['POST'])
+@admin_required
+def attach_video(post_id):
+    """Attach one of the renders sitting on the dev machine to a scraped post.
+
+    Only possible where the files are — the production server never sees them,
+    which is why this route exists solely when the video tool is enabled.
+    """
+    import video
+    if not video.is_enabled():
+        abort(404)
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    name = (request.form.get('filename') or '').strip()
+    path = os.path.join(video.WORKDIR, os.path.basename(name))
+    if not name or not os.path.isfile(path):
+        flash("Fichier introuvable sur le serveur.", 'danger')
+        return redirect(url_for('admin_tiktok.list_posts'))
+
+    erreur = attach_render(post, path)
+    if erreur:
+        flash(erreur, 'danger')
+    else:
+        flash("Vidéo attachée au post."
+              + (" Transcription enregistrée." if post.transcript else ""), 'success')
+    return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
 def _tweet_text(post, limit=280):
@@ -392,54 +402,42 @@ def _tweet_text(post, limit=280):
     return shorter or xapi._truncate(text, limit)
 
 
-@admin_tiktok_bp.route('/<int:post_id>/post-x', methods=['POST'])
-@admin_required
-def post_to_x(post_id):
-    """Re-post the attached clip to X, video and all.
+def post_to_x_backend(post, texte=None):
+    """Publish a clip on X. Returns (ok, tweet_id_or_error).
 
-    Works from anywhere, not just the dev machine: the video is fetched from
-    the bucket rather than the local disk, so production can do this too. X
-    needs the bytes — there is no way to hand it a URL.
+    Shared by the button and the automatic flow, so the two cannot drift: the
+    video always comes from the bucket, which is what lets this run from
+    production as well as from the machine that produced it.
     """
     import tempfile
     import requests as http
     import x as xapi
+    from init_db import db
 
-    post = db.session.get(TikTokPost, post_id) or abort(404)
-    if not post.has_video:
-        flash("Rattachez d'abord une vidéo à ce post.", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
     if post.x_post_id:
-        flash("Ce clip a déjà été publié sur X.", 'info')
-        return redirect(url_for('admin_tiktok.list_posts'))
+        return False, "déjà publié"
+    if not post.video_url:
+        return False, "aucune vidéo"
     if not xapi.is_configured():
-        flash("X n'est pas configuré (clés API manquantes).", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
+        return False, "X n'est pas configuré"
 
-    # Un texte saisi dans le champ « Texte X » l'emporte : sinon la légende
-    # TikTok est condensée, et ce qui part n'est plus ce qui était relu.
-    text = (request.form.get('x_text') or '').strip() or tweet_text_for(post)
-    if not text:
-        flash("Ce post n'a pas de texte à publier.", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
+    texte = (texte or '').strip() or tweet_text_for(post)
+    if not texte:
+        return False, "aucun texte à publier"
 
     tmp = None
     try:
-        with http.get(post.video_url, stream=True, timeout=120) as resp:
+        with http.get(post.video_url, stream=True, timeout=180) as resp:
             if resp.status_code != 200:
-                flash(f"Vidéo illisible dans le stockage ({resp.status_code}).", 'danger')
-                return redirect(url_for('admin_tiktok.list_posts'))
+                return False, f"vidéo illisible dans le stockage ({resp.status_code})"
             fd, tmp = tempfile.mkstemp(suffix='.mp4')
             with os.fdopen(fd, 'wb') as fh:
                 for chunk in resp.iter_content(1024 * 256):
                     fh.write(chunk)
-
         media_id, err = xapi.upload_video(tmp)
         if err:
-            flash(f"Envoi de la vidéo à X impossible : {err}", 'danger')
-            return redirect(url_for('admin_tiktok.list_posts'))
-
-        ok, detail = xapi.post_tweet(text, media_ids=[media_id])
+            return False, f"envoi de la vidéo refusé : {err}"
+        ok, detail = xapi.post_tweet(texte, media_ids=[media_id])
     finally:
         if tmp:
             try:
@@ -448,17 +446,65 @@ def post_to_x(post_id):
                 pass
 
     if not ok:
-        flash(f"Échec de la publication sur X : {detail}", 'danger')
-        return redirect(url_for('admin_tiktok.list_posts'))
-
+        return False, str(detail)
     post.x_post_id = str(detail) if detail else None
     post.x_posted_at = datetime.utcnow()
-    # Ce qui est parti, conservé tel quel : le texte est parfois condensé par
-    # l'IA au moment de l'envoi, et sans cela il n'existait plus nulle part.
-    post.x_text = text
+    post.x_text = texte
     db.session.commit()
-    flash("Clip publié sur X.", 'success')
-    return redirect(url_for('admin_tiktok.list_posts'))
+    return True, post.x_post_id
+
+
+def post_to_linkedin_backend(post, texte=None):
+    """Publish a clip on LinkedIn. Returns (ok, post_urn_or_error)."""
+    import tempfile
+    import requests as http
+    import linkedin
+    from init_db import db
+
+    if post.linkedin_post_id:
+        return False, "déjà publié"
+    if not post.video_url:
+        return False, "aucune vidéo"
+    if not linkedin.is_configured():
+        return False, "LinkedIn n'est pas connecté"
+
+    texte = (texte or '').strip() or (post.caption or post.title or '')
+    tmp = None
+    try:
+        with http.get(post.video_url, stream=True, timeout=180) as resp:
+            if resp.status_code != 200:
+                return False, f"vidéo illisible dans le stockage ({resp.status_code})"
+            fd, tmp = tempfile.mkstemp(suffix='.mp4')
+            with os.fdopen(fd, 'wb') as fh:
+                for chunk in resp.iter_content(1024 * 256):
+                    fh.write(chunk)
+        ok, detail = linkedin.post_video(tmp, texte, titre=post.title)
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    if not ok:
+        return False, str(detail)
+    post.linkedin_post_id = str(detail) if detail else None
+    post.linkedin_posted_at = datetime.utcnow()
+    db.session.commit()
+    return True, post.linkedin_post_id
+
+
+@admin_tiktok_bp.route('/<int:post_id>/post-x', methods=['POST'])
+@admin_required
+def post_to_x(post_id):
+    """Publish this clip on X, with the text as reviewed on screen."""
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    ok, detail = post_to_x_backend(post, request.form.get('x_text'))
+    if ok:
+        flash("Clip publié sur X.", 'success')
+    else:
+        flash(f"Publication sur X impossible : {detail}", 'danger')
+    return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
 @admin_tiktok_bp.route('/<int:post_id>/edit')
@@ -476,15 +522,13 @@ def edit(post_id):
     from newsletter.models import MinuteSend, MinuteDelivery
 
     post = db.session.get(TikTokPost, post_id) or abort(404)
-    local_videos = video.local_renders()
-    envois = (MinuteSend.query.filter_by(post_id=post.id)
-              .order_by(MinuteSend.sent_at.desc()).all())
     return render_template(
         'tiktok_admin_edit.html', p=post,
         all_themes=Theme.query.order_by(Theme.name).all(),
-        video_enabled=video.is_enabled(), local_videos=local_videos,
+        video_enabled=video.is_enabled(), local_videos=video.local_renders(),
         storage_ok=storage.is_configured(),
-        minute_sends=envois,
+        minute_sends=(MinuteSend.query.filter_by(post_id=post.id)
+                      .order_by(MinuteSend.sent_at.desc()).all()),
         minute_delivered=MinuteDelivery.query.filter_by(post_id=post.id).count(),
         minute_count=_mailable_query('minute').count(),
         site_views=VideoView.query.filter_by(post_id=post.id).count(),
@@ -583,52 +627,13 @@ def send_minute_test(post_id):
 @admin_tiktok_bp.route('/<int:post_id>/linkedin', methods=['POST'])
 @admin_required
 def post_to_linkedin(post_id):
-    """Publish a clip on LinkedIn, fetching the file from the bucket.
-
-    Same route as X: the render lives in object storage, so this works from
-    production as well as from the machine that produced it.
-    """
-    import tempfile
-    import requests as http
-    import linkedin
-
+    """Publish this clip on LinkedIn."""
     post = db.session.get(TikTokPost, post_id) or abort(404)
-    if post.linkedin_post_id:
-        flash("Ce clip est déjà sur LinkedIn.", 'info')
-        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
-    if not post.video_url:
-        flash("Ce post n'a pas de vidéo.", 'danger')
-        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
-    if not linkedin.is_configured():
-        flash("LinkedIn n'est pas connecté — voir Réglages.", 'danger')
-        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
-
-    texte = (request.form.get('text') or '').strip() or (post.caption or post.title or '')
-    tmp = None
-    try:
-        with http.get(post.video_url, stream=True, timeout=180) as resp:
-            if resp.status_code != 200:
-                flash(f"Vidéo illisible dans le stockage ({resp.status_code}).", 'danger')
-                return redirect(url_for('admin_tiktok.edit', post_id=post.id))
-            fd, tmp = tempfile.mkstemp(suffix='.mp4')
-            with os.fdopen(fd, 'wb') as fh:
-                for chunk in resp.iter_content(1024 * 256):
-                    fh.write(chunk)
-        ok, detail = linkedin.post_video(tmp, texte, titre=post.title)
-    finally:
-        if tmp:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-
+    ok, detail = post_to_linkedin_backend(post, request.form.get('text'))
     if ok:
-        post.linkedin_post_id = str(detail) if detail else None
-        post.linkedin_posted_at = datetime.utcnow()
-        db.session.commit()
         flash("Clip publié sur LinkedIn.", 'success')
     else:
-        flash(f"Échec de la publication sur LinkedIn : {detail}", 'danger')
+        flash(f"Publication sur LinkedIn impossible : {detail}", 'danger')
     return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 

@@ -5,6 +5,33 @@
 {% block admin_subtitle %}<p>Couper les blancs, transcrire, et rédiger le texte du post.</p>{% endblock %}
 
 {% block admin_content %}
+    {# L'enchaînement publie sans rien demander : il s'allume donc
+       explicitement, et son état est écrit là où l'on monte les vidéos. #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1rem 1.2rem; margin-bottom: 1.4rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 260px;">
+            <strong style="font-size: 0.95rem;">
+                <i class="fas fa-wand-magic-sparkles" style="color: {{ 'var(--vert)' if auto_publish else 'var(--gris)' }};"></i>
+                Enchaînement après montage
+            </strong>
+            <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--gris); line-height: 1.6;">
+                {% if auto_publish %}
+                Activé : dix minutes après un montage, le serveur récupère les posts TikTok,
+                rattache la vidéo au dernier post sans fichier, puis publie sur X et LinkedIn.
+                Il réessaie toutes les cinq minutes pendant trois heures si le post n'est pas
+                encore en ligne.
+                {% else %}
+                Désactivé : les vidéos se rattachent et se publient à la main.
+                {% endif %}
+            </p>
+        </div>
+        <form method="POST" action="{{ url_for('admin_video.toggle_auto') }}" style="margin: 0;">
+            <button type="submit" class="btn btn-sm {{ 'btn-outline' if auto_publish else 'btn-vert' }}"
+                    {% if auto_publish %}style="color: var(--noir); border-color: #e0e0e0;"{% endif %}>
+                {{ 'Désactiver' if auto_publish else 'Activer' }}
+            </button>
+        </form>
+    </div>
+
     <div style="background: rgba(198,208,2,0.15); border-radius: 10px; padding: 12px 16px; font-size: 0.88rem; margin-bottom: 1.5rem;">
         <i class="fas fa-laptop-code" style="color: var(--vert-fonce);"></i>
         Outil disponible uniquement sur la machine de développement — il n'est pas

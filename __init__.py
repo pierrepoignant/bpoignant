@@ -142,6 +142,14 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_tiktok_bp)
     app.register_blueprint(public_tiktok_bp)
 
+    # Veilleur d'enchaînement après montage : uniquement là où les fichiers
+    # sont, c'est-à-dire sur la machine de développement.
+    try:
+        from tiktok.auto import demarrer as _demarrer_auto
+        _demarrer_auto(app)
+    except Exception:
+        app.logger.exception("veilleur de publication automatique non démarré")
+
     # Video tooling: development machine only. Its dependencies weigh close to
     # a gigabyte, so the blueprint is not registered unless VIDEO_TOOLS is set
     # — production never sets it, and the import itself is skipped there.

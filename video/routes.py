@@ -32,8 +32,27 @@ def _guard():
 @admin_video_bp.route('/')
 @admin_required
 def index():
+    from tiktok.auto import is_enabled
     return render_template('video_admin.html', jobs=video.all_jobs(),
-                           whisper_model=video.WHISPER_MODEL)
+                           whisper_model=video.WHISPER_MODEL,
+                           auto_publish=is_enabled())
+
+
+@admin_video_bp.route('/auto', methods=['POST'])
+@admin_required
+def toggle_auto():
+    """Turn the after-montage chain on or off.
+
+    Off by default: it publishes to X and LinkedIn without asking, which is the
+    point, and which is exactly why it should be switched on deliberately.
+    """
+    from tiktok.auto import set_enabled, is_enabled
+    set_enabled(not is_enabled())
+    flash("Enchaînement automatique activé — après un montage, le serveur "
+          "récupérera le post TikTok et publiera sur X et LinkedIn."
+          if is_enabled() else
+          "Enchaînement automatique désactivé.", 'success')
+    return redirect(url_for('admin_video.index'))
 
 
 @admin_video_bp.route('/upload', methods=['POST'])

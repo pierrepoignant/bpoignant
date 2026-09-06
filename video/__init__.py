@@ -787,6 +787,15 @@ def apply_banner(job_id, banner=None):
             polish(cut, dest, loudness=job.get('loudness'), gamma=job.get('gamma'),
                    title=banner)
             _set(job_id, output=dest, status='done', step='Terminé')
+            # Enchaînement : dix minutes après, le serveur ira chercher le post
+            # TikTok correspondant et publiera ailleurs. Sans incidence si la
+            # bascule est éteinte — le veilleur ignore alors les jobs armés.
+            try:
+                from tiktok.auto import armer, is_enabled
+                if is_enabled():
+                    armer(job_id)
+            except Exception:
+                log.exception('auto-publication : armement impossible (%s)', job_id)
             # The intermediate is only useful if the polish pass failed.
             try:
                 os.remove(cut)

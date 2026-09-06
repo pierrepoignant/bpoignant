@@ -16,6 +16,9 @@
             <strong id="step">{{ job.step }}</strong>
         </div>
         <div id="stats" style="color: var(--gris); font-size: 0.85rem; margin-top: 0.5rem;"></div>
+        {# L'enchaînement se déroule après coup : sans cette ligne, on ne sait
+           pas s'il attend, ce qu'il a trouvé, ni pourquoi il a renoncé. #}
+        <div id="auto" style="display: none; font-size: 0.85rem; margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--gris-clair);"></div>
         <div id="error" style="color: var(--rouge); font-size: 0.9rem; margin-top: 0.5rem;"></div>
     </div>
 
@@ -139,6 +142,16 @@
                     icon.style.color = 'var(--rouge)';
                     document.getElementById('error').textContent = j.error || '';
                     return;                      // plus de polling
+                }
+                if (j.auto) {
+                    var couleur = {attente: 'var(--gris)', fait: 'var(--vert)',
+                                   partiel: '#8a6d00', abandon: 'var(--rouge)'}[j.auto.etat] || 'var(--gris)';
+                    var icone = {attente: 'fa-hourglass-half', fait: 'fa-circle-check',
+                                 partiel: 'fa-triangle-exclamation', abandon: 'fa-circle-xmark'}[j.auto.etat] || 'fa-hourglass-half';
+                    var a = document.getElementById('auto');
+                    a.innerHTML = '<i class="fas ' + icone + '" style="color:' + couleur + '"></i> ' +
+                                  '<strong>Enchaînement</strong> — ' + (j.auto.detail || '');
+                    a.style.display = 'block';
                 }
                 if (j.status === 'awaiting_banner') {
                     icon.className = 'fas fa-circle-question';
