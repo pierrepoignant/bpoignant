@@ -5,6 +5,12 @@
 {% block admin_subtitle %}<p>Les personnes avec qui Bernard a échangé, et ce qui a été décidé pour chacune.</p>{% endblock %}
 
 {% block admin_content %}
+    {# Retour d'action : une ligne discrète en bas de l'écran, avec l'annulation. #}
+    <div id="bandeau-action" role="status"
+         style="display: none; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+                background: var(--noir); color: #fff; padding: 10px 18px; border-radius: 50px;
+                font-size: 0.9rem; z-index: 300; box-shadow: 0 6px 20px rgba(0,0,0,0.25);"></div>
+
     {% if not has_client %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
         Les identifiants OAuth Google ne sont pas renseignés — voir
@@ -101,16 +107,14 @@
     {% endif %}
 
     {% if contacts %}
-    <form method="POST" action="{{ url_for('admin_subscribers.gmail_decide') }}">
-        <input type="hidden" name="retour" value="{{ filtre }}">
+    <div id="liste-contacts" data-url="{{ url_for('admin_subscribers.gmail_decide') }}">
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.9rem;">
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
                     onclick="document.querySelectorAll('.coche').forEach(c => c.checked = true);">Tout cocher</button>
             <span style="color: var(--gris); font-size: 0.85rem;">puis&nbsp;:</span>
-            <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Ignorer</button>
-            <button type="submit" name="action" value="inviter" class="btn btn-sm btn-primary">Inviter</button>
-            <button type="submit" name="action" value="ajouter" class="btn btn-sm btn-vert"
-                    onclick="return confirm('Inscrire les personnes cochées sans confirmation ? À ne faire que si Bernard a déjà leur accord.')">Ajouter</button>
+            <button type="button" class="grouper btn btn-sm btn-outline" data-action="ignorer" style="color: var(--noir); border-color: #e0e0e0;">Ignorer</button>
+            <button type="button" class="grouper btn btn-sm btn-primary" data-action="inviter">Inviter</button>
+            <button type="button" class="grouper btn btn-sm btn-vert" data-action="ajouter">Ajouter</button>
         </div>
 
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
@@ -127,9 +131,9 @@
                 </thead>
                 <tbody>
                     {% for c in contacts %}
-                    <tr style="border-top: 1px solid var(--gris-clair);">
+                    <tr data-ligne="{{ c.id }}" style="border-top: 1px solid var(--gris-clair);">
                         <td style="padding: 0.7rem 0.6rem; text-align: center;">
-                            <input type="checkbox" name="ids" value="{{ c.id }}" class="coche">
+                            <input type="checkbox" value="{{ c.id }}" class="coche">
                         </td>
                         <td data-label="Personne" style="padding: 0.7rem 1rem;">
                             {% if c.name %}<strong>{{ c.name }}</strong><br>{% endif %}
@@ -154,15 +158,15 @@
                             {% endif %}
                         </td>
                         <td style="padding: 0.7rem 1rem; text-align: right; white-space: nowrap;">
-                            <button type="submit" name="action" value="ignorer" formnovalidate
-                                    onclick="this.form.querySelector('#seul').value={{ c.id }}"
-                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">Ignorer</button>
-                            <button type="submit" name="action" value="inviter"
-                                    onclick="this.form.querySelector('#seul').value={{ c.id }}"
-                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid var(--rouge); color: var(--rouge); border-radius: 50px;">Inviter</button>
-                            <button type="submit" name="action" value="ajouter"
-                                    onclick="if (!confirm('Inscrire {{ (c.name or c.email)|e }} sans confirmation ?')) return false; this.form.querySelector('#seul').value={{ c.id }}"
-                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid var(--vert-fonce); color: var(--vert-fonce); border-radius: 50px;">Ajouter</button>
+                            {# Pas de fenêtre de confirmation : à cent contacts à
+                               trier, elle double le nombre de clics. Le filet est
+                               l'annulation proposée après coup. #}
+                            <button type="button" class="decider" data-action="ignorer" data-id="{{ c.id }}"
+                                    class="btn btn-sm" style="padding: 3px 9px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px; cursor: pointer;">Ignorer</button>
+                            <button type="button" class="decider" data-action="inviter" data-id="{{ c.id }}"
+                                    style="padding: 3px 9px; background: none; border: 1px solid var(--rouge); color: var(--rouge); border-radius: 50px; cursor: pointer;">Inviter</button>
+                            <button type="button" class="decider" data-action="ajouter" data-id="{{ c.id }}"
+                                    style="padding: 3px 9px; background: none; border: 1px solid var(--vert-fonce); color: var(--vert-fonce); border-radius: 50px; cursor: pointer;">Ajouter</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -170,10 +174,73 @@
             </table>
             </div>
         </div>
-        {# Une action sur une seule ligne passe par ce champ ; laissé vide, ce
-           sont les cases cochées qui s'appliquent. #}
-        <input type="hidden" name="id" id="seul" value="">
-    </form>
+    </div>
+
+<script>
+(function () {
+    var liste = document.getElementById('liste-contacts');
+    if (!liste) return;
+    var url = liste.dataset.url;
+    var bandeau = document.getElementById('bandeau-action');
+
+    function annonce(texte, ids, action) {
+        bandeau.innerHTML = '';
+        bandeau.appendChild(document.createTextNode(texte + ' '));
+        // Une annulation plutôt qu'une confirmation : le geste courant reste
+        // à un clic, et l'erreur se répare en un clic aussi.
+        if (action !== 'annuler') {
+            var a = document.createElement('button');
+            a.type = 'button';
+            a.textContent = 'Annuler';
+            a.className = 'btn btn-sm';
+            a.style.cssText = 'margin-left:.6rem;padding:2px 10px;border:1px solid #fff;background:none;color:#fff;border-radius:50px;cursor:pointer;';
+            a.addEventListener('click', function () { envoyer('annuler', ids, true); });
+            bandeau.appendChild(a);
+        }
+        bandeau.style.display = 'block';
+        clearTimeout(bandeau._t);
+        bandeau._t = setTimeout(function () { bandeau.style.display = 'none'; }, 12000);
+    }
+
+    function envoyer(action, ids, restaurer) {
+        var d = new FormData();
+        d.append('action', action);
+        d.append('json', '1');
+        ids.forEach(function (i) { d.append('ids', i); });
+        return fetch(url, {method: 'POST', body: d, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { annonce(j.message || 'Échec.', [], 'annuler'); return; }
+                ids.forEach(function (i) {
+                    var tr = liste.querySelector('tr[data-ligne="' + i + '"]');
+                    if (!tr) return;
+                    if (restaurer) { tr.style.opacity = ''; tr.style.display = ''; }
+                    else { tr.style.transition = 'opacity .25s'; tr.style.opacity = '0';
+                           setTimeout(function () { tr.style.display = 'none'; }, 250); }
+                });
+                annonce(j.message, ids, action);
+            })
+            .catch(function () { annonce('Le serveur n’a pas répondu.', [], 'annuler'); });
+    }
+
+    liste.addEventListener('click', function (e) {
+        var b = e.target.closest('.decider');
+        if (!b) return;
+        b.disabled = true;
+        envoyer(b.dataset.action, [parseInt(b.dataset.id, 10)]).then(function () { b.disabled = false; });
+    });
+
+    document.querySelectorAll('.grouper').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var ids = Array.prototype.slice.call(liste.querySelectorAll('.coche:checked'))
+                           .map(function (c) { return parseInt(c.value, 10); });
+            if (!ids.length) { annonce('Aucun contact coché.', [], 'annuler'); return; }
+            b.disabled = true;
+            envoyer(b.dataset.action, ids).then(function () { b.disabled = false; });
+        });
+    });
+})();
+</script>
     {% else %}
     <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
         <p style="margin: 0;">

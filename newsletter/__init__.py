@@ -7,7 +7,8 @@ import threading
 from datetime import datetime
 
 from flask import (
-    Blueprint, Response, abort, flash, redirect, render_template, request, url_for
+    Blueprint, Response, abort, flash, jsonify, redirect, render_template, request,
+    url_for,
 )
 
 from init_db import db
@@ -1762,6 +1763,7 @@ def _invite_contact(contact, par=None):
             token=secrets.token_urlsafe(32), confirmed_at=None)
         db.session.add(sub)
         db.session.commit()
+        contact.created_subscriber = True
         _send_confirmation_email(sub)
     _decide(contact, 'invité', par)
 
@@ -1784,6 +1786,7 @@ def _add_contact(contact, par=None):
             nom=' '.join(nom.split(' ')[1:]) or None,
             token=secrets.token_urlsafe(32),
             confirmed_at=datetime.utcnow()))
+        contact.created_subscriber = True
     elif existant.confirmed_at is None:
         existant.confirmed_at = datetime.utcnow()
     _decide(contact, 'ajouté', par)
@@ -1854,12 +1857,21 @@ def gmail_sync():
 @admin_subscribers_bp.route('/gmail/decider', methods=['POST'])
 @admin_required
 def gmail_decide():
-    """Apply one decision to one contact, or the same to a selection."""
+    """Apply one decision to one contact, or the same to a selection.
+
+    Answers JSON when the page asks for it, so a decision costs a request and
+    a line fading out rather than a full reload — with a hundred people to sort
+    through, reloading after each one is most of the work.
+    """
     action = request.form.get('action')
     ids = request.form.getlist('ids', type=int)
     if request.form.get('id', type=int):
         ids = [request.form.get('id', type=int)]
-    if action not in ('ignorer', 'inviter', 'ajouter') or not ids:
+    en_json = request.form.get('json') == '1'
+
+    if action not in ('ignorer', 'inviter', 'ajouter', 'annuler') or not ids:
+        if en_json:
+            return jsonify({'ok': False, 'message': "Rien à faire."}), 400
         flash("Rien à faire.", 'danger')
         return redirect(url_for('admin_subscribers.gmail_contacts_page'))
 
@@ -1869,16 +1881,42 @@ def gmail_decide():
             _decide(contact, 'ignoré', current_user)
         elif action == 'inviter':
             _invite_contact(contact, current_user)
-        else:
+        elif action == 'ajouter':
             _add_contact(contact, current_user)
+        else:
+            _undo_contact(contact)
         fait += 1
     db.session.commit()
 
-    libelle = {'ignorer': 'ignoré(s)', 'inviter': 'invité(s)',
-               'ajouter': 'inscrit(s) directement'}[action]
-    flash(f"{fait} contact(s) {libelle}.", 'success')
+    libelle = {'ignorer': 'ignoré', 'inviter': 'invité',
+               'ajouter': 'inscrit directement', 'annuler': 'remis à traiter'}[action]
+    message = f"{fait} contact(s) {libelle}(s)." if fait > 1 else f"Contact {libelle}."
+    if en_json:
+        return jsonify({'ok': True, 'message': message, 'ids': ids, 'action': action})
+    flash(message, 'success')
     return redirect(url_for('admin_subscribers.gmail_contacts_page',
                             statut=request.form.get('retour') or 'nouveau'))
+
+
+def _undo_contact(contact):
+    """Put a contact back to undecided, and remove the subscriber row if this
+    is what created it.
+
+    An invitation already sent cannot be recalled — the e-mail has left — but
+    the pending row can go, so the person is not sitting in the list awaiting a
+    confirmation nobody wants any more.
+    """
+    if contact.created_subscriber:
+        sub = Subscriber.query.filter(
+            db.func.lower(Subscriber.email) == contact.email).first()
+        # Prudence : ne pas supprimer une adresse qui a déjà reçu quelque chose.
+        if sub is not None and not Delivery.query.filter_by(subscriber_id=sub.id).first() \
+                and not MinuteDelivery.query.filter_by(subscriber_id=sub.id).first():
+            db.session.delete(sub)
+    contact.created_subscriber = False
+    contact.status = 'nouveau'
+    contact.decided_at = None
+    contact.decided_by_id = None
 
 
 @admin_subscribers_bp.route('/gmail/connect')

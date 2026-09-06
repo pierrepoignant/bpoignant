@@ -333,6 +333,7 @@ def _migrate_schema():
     creates missing tables — it never ALTERs existing ones, so we run
     a few targeted ALTERs here for columns added after launch."""
     from sqlalchemy import inspect, text
+    from sqlalchemy.exc import OperationalError
 
     inspector = inspect(db.engine)
     if 'users' in inspector.get_table_names():
@@ -394,6 +395,23 @@ def _migrate_schema():
         if 'spam_score' not in cols:
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
             db.session.commit()
+
+    if 'gmail_contacts' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('gmail_contacts')}
+        if 'created_subscriber' not in cols:
+            # Tolérer la colonne déjà présente : l'inspecteur est lu une fois
+            # au début, et deux processus qui démarrent ensemble — le serveur
+            # qui redémarre et un script lancé à la main — voient tous deux la
+            # colonne manquante, puis le second échoue sur l'ALTER.
+            try:
+                db.session.execute(text(
+                    "ALTER TABLE gmail_contacts ADD COLUMN created_subscriber "
+                    "BOOLEAN NOT NULL DEFAULT 0"))
+                db.session.commit()
+            except OperationalError as exc:
+                db.session.rollback()
+                if 'Duplicate column' not in str(exc):
+                    raise
 
     if 'themes' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('themes')}

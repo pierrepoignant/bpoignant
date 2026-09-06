@@ -287,6 +287,11 @@ class GmailContact(db.Model):
     decided_at = db.Column(db.DateTime, nullable=True)
     decided_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
+    # Vrai quand la décision a créé la ligne d'abonné. Annuler peut alors la
+    # retirer sans risque ; sans ce drapeau, on ne saurait pas distinguer
+    # quelqu'un qu'on vient d'ajouter d'un abonné de longue date.
+    created_subscriber = db.Column(db.Boolean, default=False, nullable=False)
+
     first_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
