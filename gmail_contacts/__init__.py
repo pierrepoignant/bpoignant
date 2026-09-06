@@ -15,6 +15,7 @@ fastest way to have the domain treated as a spammer.
 
 import logging
 import re
+import time
 from datetime import datetime
 from email.utils import getaddresses, parsedate_to_datetime
 from urllib.parse import urlencode
@@ -155,12 +156,23 @@ def _explain(resp, defaut):
 
 
 def profile_address(token=None):
+    """The connected mailbox's own address, cached once known.
+
+    It is fetched through the same backoff as everything else: this is the
+    first call of an import, and failing it on a momentary quota limit aborts
+    the run before it has read a single message. The result is stored, because
+    the address does not change and the connection may well have been made
+    before the API was enabled — which is exactly when the first attempt to
+    read it failed.
+    """
     token = token or _access_token()
-    r = requests.get(f'{API}/profile', headers={'Authorization': f'Bearer {token}'},
-                     timeout=_TIMEOUT)
+    r = _get(f'{API}/profile', token, None)
     if r.status_code != 200:
         raise GmailError(_explain(r, "Profil Gmail illisible"))
-    return (r.json() or {}).get('emailAddress') or ''
+    adresse = (r.json() or {}).get('emailAddress') or ''
+    if adresse and adresse != address():
+        set_config(KEY_ADDRESS, adresse)
+    return adresse
 
 
 # Adresses qui ne sont jamais des correspondants : services, robots, listes.
@@ -180,6 +192,29 @@ def _skippable(addr):
     return addr.lower().endswith(('.mailgun.org', '.sendgrid.net', 'google.com'))
 
 
+def _get(url, token, params=None, tentatives=5):
+    """GET with backoff on Gmail's rate limiter.
+
+    Each message read costs quota units, and a few hundred of them in a row
+    trips the per-minute allowance. Google answers 429 and expects the caller
+    to wait; failing the whole import over a limit that clears in seconds
+    would be throwing away several minutes of work.
+    """
+    attente = 2
+    for essai in range(tentatives):
+        r = requests.get(url, params=params,
+                         headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+        if r.status_code != 429 and not (r.status_code == 403 and 'ratelimit' in r.text.lower()
+                                         or 'Quota exceeded' in r.text):
+            return r
+        if essai == tentatives - 1:
+            return r
+        log.info('Gmail: quota atteint, pause de %ss', attente)
+        time.sleep(attente)
+        attente *= 2
+    return r
+
+
 def _messages(token, query, limit):
     """Message ids matching `query`, newest first."""
     ids, page = [], None
@@ -187,8 +222,7 @@ def _messages(token, query, limit):
         params = {'q': query, 'maxResults': min(100, limit - len(ids))}
         if page:
             params['pageToken'] = page
-        r = requests.get(f'{API}/messages', params=params,
-                         headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+        r = _get(f'{API}/messages', token, params)
         if r.status_code != 200:
             raise GmailError(_explain(r, "Lecture des messages impossible"))
         body = r.json() or {}
@@ -203,11 +237,9 @@ def _headers(token, message_id):
     """From/To/Cc/Date of one message. `format=metadata` with an explicit
     header list means Google never sends us the body — we do not want it and
     should not receive it."""
-    r = requests.get(
-        f'{API}/messages/{message_id}',
-        params=[('format', 'metadata')] + [('metadataHeaders', h)
-                                           for h in ('From', 'To', 'Cc', 'Date')],
-        headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+    r = _get(f'{API}/messages/{message_id}', token,
+             [('format', 'metadata')] + [('metadataHeaders', h)
+                                         for h in ('From', 'To', 'Cc', 'Date')])
     if r.status_code != 200:
         return {}
     out = {}
@@ -216,7 +248,7 @@ def _headers(token, message_id):
     return out
 
 
-def recent_contacts(limit=100, scan=400):
+def recent_contacts(limit=100, scan=600):
     """The people Bernard has most recently written to or heard from.
 
     Walks the sent box and the inbox newest-first and keeps one entry per
@@ -230,7 +262,12 @@ def recent_contacts(limit=100, scan=400):
     moi = (address() or profile_address(token)).lower()
 
     trouves = {}
-    for requete, direction in (('in:sent', 'envoyé'), ('in:inbox', 'reçu')):
+    # `to:me` plutôt que `in:inbox` : Bernard archive tout, sa boîte de
+    # réception ne contient qu'une poignée de messages, et chercher là ne
+    # trouvait presque aucun correspondant entrant. `-in:chats` écarte les
+    # conversations Hangouts, qui ne sont pas du courrier.
+    for requete, direction in (('in:sent', 'envoyé'),
+                               ('to:me -in:chats -in:sent', 'reçu')):
         for mid in _messages(token, requete, scan // 2):
             h = _headers(token, mid)
             if not h:
