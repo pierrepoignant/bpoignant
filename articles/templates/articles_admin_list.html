@@ -116,6 +116,36 @@
                 {% endif %}
                 {% endif %}
                 {% endif %}
+
+                {# LinkedIn : même logique que X — le lien vers le post une fois
+                   partagé, le bouton de partage sinon. Aucune fenêtre de
+                   rédaction : LinkedIn accepte 3000 caractères, le texte n'a
+                   pas besoin d'être taillé sur mesure. #}
+                {% if linkedin_configured %}
+                {% if a.linkedin_posted_at %}
+                    {% if a.linkedin_post_url %}
+                    <a href="{{ a.linkedin_post_url }}" target="_blank" rel="noopener"
+                       class="btn btn-sm" style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px;"
+                       title="Partagé sur LinkedIn le {{ a.linkedin_posted_at.strftime('%d/%m/%Y') }} — voir le post">
+                        <i class="fa-brands fa-linkedin-in"></i> <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                    </a>
+                    {% else %}
+                    <button type="button" class="btn btn-sm" disabled
+                            style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px; opacity: 0.45; cursor: default;"
+                            title="Partagé sur LinkedIn le {{ a.linkedin_posted_at.strftime('%d/%m/%Y') }} (lien du post non enregistré)">
+                        <i class="fa-brands fa-linkedin-in"></i> <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                    </button>
+                    {% endif %}
+                {% else %}
+                <form method="POST" action="{{ url_for('admin_articles.share_linkedin', article_id=a.id) }}"
+                      style="margin: 0;" onsubmit="return confirm('Partager « {{ a.title|truncate(60)|e }} » sur LinkedIn ?')">
+                    <button type="submit" class="btn btn-sm" title="Partager sur LinkedIn"
+                            style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px;">
+                        <i class="fa-brands fa-linkedin-in"></i>
+                    </button>
+                </form>
+                {% endif %}
+                {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"
                    class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;" title="Statistiques détaillées">
                     <i class="fas fa-chart-line"></i> Stats

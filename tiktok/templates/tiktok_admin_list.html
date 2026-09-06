@@ -87,6 +87,20 @@
             <a href="{{ p.posted_url }}" target="_blank" rel="noopener" title="Voir sur TikTok"
                style="color: var(--gris); padding: 4px 7px;"><i class="fa-brands fa-tiktok"></i></a>
             {% endif %}
+            {# LinkedIn : le lien vers le post une fois publié, le bouton sinon. #}
+            {% if p.linkedin_post_id %}
+            <a href="{{ p.linkedin_url }}" target="_blank" rel="noopener" title="Publié sur LinkedIn"
+               style="color: var(--gris); padding: 4px 7px;"><i class="fa-brands fa-linkedin-in"></i></a>
+            {% elif p.has_video and linkedin_ok %}
+            <form method="POST" action="{{ url_for('admin_tiktok.post_to_linkedin', post_id=p.id) }}"
+                  style="margin: 0;" onsubmit="return confirm('Publier cette vidéo sur LinkedIn ?')">
+                <button type="submit" class="btn btn-sm" title="Publier sur LinkedIn"
+                        style="padding: 4px 12px; border-radius: 50px; border: none; background: #0A66C2; color: #fff;">
+                    <i class="fa-brands fa-linkedin-in"></i>
+                </button>
+            </form>
+            {% endif %}
+
             {% if p.has_video %}
             {# Les valeurs passent par des attributs data-, pas par un onclick :
                `tojson` produit des guillemets doubles, qui refermaient

@@ -55,8 +55,10 @@ def list_posts():
         db.session.query(VideoView.post_id, db.func.count(VideoView.id))
         .group_by(VideoView.post_id).all()
     )
+    import linkedin
     return render_template('tiktok_admin_list.html', posts=posts,
                            minute_sent=envois, site_views=vues_site,
+                           linkedin_ok=linkedin.is_configured(),
                            minute_count=_mailable_query('minute').count(),
                            mon_email=getattr(current_user, 'email', '') or '',
                            storage_ok=storage.is_configured(),

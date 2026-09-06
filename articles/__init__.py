@@ -400,6 +400,7 @@ def list_articles():
         comments_by_article=comments_by_article,
         reactions_by_article=reactions_by_article,
         x_configured=x_configured,
+        linkedin_configured=__import__('linkedin').is_configured(),
         x_proposed_by_article=x_proposed_by_article,
     )
 
