@@ -409,6 +409,22 @@ def _migrate_schema():
     for table in ('articles', 'tiktok_posts'):
         if table in inspector.get_table_names():
             cols = {c['name'] for c in inspector.get_columns(table)}
+            if 'linkedin_impressions' not in cols:
+                try:
+                    for col, typ in (('linkedin_impressions', 'INTEGER'),
+                                     ('linkedin_interactions', 'INTEGER'),
+                                     ('linkedin_metrics_at', 'DATETIME')):
+                        db.session.execute(text(
+                            f"ALTER TABLE {table} ADD COLUMN {col} {typ} NULL"))
+                    db.session.commit()
+                except OperationalError as exc:
+                    db.session.rollback()
+                    if 'Duplicate column' not in str(exc):
+                        raise
+
+    for table in ('articles', 'tiktok_posts'):
+        if table in inspector.get_table_names():
+            cols = {c['name'] for c in inspector.get_columns(table)}
             if 'linkedin_post_id' not in cols:
                 try:
                     db.session.execute(text(

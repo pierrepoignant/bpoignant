@@ -82,6 +82,12 @@ class Article(db.Model):
     # a ni vues ni réactions à stocker.
     linkedin_post_id = db.Column(db.String(120), nullable=True)
     linkedin_posted_at = db.Column(db.DateTime, nullable=True)
+    # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
+    # publication d'un membre, et aucun scrapeur n'atteint les impressions,
+    # qui ne figurent pas sur la page publique.
+    linkedin_impressions = db.Column(db.Integer, nullable=True)
+    linkedin_interactions = db.Column(db.Integer, nullable=True)
+    linkedin_metrics_at = db.Column(db.DateTime, nullable=True)
     # Illustration used for the article header and, more importantly, as the
     # og:image / twitter:image. Without it every share — including the daily
     # automatic tweet — falls back to the same portrait.

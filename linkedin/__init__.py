@@ -453,7 +453,9 @@ def auto_post():
 
 # ─── Écran d'administration ─────────────────────────────────
 
-from flask import Blueprint, flash, redirect, render_template, url_for  # noqa: E402
+from flask import (  # noqa: E402
+    Blueprint, flash, redirect, render_template, request, url_for,
+)
 
 from auth import admin_required  # noqa: E402
 
@@ -484,21 +486,28 @@ def index():
                'stats': url_for('admin_articles.article_stats', article_id=a.id),
                'edit': url_for('admin_articles.edit_article', article_id=a.id),
                'x': a.x_post_url, 'site': (url_for('articles.public_show', slug=a.slug)
-                                           if a.published else None)}
+                                           if a.published else None),
+               'impressions': a.linkedin_impressions, 'interactions': a.linkedin_interactions}
               for a in articles]
     lignes += [{'kind': 'video', 'title': c.title, 'at': c.linkedin_posted_at,
                 'url': c.linkedin_url, 'image': c.poster_url,
                 'stats': url_for('admin_tiktok.post_stats', post_id=c.id),
                 'edit': url_for('admin_tiktok.edit', post_id=c.id),
-                'x': c.x_url, 'site': c.posted_url}
+                'x': c.x_url, 'site': c.posted_url,
+                'impressions': c.linkedin_impressions, 'interactions': c.linkedin_interactions}
                for c in clips]
     lignes.sort(key=lambda l: l['at'] or datetime.min, reverse=True)
 
     dernier, variations = follower_trend()
+    jours_connus = DailyStat.query.count()
+    dernier_import = db.session.query(db.func.max(DailyStat.imported_at)).scalar()
+    total_impressions = db.session.query(
+        db.func.coalesce(db.func.sum(DailyStat.impressions), 0)).scalar()
     return render_template(
         'linkedin_admin.html',
         lignes=lignes, snapshot=dernier, variations=variations,
-        profil=profile_url(),
+        profil=profile_url(), jours_connus=jours_connus,
+        dernier_import=dernier_import, total_impressions=total_impressions,
         connected=is_configured(),
         nom=display_name(),
         jours=days_left(),
@@ -532,6 +541,91 @@ class ProfileSnapshot(db.Model):
     headline = db.Column(db.String(300), nullable=True)
     location = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DailyStat(db.Model):
+    """One row per day, taken from the LinkedIn analytics export.
+
+    Impressions and interactions exist nowhere else: the API gives a member
+    nothing, and a scraper cannot read a number LinkedIn does not print on the
+    page. The export is the only source, so the figures arrive by hand — hence
+    a table keyed on the day, which re-importing an overlapping period
+    overwrites rather than duplicates.
+    """
+
+    __tablename__ = 'linkedin_daily_stats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    day = db.Column(db.Date, unique=True, nullable=False, index=True)
+    impressions = db.Column(db.Integer, nullable=True)
+    interactions = db.Column(db.Integer, nullable=True)
+    new_followers = db.Column(db.Integer, nullable=True)
+    imported_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+def import_analytics(fileobj):
+    """Read an export and store what it holds.
+
+    Returns a summary: days written, posts matched, posts seen but unknown to
+    us. An unmatched post is reported rather than dropped — it means something
+    was published on LinkedIn outside the site, which is worth knowing.
+    """
+    from articles.models import Article
+    from tiktok.models import TikTokPost
+    from linkedin.analytics_import import lire, post_id
+
+    donnees = lire(fileobj)
+    maintenant = datetime.utcnow()
+
+    for jour in donnees['jours']:
+        ligne = DailyStat.query.filter_by(day=jour['jour']).first()
+        if ligne is None:
+            ligne = DailyStat(day=jour['jour'])
+            db.session.add(ligne)
+        for champ, cle in (('impressions', 'impressions'),
+                           ('interactions', 'interactions'),
+                           ('new_followers', 'nouveaux_abonnes')):
+            if jour.get(cle) is not None:
+                setattr(ligne, champ, jour[cle])
+        ligne.imported_at = maintenant
+
+    # Rapprochement par l'identifiant numérique, qui est le même des deux côtés.
+    par_id = {}
+    for a in Article.query.filter(Article.linkedin_post_id.isnot(None)).all():
+        pid = post_id(a.linkedin_post_id)
+        if pid:
+            par_id[pid] = a
+    for c in TikTokPost.query.filter(TikTokPost.linkedin_post_id.isnot(None)).all():
+        pid = post_id(c.linkedin_post_id)
+        if pid:
+            par_id[pid] = c
+
+    rapproches, inconnus = 0, []
+    for pid, chiffres in donnees['posts'].items():
+        cible = par_id.get(pid)
+        if cible is None:
+            inconnus.append(pid)
+            continue
+        if chiffres.get('impressions') is not None:
+            cible.linkedin_impressions = chiffres['impressions']
+        if chiffres.get('interactions') is not None:
+            cible.linkedin_interactions = chiffres['interactions']
+        cible.linkedin_metrics_at = maintenant
+        rapproches += 1
+
+    # Le total d'abonnés complète l'instantané du jour, sans écraser un relevé
+    # Apify plus récent s'il existe déjà.
+    if donnees.get('abonnes'):
+        aujourdhui = maintenant.date()
+        snap = ProfileSnapshot.query.filter_by(day=aujourdhui).first()
+        if snap is None:
+            snap = ProfileSnapshot(day=aujourdhui)
+            db.session.add(snap)
+        snap.followers = donnees['abonnes']
+
+    db.session.commit()
+    return {'jours': len(donnees['jours']), 'posts': rapproches,
+            'inconnus': inconnus, 'abonnes': donnees.get('abonnes')}
 
 
 def profile_url():
@@ -606,4 +700,39 @@ def refresh_profile():
         flash("Apify n'est pas configuré, ou le profil n'a rien renvoyé.", 'danger')
     else:
         flash(f"Profil relevé : {snap.followers or '—'} abonnés.", 'success')
+    return redirect(url_for('admin_linkedin.index'))
+
+
+@admin_linkedin_bp.route('/import', methods=['POST'])
+@admin_required
+def import_stats():
+    """Import a LinkedIn analytics export (.xlsx)."""
+    from linkedin.analytics_import import ImportError_
+
+    fichier = request.files.get('export')
+    if not fichier or not fichier.filename:
+        flash("Choisissez le fichier exporté depuis LinkedIn.", 'danger')
+        return redirect(url_for('admin_linkedin.index'))
+    if not fichier.filename.lower().endswith(('.xlsx', '.xls')):
+        flash("Le fichier attendu est le classeur .xlsx exporté par LinkedIn.", 'danger')
+        return redirect(url_for('admin_linkedin.index'))
+
+    try:
+        bilan = import_analytics(fichier)
+    except ImportError_ as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_linkedin.index'))
+    except Exception:
+        log.exception('import des statistiques LinkedIn')
+        flash("L'import a échoué — voir les journaux.", 'danger')
+        return redirect(url_for('admin_linkedin.index'))
+
+    message = (f"{bilan['jours']} jour(s) enregistré(s), "
+               f"{bilan['posts']} publication(s) rapprochée(s)")
+    if bilan.get('abonnes'):
+        message += f", {bilan['abonnes']} abonnés"
+    if bilan['inconnus']:
+        message += (f". {len(bilan['inconnus'])} publication(s) de l'export "
+                    "ne correspondent à rien ici — publiées hors du site ?")
+    flash(message + '.', 'success')
     return redirect(url_for('admin_linkedin.index'))

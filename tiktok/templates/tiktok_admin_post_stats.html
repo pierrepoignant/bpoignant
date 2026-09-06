@@ -103,9 +103,15 @@
         <strong>LinkedIn</strong> :
         {% if p.linkedin_posted_at %}
         publié le {{ p.linkedin_posted_at.strftime('%d/%m/%Y') }}
-        {% if p.linkedin_url %}— <a href="{{ p.linkedin_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>{% endif %}.
-        LinkedIn ne publie aucun chiffre pour la publication d'un membre : les vues
-        et réactions se lisent sur le post lui-même.
+        {%- if p.linkedin_url %} — <a href="{{ p.linkedin_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>{% endif %}.
+        {% if p.linkedin_impressions is not none %}
+        <strong>{{ p.linkedin_impressions }}</strong> impressions,
+        <strong>{{ p.linkedin_interactions or 0 }}</strong> interactions
+        {%- if p.linkedin_metrics_at %} (importé le {{ p.linkedin_metrics_at.strftime('%d/%m/%Y') }}){% endif %}.
+        {% else %}
+        Chiffres pas encore importés — ils viennent de l'export LinkedIn, seule source :
+        ni l'API ni la page publique ne les portent.
+        {% endif %}
         {% else %}pas encore publié.{% endif %}
         <br>
         Les chiffres ci-dessus viennent de quatre sources différentes et ne s'additionnent pas :

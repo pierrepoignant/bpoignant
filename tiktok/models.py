@@ -67,6 +67,12 @@ class TikTokPost(db.Model):
     # publie pas pour un membre.
     linkedin_post_id = db.Column(db.String(120), nullable=True)
     linkedin_posted_at = db.Column(db.DateTime, nullable=True)
+    # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
+    # publication d'un membre, et aucun scrapeur n'atteint les impressions,
+    # qui ne figurent pas sur la page publique.
+    linkedin_impressions = db.Column(db.Integer, nullable=True)
+    linkedin_interactions = db.Column(db.Integer, nullable=True)
+    linkedin_metrics_at = db.Column(db.DateTime, nullable=True)
 
     # Posts that were promoted with paid advertising. Their figures are not
     # comparable with the organic ones — the 2021-2022 clips were all boosted

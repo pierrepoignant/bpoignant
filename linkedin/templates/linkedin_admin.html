@@ -68,6 +68,34 @@
         </form>
     </div>
 
+    {# L'export de LinkedIn est la seule source d'impressions : l'API n'en donne
+       aucune à un membre, et elles ne figurent pas sur la page publique, donc
+       aucun scrapeur ne les atteint non plus. D'où un import à la main. #}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.4rem; margin-bottom: 1.6rem;">
+        <h2 style="font-size: 1rem; margin: 0 0 0.3rem;">
+            <i class="fas fa-file-import" style="color: var(--rouge);"></i> Importer les statistiques
+        </h2>
+        <p style="font-size: 0.84rem; color: var(--gris); margin: 0 0 0.9rem; line-height: 1.6;">
+            Sur LinkedIn, <em>Vous · Tableau de bord · Exporter</em> : le classeur obtenu contient
+            les impressions par jour et par publication, que rien d'autre ne fournit.
+            Réimporter une période déjà connue la met à jour sans la dupliquer.
+        </p>
+        <form method="POST" action="{{ url_for('admin_linkedin.import_stats') }}"
+              enctype="multipart/form-data" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <input type="file" name="export" accept=".xlsx,.xls" required
+                   style="flex: 1; min-width: 220px; font-family: inherit; font-size: 0.86rem;">
+            <button type="submit" class="btn btn-sm btn-primary">
+                <i class="fas fa-upload"></i> Importer
+            </button>
+        </form>
+        {% if dernier_import %}
+        <p style="font-size: 0.8rem; color: var(--gris); margin: 0.7rem 0 0;">
+            Dernier import : {{ dernier_import.strftime('%d/%m/%Y') }} ·
+            {{ total_impressions }} impressions sur {{ jours_connus }} jour(s) enregistré(s).
+        </p>
+        {% endif %}
+    </div>
+
     {% if prochain %}
     <p style="font-size: 0.88rem; color: var(--gris); margin: 0 0 1.2rem;">
         Prochain automatiquement : <strong style="color: var(--noir);">{{ prochain.title|truncate(70) }}</strong>
@@ -89,6 +117,10 @@
             <div class="fiche-meta">
                 {{ 'Vidéo' if l.kind == 'video' else 'Article' }} ·
                 publié sur LinkedIn le {{ l.at.strftime('%d/%m/%Y') if l.at else '—' }}
+                {% if l.impressions is not none %}
+                · <i class="far fa-eye"></i> {{ l.impressions }} impressions
+                {%- if l.interactions %} · <i class="far fa-heart"></i> {{ l.interactions }}{% endif %}
+                {% endif %}
             </div>
             <div class="fiche-pastilles">
                 {{ pastille(true, 'fa-brands fa-linkedin-in', 'Voir sur LinkedIn', l.url, '#0A66C2') }}

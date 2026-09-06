@@ -178,10 +178,26 @@
                     · <a href="{{ article.linkedin_post_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
                     {% endif %}
                 </div>
+                {% if article.linkedin_impressions is not none %}
+                <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem;">
+                    <span><strong>{{ article.linkedin_impressions }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">impressions</span></span>
+                    <span><strong>{{ article.linkedin_interactions or 0 }}</strong>
+                          <span style="color: var(--gris); font-size: 0.8rem;">interactions</span></span>
+                </div>
+                {% if article.linkedin_metrics_at %}
+                <div style="font-size: 0.76rem; color: #bbb; margin-top: 0.6rem;">
+                    importé le {{ article.linkedin_metrics_at.strftime('%d/%m/%Y') }}
+                </div>
+                {% endif %}
+                {% else %}
+                {# Ces chiffres n'existent que dans l'export : ni l'API ni la
+                   page publique ne les portent. #}
                 <p style="font-size: 0.82rem; color: var(--gris); margin: 0; line-height: 1.55;">
-                    LinkedIn ne publie aucun chiffre pour la publication d'un membre :
-                    les vues et réactions se lisent sur le post lui-même.
+                    Pas encore de chiffres — ils viennent de l'export LinkedIn,
+                    à déposer sur <a href="{{ url_for('admin_linkedin.index') }}" style="color: var(--rouge);">la page LinkedIn</a>.
                 </p>
+                {% endif %}
                 {% else %}
                 <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">Pas encore partagé sur LinkedIn.</p>
                 {% endif %}
