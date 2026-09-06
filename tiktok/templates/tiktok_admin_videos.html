@@ -78,19 +78,20 @@
             {% endif %}
             {# L'envoi de La Minute vit ici : c'est la page des vidéos, donc
                c'est d'ici qu'on les envoie aux abonnés. #}
+            {# Même bouton que sur un article, même libellé, même vert : les deux
+               font la même chose. Qu'il ait déjà été envoyé se lit sur la
+               pastille et dans la fenêtre, pas sur la couleur du bouton. #}
             {% set envoi = minute_sends.get(c.id) %}
-            <button type="button" class="btn btn-sm bouton-envoi"
+            <button type="button" class="btn btn-sm btn-vert bouton-envoi"
+                    style="border-radius:50px; padding:6px 14px;"
                     data-lettre="La Minute"
                     data-titre="{{ c.title }}"
                     data-email="{{ mon_email }}"
                     data-nb="{{ minute_count }}"
                     data-test="{{ url_for('admin_tiktok.send_minute_test', post_id=c.id) }}"
                     data-envoi="{{ url_for('admin_tiktok.send_minute', post_id=c.id) }}"
-                    data-dernier="{{ envoi.sent_at.strftime('%d/%m/%Y') if envoi else '' }}"
-                    style="border-radius:50px; padding:6px 14px; border:1px solid #e0e0e0;
-                           background: {{ 'var(--gris-clair)' if envoi else 'none' }};
-                           color: {{ 'var(--gris)' if envoi else 'var(--noir)' }};">
-                <i class="far fa-envelope"></i> {{ 'Renvoyer' if envoi else 'La Minute' }}
+                    data-dernier="{{ envoi.sent_at.strftime('%d/%m/%Y') if envoi else '' }}">
+                <i class="fas fa-paper-plane"></i> Envoyer
             </button>
             <a href="{{ url_for('admin_tiktok.post_stats', post_id=c.id) }}" class="btn btn-sm btn-outline"
                style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
