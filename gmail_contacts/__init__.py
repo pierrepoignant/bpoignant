@@ -177,9 +177,13 @@ def profile_address(token=None):
 
 # Adresses qui ne sont jamais des correspondants : services, robots, listes.
 _IGNORE_RE = re.compile(
-    r'(^|[.@_-])(no.?reply|ne.?pas.?repondre|notification|newsletter|mailer|'
+    r'(^|[.@_+-])(no.?reply|ne.?pas.?repondre|notification|newsletter|mailer|'
     r'postmaster|bounce|donotreply|support|contact@|info@|admin@|abuse|'
-    r'noreply|automated|do-not-reply)', re.I)
+    r'noreply|automated|do-not-reply|invoice|facture|billing|receipt|'
+    r'statements?|alerte?s?|nepasrepondre)', re.I)
+# Services dont aucune adresse n'est un correspondant.
+_IGNORE_DOMAINS = ('stripe.com', 'paypal.com', 'notify.', 'mailchimp.com',
+                   'substack.com', 'eventbrite.com', 'doctolib.fr')
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
@@ -188,8 +192,13 @@ def _skippable(addr):
         return True
     if _IGNORE_RE.search(addr):
         return True
+    bas = addr.lower()
+    domaine = bas.rsplit('@', 1)[-1]
+    if any(domaine == d or domaine.endswith('.' + d) or d.endswith('.') and domaine.startswith(d)
+           for d in _IGNORE_DOMAINS):
+        return True
     # Les adresses de suivi et de réponse automatique des grands services.
-    return addr.lower().endswith(('.mailgun.org', '.sendgrid.net', 'google.com'))
+    return bas.endswith(('.mailgun.org', '.sendgrid.net', 'google.com'))
 
 
 def _get(url, token, params=None, tentatives=5):
