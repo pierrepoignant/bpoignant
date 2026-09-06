@@ -1,0 +1,20 @@
+{% macro pastille(actif, icone, libelle, url=None, couleur='var(--vert-fonce)') %}
+{# Une pastille par canal : allumée quand c'est parti, éteinte sinon. Lisible
+   d'un coup d'œil, et au pouce elle reste une cible de 32 px. #}
+{% if actif and url %}
+<a href="{{ url }}" target="_blank" rel="noopener" title="{{ libelle }}"
+   style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:{{ couleur }}; color:#fff; text-decoration:none;">
+    <i class="{{ icone }}"></i>
+</a>
+{% elif actif %}
+<span title="{{ libelle }}"
+      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:{{ couleur }}; color:#fff;">
+    <i class="{{ icone }}"></i>
+</span>
+{% else %}
+<span title="{{ libelle }}"
+      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--gris-clair); color:#bbb;">
+    <i class="{{ icone }}"></i>
+</span>
+{% endif %}
+{% endmacro %}

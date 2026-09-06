@@ -1418,10 +1418,10 @@ a:hover { color: var(--rouge-fonce); }
     .admin-stack-table td[data-label="Personne"]::before { display: block; }
 }
 
-/* ── Vidéos : une fiche par vidéo ───────────────────────────
-   Pensée pour le téléphone d'abord : la vignette et le texte sur une ligne,
+/* ── Fiches d'administration (vidéos, articles) ─────────────
+   Pensées pour le téléphone d'abord : la vignette et le texte sur une ligne,
    les actions sur la suivante, en cibles pleine largeur. */
-.video-carte {
+.fiche {
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -1433,7 +1433,7 @@ a:hover { color: var(--rouge-fonce); }
     gap: 0.5rem 1rem;
     align-items: start;
 }
-.video-vignette {
+.fiche-vignette {
     grid-area: vignette;
     width: 64px; height: 96px;
     border-radius: 8px;
@@ -1442,13 +1442,13 @@ a:hover { color: var(--rouge-fonce); }
     display: flex; align-items: center; justify-content: center;
     color: var(--gris);
 }
-.video-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.video-corps { grid-area: corps; min-width: 0; }
-.video-titre { font-weight: 700; color: var(--noir); display: block; margin-bottom: 0.2rem; }
-.video-meta { font-size: 0.78rem; color: var(--gris); line-height: 1.6; }
-.video-pastilles { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+.fiche-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fiche-corps { grid-area: corps; min-width: 0; }
+.fiche-titre { font-weight: 700; color: var(--noir); display: block; margin-bottom: 0.2rem; }
+.fiche-meta { font-size: 0.78rem; color: var(--gris); line-height: 1.6; }
+.fiche-pastilles { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
 
-.video-actions {
+.fiche-actions {
     grid-area: actions;
     display: flex;
     gap: 0.4rem;
@@ -1459,19 +1459,19 @@ a:hover { color: var(--rouge-fonce); }
 
 @media (min-width: 900px) {
     /* Au-delà, les actions retrouvent leur place à droite. */
-    .video-carte {
+    .fiche {
         grid-template-columns: 64px 1fr auto;
         grid-template-areas: "vignette corps actions";
         align-items: center;
     }
-    .video-actions { border-top: none; padding-top: 0; }
+    .fiche-actions { border-top: none; padding-top: 0; }
 }
 
 @media (max-width: 768px) {
     /* Les actions occupent toute la largeur, deux par rangée. */
-    .video-actions .btn, .video-actions form { flex: 1 1 45%; }
-    .video-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
-    .video-actions form .btn { width: 100%; }
+    .fiche-actions .btn, .fiche-actions form { flex: 1 1 45%; }
+    .fiche-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+    .fiche-actions form .btn { width: 100%; }
 
     /* Les outils d'entretien des articles, en bas de page, sur toute la largeur. */
     .admin-entretien form { flex: 1 1 100%; }

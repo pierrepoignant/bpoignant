@@ -5,6 +5,8 @@
 {% block admin_subtitle %}<p>Gérez les articles publiés sur le site.</p>{% endblock %}
 
 
+{% from 'admin_pastille.html' import pastille %}
+
 {% block admin_content %}
     <div class="admin-row" style="justify-content: space-between; margin-bottom: 1.5rem;">
         <h2 style="font-size: 1.5rem; margin: 0;">
@@ -17,127 +19,94 @@
 
     {% if articles %}
         {% for a in articles %}
-        <div style="background: white; border-radius: 12px; margin-bottom: 0.8rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
-            <div class="admin-row" style="padding: 1.2rem 1.5rem;">
-                <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--rouge), var(--rouge-fonce)); color: white; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fas fa-feather-alt"></i>
-                </div>
-                <div class="admin-row-main" style="flex: 1; min-width: 0;">
-                    <strong style="text-transform: uppercase;">{{ a.title }}</strong>
-                    {% if a.published %}
-                        <span style="background: rgba(198,208,2,0.2); color: var(--vert-fonce); padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem;">PUBLIÉ</span>
-                    {% else %}
-                        <span style="background: rgba(108,117,125,0.15); color: var(--gris); padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; margin-left: 0.5rem;">BROUILLON</span>
-                    {% endif %}
-                    <div style="color: var(--gris); font-size: 0.8rem; margin-top: 4px;">
-                        <code style="background: var(--gris-clair); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">/articles/{{ a.slug }}</code>
-                        · {{ a.display_date.strftime('%d/%m/%Y') }}
-                        {% set last = last_campaign_by_article.get(a.id) %}
-                        {% if last %}
-                        · <span title="Dernier envoi"><i class="far fa-envelope"></i> {{ last.sent_at.strftime('%d/%m/%Y') }} ({{ last.success_count }}/{{ last.recipient_count }})</span>
-                        {% endif %}
-                    </div>
-                    {% set views = views_by_article.get(a.id, 0) %}
-                    {% set comments = comments_by_article.get(a.id, 0) %}
-                    {% set reactions = reactions_by_article.get(a.id, 0) %}
-                    <div style="color: var(--gris); font-size: 0.8rem; margin-top: 6px; display: flex; gap: 1rem; flex-wrap: wrap;">
-                        <span title="Vues"><i class="far fa-eye"></i> {{ views }}</span>
-                        {% if comments %}
-                        <span title="Commentaires"><i class="far fa-comment"></i> {{ comments }}</span>
-                        {% endif %}
-                        {% if reactions %}
-                        <span title="Réactions"><i class="far fa-heart"></i> {{ reactions }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="admin-row-actions">
-                {% if a.published %}
-                <a href="{{ url_for('articles.public_show', slug=a.slug) }}" target="_blank"
-                   class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;" title="Voir sur le site">
-                    <i class="fas fa-eye"></i>
+        <div class="fiche">
+            <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}" class="fiche-vignette">
+                {% if a.image_url %}
+                <img src="{{ a.image_url }}" alt="" loading="lazy">
+                {% else %}
+                <i class="fas fa-newspaper"></i>
+                {% endif %}
+            </a>
+
+            <div class="fiche-corps">
+                <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}" class="fiche-titre">
+                    {{ a.title }}
                 </a>
-                {% set _last = last_campaign_by_article.get(a.id) %}
-                <button type="button" class="btn btn-sm btn-vert" style="padding: 6px 12px;" title="Envoyer par e-mail aux abonnés"
+                <div class="fiche-meta">
+                    {% if not a.published %}<strong style="color: var(--gris);">brouillon</strong> · {% endif %}
+                    {{ a.display_date.strftime('%d/%m/%Y') }}
+                    {% set views = views_by_article.get(a.id, 0) %}
+                    · <i class="far fa-eye"></i> {{ views }}
+                    {% if comments_by_article.get(a.id) %} · <i class="far fa-comment"></i> {{ comments_by_article[a.id] }}{% endif %}
+                    {% if reactions_by_article.get(a.id) %} · <i class="far fa-heart"></i> {{ reactions_by_article[a.id] }}{% endif %}
+                </div>
+
+                {# Les mêmes pastilles que sur les vidéos : allumée quand c'est
+                   parti, éteinte sinon. La newsletter en fait partie — c'est un
+                   canal de diffusion comme les autres. #}
+                {% set last = last_campaign_by_article.get(a.id) %}
+                <div class="fiche-pastilles">
+                    {{ pastille(last, 'far fa-envelope',
+                                'Envoyé le %s à %s abonnés'|format(last.sent_at.strftime('%d/%m/%Y'), last.success_count) if last else 'Pas encore envoyé aux abonnés',
+                                None, 'var(--rouge)') }}
+                    {{ pastille(a.x_posted_at, 'fa-brands fa-x-twitter',
+                                'Partagé sur X le %s'|format(a.x_posted_at.strftime('%d/%m/%Y')) if a.x_posted_at else 'Pas encore sur X',
+                                a.x_post_url, '#000') }}
+                    {{ pastille(a.linkedin_posted_at, 'fa-brands fa-linkedin-in',
+                                'Partagé sur LinkedIn le %s'|format(a.linkedin_posted_at.strftime('%d/%m/%Y')) if a.linkedin_posted_at else 'Pas encore sur LinkedIn',
+                                a.linkedin_post_url, '#0A66C2') }}
+                    {{ pastille(a.published, 'fas fa-globe',
+                                'En ligne' if a.published else 'Brouillon — pas en ligne',
+                                url_for('articles.public_show', slug=a.slug) if a.published else None,
+                                'var(--vert-fonce)') }}
+                </div>
+            </div>
+
+            <div class="fiche-actions">
+                {% if a.published %}
+                <button type="button" class="btn btn-sm btn-vert" style="border-radius:50px; padding:6px 14px;"
                         onclick="openSendModal(this)"
                         data-action="{{ url_for('admin_articles.send_newsletter', article_id=a.id) }}"
                         data-title="{{ a.title }}"
                         data-intro="{{ a.newsletter_intro or '' }}"
-                        data-last="{{ _last.sent_at.strftime('%d/%m/%Y') if _last else '' }}">
+                        data-last="{{ last.sent_at.strftime('%d/%m/%Y') if last else '' }}">
                     <i class="fas fa-paper-plane"></i> Envoyer
                 </button>
-                {% if x_configured %}
-                {% if a.x_posted_at %}
-                    {# Already shared: no re-post, just a way back to the tweet. #}
-                    {% if a.x_post_url %}
-                    <a href="{{ a.x_post_url }}" target="_blank" rel="noopener"
-                       class="btn btn-sm" style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px;"
-                       title="Partagé sur X le {{ a.x_posted_at.strftime('%d/%m/%Y') }} — voir le post">
-                        <i class="fa-brands fa-x-twitter"></i> <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                    </a>
-                    {% else %}
-                    <button type="button" class="btn btn-sm" disabled
-                            style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px; opacity: 0.45; cursor: default;"
-                            title="Partagé sur X le {{ a.x_posted_at.strftime('%d/%m/%Y') }} (lien du post non enregistré)">
-                        <i class="fa-brands fa-x-twitter"></i> <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                    </button>
-                    {% endif %}
-                {% else %}
-                <button type="button" class="btn btn-sm" style="padding: 6px 12px; background: #000; color: #fff; border: none; border-radius: 50px;"
-                        title="Partager sur X"
+                {% if x_configured and not a.x_posted_at %}
+                <button type="button" class="btn btn-sm"
+                        style="border-radius:50px; padding:6px 14px; background:#000; color:#fff; border:none;"
                         onclick="openXModal(this)"
                         data-action="{{ url_for('admin_articles.post_to_x', article_id=a.id) }}"
                         data-title="{{ a.title }}"
                         data-text="{{ x_proposed_by_article.get(a.id, '') }}">
-                    <i class="fa-brands fa-x-twitter"></i>
+                    <i class="fa-brands fa-x-twitter"></i> Publier
                 </button>
                 {% endif %}
-                {% endif %}
-                {% endif %}
-
-                {# LinkedIn : même logique que X — le lien vers le post une fois
-                   partagé, le bouton de partage sinon. Aucune fenêtre de
-                   rédaction : LinkedIn accepte 3000 caractères, le texte n'a
-                   pas besoin d'être taillé sur mesure. #}
-                {% if linkedin_configured %}
-                {% if a.linkedin_posted_at %}
-                    {% if a.linkedin_post_url %}
-                    <a href="{{ a.linkedin_post_url }}" target="_blank" rel="noopener"
-                       class="btn btn-sm" style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px;"
-                       title="Partagé sur LinkedIn le {{ a.linkedin_posted_at.strftime('%d/%m/%Y') }} — voir le post">
-                        <i class="fa-brands fa-linkedin-in"></i> <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                    </a>
-                    {% else %}
-                    <button type="button" class="btn btn-sm" disabled
-                            style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px; opacity: 0.45; cursor: default;"
-                            title="Partagé sur LinkedIn le {{ a.linkedin_posted_at.strftime('%d/%m/%Y') }} (lien du post non enregistré)">
-                        <i class="fa-brands fa-linkedin-in"></i> <i class="fas fa-check" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                    </button>
-                    {% endif %}
-                {% else %}
+                {% if linkedin_configured and not a.linkedin_posted_at %}
                 <form method="POST" action="{{ url_for('admin_articles.share_linkedin', article_id=a.id) }}"
                       style="margin: 0;" onsubmit="return confirm('Partager « {{ a.title|truncate(60)|e }} » sur LinkedIn ?')">
-                    <button type="submit" class="btn btn-sm" title="Partager sur LinkedIn"
-                            style="padding: 6px 12px; background: #0A66C2; color: #fff; border: none; border-radius: 50px;">
-                        <i class="fa-brands fa-linkedin-in"></i>
+                    <button type="submit" class="btn btn-sm"
+                            style="border-radius:50px; padding:6px 14px; background:#0A66C2; color:#fff; border:none;">
+                        <i class="fa-brands fa-linkedin-in"></i> Publier
                     </button>
                 </form>
                 {% endif %}
                 {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"
-                   class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;" title="Statistiques détaillées">
+                   class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
                     <i class="fas fa-chart-line"></i> Stats
                 </a>
                 <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}"
-                   class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; padding: 6px 12px;">
-                    <i class="fas fa-edit"></i> Éditer
+                   class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                    <i class="fas fa-pen"></i> Modifier
                 </a>
                 <form method="POST" action="{{ url_for('admin_articles.delete_article', article_id=a.id) }}" style="margin: 0;"
                       onsubmit="return confirm('Supprimer définitivement cet article ?')">
-                    <button type="submit" class="btn btn-sm" style="padding: 6px 12px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
+                    <button type="submit" class="btn btn-sm"
+                            style="padding: 6px 12px; background: none; border: 1px solid #e0e0e0; color: var(--gris); border-radius: 50px;">
                         <i class="fas fa-trash"></i>
                     </button>
                 </form>
-                </div>
             </div>
         </div>
         {% endfor %}
