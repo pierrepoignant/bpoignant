@@ -63,6 +63,11 @@ class TikTokPost(db.Model):
     x_retweet_count = db.Column(db.Integer, nullable=True)
     x_metrics_at = db.Column(db.DateTime, nullable=True)
 
+    # LinkedIn : identifiant et date du post, sans chiffres — LinkedIn n'en
+    # publie pas pour un membre.
+    linkedin_post_id = db.Column(db.String(120), nullable=True)
+    linkedin_posted_at = db.Column(db.DateTime, nullable=True)
+
     # Posts that were promoted with paid advertising. Their figures are not
     # comparable with the organic ones — the 2021-2022 clips were all boosted
     # and run into six figures, against a few hundred for the current ones —
@@ -100,6 +105,12 @@ class TikTokPost(db.Model):
     @property
     def has_video(self):
         return bool(self.video_url)
+
+    @property
+    def linkedin_url(self):
+        if not self.linkedin_post_id:
+            return None
+        return f"https://www.linkedin.com/feed/update/{self.linkedin_post_id}/"
 
     @property
     def x_url(self):

@@ -396,6 +396,21 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
             db.session.commit()
 
+    for table in ('articles', 'tiktok_posts'):
+        if table in inspector.get_table_names():
+            cols = {c['name'] for c in inspector.get_columns(table)}
+            if 'linkedin_post_id' not in cols:
+                try:
+                    db.session.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN linkedin_post_id VARCHAR(120) NULL"))
+                    db.session.execute(text(
+                        f"ALTER TABLE {table} ADD COLUMN linkedin_posted_at DATETIME NULL"))
+                    db.session.commit()
+                except OperationalError as exc:
+                    db.session.rollback()
+                    if 'Duplicate column' not in str(exc):
+                        raise
+
     if 'gmail_contacts' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('gmail_contacts')}
         if 'created_subscriber' not in cols:

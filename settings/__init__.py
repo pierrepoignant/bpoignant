@@ -50,8 +50,16 @@ def _callback_url():
 def index():
     import gdrive
     import apify
+    import linkedin
     return render_template(
         'settings_index.html',
+        linkedin_client_id=linkedin._client_id(),
+        linkedin_has_secret=bool(linkedin._client_secret()),
+        linkedin_connected=linkedin.is_configured(),
+        linkedin_name=linkedin.display_name(),
+        linkedin_days_left=linkedin.days_left(),
+        linkedin_version=linkedin._version(),
+        linkedin_redirect_uri=url_for('admin_settings.linkedin_callback', _external=True),
         apify_configured=apify.is_configured(),
         apify_actor=apify.actor(),
         apify_profile=apify.profile(),
@@ -61,6 +69,73 @@ def index():
         gdrive_connected=gdrive.is_connected(),
         gdrive_redirect_uri=_callback_url(),
     )
+
+
+@admin_settings_bp.route('/linkedin/credentials', methods=['POST'])
+@admin_required
+def linkedin_credentials():
+    import linkedin
+    linkedin.save_settings(request.form.get('client_id'),
+                           request.form.get('client_secret'),
+                           request.form.get('version'))
+    flash("Identifiants LinkedIn enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index') + '#linkedin')
+
+
+@admin_settings_bp.route('/linkedin/connect')
+@admin_required
+def linkedin_connect():
+    import linkedin
+    etat = secrets.token_urlsafe(24)
+    session['linkedin_oauth_state'] = etat
+    try:
+        url = linkedin.authorization_url(
+            url_for('admin_settings.linkedin_callback', _external=True), etat)
+    except linkedin.LinkedInError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#linkedin')
+    return redirect(url)
+
+
+@admin_settings_bp.route('/linkedin/callback')
+@admin_required
+def linkedin_callback():
+    import linkedin
+    attendu = session.pop('linkedin_oauth_state', None)
+    if not attendu or request.args.get('state') != attendu:
+        flash("Réponse LinkedIn inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_settings.index') + '#linkedin')
+    if request.args.get('error'):
+        flash(f"Connexion refusée : {request.args.get('error_description') or request.args['error']}",
+              'danger')
+        return redirect(url_for('admin_settings.index') + '#linkedin')
+    try:
+        linkedin.exchange_code(request.args.get('code'),
+                               url_for('admin_settings.linkedin_callback', _external=True))
+    except linkedin.LinkedInError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#linkedin')
+    flash(f"LinkedIn connecté — {linkedin.display_name() or 'compte'}. "
+          f"L'autorisation dure {linkedin.days_left()} jours.", 'success')
+    return redirect(url_for('admin_settings.index') + '#linkedin')
+
+
+@admin_settings_bp.route('/linkedin/verify', methods=['POST'])
+@admin_required
+def linkedin_verify():
+    import linkedin
+    ok, message = linkedin.verify_credentials()
+    flash(message, 'success' if ok else 'danger')
+    return redirect(url_for('admin_settings.index') + '#linkedin')
+
+
+@admin_settings_bp.route('/linkedin/disconnect', methods=['POST'])
+@admin_required
+def linkedin_disconnect():
+    import linkedin
+    linkedin.disconnect()
+    flash("LinkedIn déconnecté.", 'success')
+    return redirect(url_for('admin_settings.index') + '#linkedin')
 
 
 @admin_settings_bp.route('/apify/credentials', methods=['POST'])

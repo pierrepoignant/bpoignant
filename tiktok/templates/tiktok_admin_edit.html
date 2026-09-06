@@ -129,6 +129,19 @@
                         </button>
                     </form>
                     {% endif %}
+                    {% if p.linkedin_post_id %}
+                    <a href="{{ p.linkedin_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-linkedin"></i> Voir sur LinkedIn
+                    </a>
+                    {% elif p.has_video %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_linkedin', post_id=p.id) }}"
+                          onsubmit="return confirm('Publier cette vidéo sur LinkedIn maintenant ?')" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm" style="width: 100%; background: #0A66C2; color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
+                            <i class="fa-brands fa-linkedin"></i> Publier sur LinkedIn
+                        </button>
+                    </form>
+                    {% endif %}
                     {% if p.has_video %}
                     <a href="{{ p.video_url }}" download class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
                         <i class="fas fa-download"></i> Télécharger

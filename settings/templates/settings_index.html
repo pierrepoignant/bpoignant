@@ -162,5 +162,88 @@
         </p>
         {% endif %}
     </div>
+    {# LinkedIn : publier sur le profil personnel de Bernard. Les statistiques
+       n'existent pas pour un membre — seules les pages d'organisation en ont —
+       et l'autorisation expire au bout de soixante jours, ce que la console
+       LinkedIn ne rappelle nulle part. #}
+    <section id="linkedin" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.6rem; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">
+            <i class="fa-brands fa-linkedin" style="color: #0A66C2;"></i> LinkedIn
+        </h2>
+        <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1.1rem; line-height: 1.6;">
+            Publier sur le profil personnel de Bernard. LinkedIn ne fournit aucune
+            statistique pour les publications d'un membre : il n'y aura ni vues ni
+            réactions à afficher ici, contrairement à X et TikTok.
+        </p>
+
+        {% if linkedin_connected %}
+        <p style="font-size: 0.92rem; margin: 0 0 1rem;">
+            <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+            Connecté en tant que <strong>{{ linkedin_name or 'ce compte' }}</strong>
+            {% if linkedin_days_left is not none %}
+            — autorisation valable encore
+            <strong style="{% if linkedin_days_left < 7 %}color: var(--rouge);{% endif %}">{{ linkedin_days_left }} jour{{ 's' if linkedin_days_left > 1 else '' }}</strong>.
+            {% endif %}
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
+            <form method="POST" action="{{ url_for('admin_settings.linkedin_verify') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Vérifier</button>
+            </form>
+            <a href="{{ url_for('admin_settings.linkedin_connect') }}" class="btn btn-sm btn-primary">Renouveler l'autorisation</a>
+            <form method="POST" action="{{ url_for('admin_settings.linkedin_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Déconnecter LinkedIn ?')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Déconnecter</button>
+            </form>
+        </div>
+        {% elif linkedin_client_id and linkedin_has_secret %}
+        <a href="{{ url_for('admin_settings.linkedin_connect') }}" class="btn btn-primary" style="margin-bottom: 1.2rem;">
+            <i class="fa-brands fa-linkedin"></i> Connecter le compte de Bernard
+        </a>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('admin_settings.linkedin_credentials') }}">
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Client ID</label>
+            <input type="text" name="client_id" value="{{ linkedin_client_id }}"
+                   style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
+
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+                Client Secret {% if linkedin_has_secret %}<span style="text-transform:none; letter-spacing:0; color:#bbb;">— enregistré, laissez vide pour le conserver</span>{% endif %}
+            </label>
+            <input type="password" name="client_secret" placeholder="{{ '••••••••' if linkedin_has_secret else '' }}"
+                   style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
+
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+                Version de l'API <span style="text-transform:none; letter-spacing:0; color:#bbb;">— LinkedIn retire ses versions au bout d'un an</span>
+            </label>
+            <input type="text" name="version" value="{{ linkedin_version }}"
+                   style="width: 160px; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 1rem;">
+
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+        </form>
+
+        <details style="margin-top: 1.2rem;">
+            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">Comment obtenir ces identifiants</summary>
+            <ol style="font-size: 0.86rem; line-height: 1.75; color: var(--noir); margin: 0.7rem 0 0.5rem; padding-left: 1.2rem;">
+                <li>Une <strong>Page LinkedIn</strong> est indispensable : une application ne peut pas
+                    être créée sur un profil seul. Créez-en une si nécessaire, même si les
+                    publications iront sur le profil de Bernard.</li>
+                <li>Sur <code>linkedin.com/developers</code>, créez une application et rattachez-la
+                    à cette Page, puis vérifiez-la depuis la Page.</li>
+                <li>Onglet <em>Products</em> : demandez <em>Sign In with LinkedIn using OpenID
+                    Connect</em> et <em>Share on LinkedIn</em>. Les deux sont accordés
+                    immédiatement, sans validation.</li>
+                <li>Onglet <em>Auth</em> : ajoutez l'adresse de retour ci-dessous, puis copiez le
+                    Client ID et le Client Secret dans les champs ci-dessus.</li>
+                <li>Revenez ici et cliquez <em>Connecter</em> : c'est Bernard qui doit autoriser,
+                    avec son propre compte.</li>
+            </ol>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <code id="uri-linkedin" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ linkedin_redirect_uri }}</code>
+                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="navigator.clipboard.writeText(document.getElementById('uri-linkedin').textContent.trim()); this.textContent='Copié';">Copier</button>
+            </div>
+        </details>
+    </section>
+
 
 {% endblock %}

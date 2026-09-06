@@ -76,6 +76,12 @@ class Article(db.Model):
     x_reply_count = db.Column(db.Integer, nullable=True)
     x_retweet_count = db.Column(db.Integer, nullable=True)
     x_metrics_at = db.Column(db.DateTime, nullable=True)
+
+    # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
+    # n'expose aucune statistique pour la publication d'un membre, donc il n'y
+    # a ni vues ni réactions à stocker.
+    linkedin_post_id = db.Column(db.String(120), nullable=True)
+    linkedin_posted_at = db.Column(db.DateTime, nullable=True)
     # Illustration used for the article header and, more importantly, as the
     # og:image / twitter:image. Without it every share — including the daily
     # automatic tweet — falls back to the same portrait.
@@ -88,6 +94,12 @@ class Article(db.Model):
     themes = db.relationship('Theme', secondary=article_themes,
                              backref=db.backref('articles', lazy='selectin'),
                              lazy='selectin', order_by='Theme.name')
+
+    @property
+    def linkedin_post_url(self):
+        if not self.linkedin_post_id:
+            return None
+        return f"https://www.linkedin.com/feed/update/{self.linkedin_post_id}/"
 
     @property
     def x_post_url(self):

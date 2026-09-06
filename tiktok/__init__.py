@@ -578,6 +578,58 @@ def send_minute_test(post_id):
     return redirect(url_for('admin_tiktok.list_posts'))
 
 
+@admin_tiktok_bp.route('/<int:post_id>/linkedin', methods=['POST'])
+@admin_required
+def post_to_linkedin(post_id):
+    """Publish a clip on LinkedIn, fetching the file from the bucket.
+
+    Same route as X: the render lives in object storage, so this works from
+    production as well as from the machine that produced it.
+    """
+    import tempfile
+    import requests as http
+    import linkedin
+
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    if post.linkedin_post_id:
+        flash("Ce clip est déjà sur LinkedIn.", 'info')
+        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+    if not post.video_url:
+        flash("Ce post n'a pas de vidéo.", 'danger')
+        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+    if not linkedin.is_configured():
+        flash("LinkedIn n'est pas connecté — voir Réglages.", 'danger')
+        return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+
+    texte = (request.form.get('text') or '').strip() or (post.caption or post.title or '')
+    tmp = None
+    try:
+        with http.get(post.video_url, stream=True, timeout=180) as resp:
+            if resp.status_code != 200:
+                flash(f"Vidéo illisible dans le stockage ({resp.status_code}).", 'danger')
+                return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+            fd, tmp = tempfile.mkstemp(suffix='.mp4')
+            with os.fdopen(fd, 'wb') as fh:
+                for chunk in resp.iter_content(1024 * 256):
+                    fh.write(chunk)
+        ok, detail = linkedin.post_video(tmp, texte, titre=post.title)
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    if ok:
+        post.linkedin_post_id = str(detail) if detail else None
+        post.linkedin_posted_at = datetime.utcnow()
+        db.session.commit()
+        flash("Clip publié sur LinkedIn.", 'success')
+    else:
+        flash(f"Échec de la publication sur LinkedIn : {detail}", 'danger')
+    return redirect(url_for('admin_tiktok.edit', post_id=post.id))
+
+
 @admin_tiktok_bp.route('/<int:post_id>/minute', methods=['POST'])
 @admin_required
 def send_minute(post_id):

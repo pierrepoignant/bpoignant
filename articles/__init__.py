@@ -448,6 +448,42 @@ def post_to_x(article_id):
     return redirect(url_for('admin_articles.list_articles'))
 
 
+@admin_articles_bp.route('/<int:article_id>/share-linkedin', methods=['POST'])
+@admin_required
+def share_linkedin(article_id):
+    """Share an article on Bernard's LinkedIn profile.
+
+    LinkedIn allows three thousand characters, so the text is the summary and
+    the link rather than the compressed line X needs.
+    """
+    import linkedin
+
+    article = db.session.get(Article, article_id) or abort(404)
+    if article.linkedin_posted_at:
+        flash(f"Déjà partagé sur LinkedIn le {article.linkedin_posted_at:%d/%m/%Y}.", 'info')
+        return redirect(url_for('admin_articles.list_articles'))
+    if not linkedin.is_configured():
+        flash("LinkedIn n'est pas connecté — voir Réglages.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    texte = (request.form.get('text') or '').strip()
+    if not texte:
+        url = linkedin.share_url(
+            url_for('articles.public_show', slug=article.slug, _external=True))
+        resume = (article.summary or '').strip()
+        texte = f"{article.title}\n\n{resume}\n\n{url}" if resume else f"{article.title}\n\n{url}"
+
+    ok, detail = linkedin.post_text(texte)
+    if ok:
+        article.linkedin_post_id = str(detail) if detail else None
+        article.linkedin_posted_at = datetime.utcnow()
+        db.session.commit()
+        flash("Article partagé sur LinkedIn.", 'success')
+    else:
+        flash(f"Échec du partage sur LinkedIn : {detail}", 'danger')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
 @admin_articles_bp.route('/<int:article_id>/send-newsletter', methods=['POST'])
 @admin_required
 def send_newsletter(article_id):
