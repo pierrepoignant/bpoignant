@@ -1806,12 +1806,29 @@ def gmail_contacts_page():
     for c in contacts:
         c.abonne = connus.get(c.email)
 
+    # « À traiter » ne montre que ce qui reste à décider. Une adresse déjà
+    # présente chez les abonnés n'appelle aucune décision : elle est inscrite,
+    # en attente de confirmation, partie d'elle-même, ou en rebond — et dans
+    # les quatre cas la proposer à nouveau serait une erreur, la dernière étant
+    # celle qu'il faut le plus éviter.
+    masques = 0
+    if filtre == 'nouveau':
+        avant = len(contacts)
+        contacts = [c for c in contacts if c.abonne is None]
+        masques = avant - len(contacts)
+
     compte = dict(db.session.query(GmailContact.status, db.func.count(GmailContact.id))
                   .group_by(GmailContact.status).all())
+    # Le compteur de l'onglet doit refléter ce qui est réellement montré.
+    if 'nouveau' in compte:
+        deja = {e for e in connus}
+        compte['nouveau'] = GmailContact.query.filter(
+            GmailContact.status == 'nouveau',
+            db.func.lower(GmailContact.email).notin_(deja) if deja else db.true()).count()
 
     return render_template(
         'gmail_contacts_admin.html',
-        contacts=contacts, compte=compte, filtre=filtre,
+        contacts=contacts, compte=compte, filtre=filtre, masques=masques,
         total=sum(compte.values()),
         connected=gmail_contacts.is_connected(),
         adresse=gmail_contacts.address(),

@@ -88,6 +88,18 @@
         {% endfor %}
     </nav>
 
+    {% if masques %}
+    {# Masquer sans le dire donnerait une liste dont on ne comprend pas la
+       longueur, et laisserait croire que ces gens n'ont pas été vus. #}
+    <p style="color: var(--gris); font-size: 0.85rem; margin: -0.6rem 0 1.1rem;">
+        {{ masques }} correspondant{{ 's' if masques > 1 else '' }} déjà connu{{ 's' if masques > 1 else '' }}
+        de la lettre {{ 'sont masqués' if masques > 1 else 'est masqué' }} —
+        abonnés, en attente, désinscrits ou en rebond.
+        <a href="{{ url_for('admin_subscribers.gmail_contacts_page', statut='tous') }}"
+           style="color: var(--rouge);">Tout afficher</a>
+    </p>
+    {% endif %}
+
     {% if contacts %}
     <form method="POST" action="{{ url_for('admin_subscribers.gmail_decide') }}">
         <input type="hidden" name="retour" value="{{ filtre }}">
@@ -165,7 +177,7 @@
     {% else %}
     <div style="text-align: center; padding: 2.5rem; color: var(--gris); background: white; border-radius: 12px;">
         <p style="margin: 0;">
-            {% if filtre == 'nouveau' %}Rien à traiter. Lisez la boîte pour en trouver.
+            {% if filtre == 'nouveau' %}Rien à traiter — tous les correspondants trouvés sont déjà connus de la lettre ou déjà décidés.
             {% else %}Aucun contact dans cet état.{% endif %}
         </p>
     </div>
