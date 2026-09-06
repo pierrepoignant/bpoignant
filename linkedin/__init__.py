@@ -358,3 +358,91 @@ def share_url(url, source='linkedin'):
     q = dict(parse_qsl(parts.query))
     q['utm_source'] = source
     return urlunparse(parts._replace(query=urlencode(q)))
+
+
+# ─── Publication automatique ────────────────────────────────
+#
+# Le même principe que pour X : un article par jour, le plus ancien jamais
+# publié, pour écouler l'arriéré sans le déverser d'un coup.
+
+def _paris_day(dt_utc):
+    """The Paris calendar day a UTC moment falls in."""
+    from zoneinfo import ZoneInfo
+    return dt_utc.replace(tzinfo=ZoneInfo('UTC')).astimezone(
+        ZoneInfo('Europe/Paris')).date()
+
+
+def last_post_at():
+    """When anything was last shared on LinkedIn, automatic or by hand."""
+    from sqlalchemy import func
+    from articles.models import Article
+    from init_db import db
+    return db.session.query(func.max(Article.linkedin_posted_at)).scalar()
+
+
+def already_posted_today():
+    """True when something already went out today, Paris time.
+
+    A calendar day, not a rolling window: measured from the last post rather
+    than from the schedule, a window lets a share made later in the day push
+    the next run under the threshold and silently cost a day.
+    """
+    dernier = last_post_at()
+    return dernier is not None and _paris_day(dernier) == _paris_day(datetime.utcnow())
+
+
+def next_article_to_post():
+    """The oldest published article never shared on LinkedIn."""
+    from articles.models import Article
+    return (
+        Article.query
+        .filter(Article.published == True,  # noqa: E712
+                Article.linkedin_posted_at.is_(None))
+        .order_by(Article.created_at.asc())
+        .first()
+    )
+
+
+def compose_article_post(article, url):
+    """The text of an article's post.
+
+    LinkedIn allows three thousand characters, so unlike X there is nothing to
+    compress: the title, the editorial summary, and the link.
+    """
+    resume = (article.summary or '').strip()
+    return f"{article.title}\n\n{resume}\n\n{url}" if resume else f"{article.title}\n\n{url}"
+
+
+def auto_post():
+    """Share the oldest never-posted article, unless one already went out
+    today. Returns a dict whose `status` is one of posted / too_soon /
+    nothing_to_post / not_configured / failed."""
+    from flask import url_for
+    from init_db import db
+
+    if not is_configured():
+        return {'status': 'not_configured'}
+    if already_posted_today():
+        dernier = last_post_at()
+        return {'status': 'too_soon', 'last': dernier,
+                'elapsed': datetime.utcnow() - dernier}
+
+    article = next_article_to_post()
+    if article is None:
+        return {'status': 'nothing_to_post'}
+
+    # url_for(_external=True) hors requête : le contexte est fourni par
+    # l'appelant, comme pour X.
+    url = share_url(url_for('articles.public_show', slug=article.slug, _external=True))
+    texte = compose_article_post(article, url)
+
+    ok, detail = post_text(texte)
+    if not ok:
+        log.error("auto_post LinkedIn échoué pour l'article %s : %s", article.id, detail)
+        return {'status': 'failed', 'article': article, 'detail': detail}
+
+    article.linkedin_post_id = str(detail) if detail else None
+    article.linkedin_posted_at = datetime.utcnow()
+    db.session.commit()
+    log.info("auto_post LinkedIn : article %s partagé", article.id)
+    return {'status': 'posted', 'article': article, 'text': texte}

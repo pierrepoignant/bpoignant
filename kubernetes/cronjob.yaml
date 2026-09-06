@@ -233,3 +233,53 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Daily automatic share on LinkedIn.
+#
+# One article a day, the oldest never posted there, so the back catalogue goes
+# out as a steady drip rather than a burst. A share made by hand during the day
+# suppresses the next automatic one, since the rule is one post per Paris
+# calendar day rather than a rolling window.
+#
+# Schedule: every day at 09:00 Europe/Paris, half an hour before the X job.
+# The two are deliberately staggered and independent: each platform keeps its
+# own "already posted" date, so they work through the backlog separately and a
+# failure on one never blocks the other.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-linkedin-autopost
+  namespace: default
+spec:
+  schedule: "0 9 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # No retry: a failed share must not become two posts, and the next run is
+      # tomorrow anyway.
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: linkedin-autopost
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "auto_linkedin.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi
