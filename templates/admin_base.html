@@ -45,7 +45,12 @@
     </div>
     {% endif %}
 
+    {# Rangée par importance, du geste quotidien au réglage rare : écrire,
+       puis filmer, puis diffuser, puis mesurer, puis régler. Les groupes sont
+       séparés d'un trait fin — sur téléphone la barre fait plusieurs lignes,
+       et sans ces repères on cherche une entrée au lieu de la voir. #}
     <nav class="admin-tabs" aria-label="Administration">
+        {# 1. Écrire #}
         <a href="{{ url_for('admin_articles.list_articles') }}"
            class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-newspaper"></i> Articles
@@ -53,10 +58,6 @@
         <a href="{{ url_for('admin_themes.list_themes') }}"
            class="btn btn-sm {% if _p.startswith('/admin/themes') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-tags"></i> Thèmes
-        </a>
-        <a href="{{ url_for('admin_authors.list_authors') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/authors') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-feather-alt"></i> Auteurs
         </a>
         <a href="{{ url_for('admin_pages.list_pages') }}"
            class="btn btn-sm {% if _p.startswith('/admin/pages') %}btn-primary{% else %}btn-outline{% endif %}">
@@ -66,8 +67,25 @@
            class="btn btn-sm {% if _p.startswith('/admin/comments') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-comments"></i> Commentaires
         </a>
-        {# Une seule entrée pour la newsletter : abonnés, envois et statistiques
-           sont trois vues d'un même sujet et occupaient trois onglets. #}
+
+        <span class="admin-tabs-sep" aria-hidden="true"></span>
+
+        {# 2. Filmer #}
+        <a href="{{ url_for('admin_tiktok.videos') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-film"></i> Vidéos
+        </a>
+        {% if video_tools %}
+        <a href="{{ url_for('admin_video.index') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/video') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-scissors"></i> Montage
+        </a>
+        {% endif %}
+
+        <span class="admin-tabs-sep" aria-hidden="true"></span>
+
+        {# 3. Diffuser. Une seule entrée pour la newsletter : abonnés, envois et
+           statistiques sont trois vues d'un même sujet. #}
         <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
            class="btn btn-sm {% if _p.startswith('/admin/subscribers') or _p.startswith('/admin/sends') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-envelope"></i> Newsletter
@@ -76,20 +94,14 @@
            class="btn btn-sm {% if _p.startswith('/admin/tweets') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fa-brands fa-x-twitter"></i> Twitter
         </a>
-        <a href="{{ url_for('admin_tiktok.videos') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/tiktok') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-film"></i> Vidéos
-        </a>
         <a href="{{ url_for('admin_linkedin.index') }}"
            class="btn btn-sm {% if _p.startswith('/admin/linkedin') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fa-brands fa-linkedin-in"></i> LinkedIn
         </a>
-        {% if video_tools %}
-        <a href="{{ url_for('admin_video.index') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/video') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-scissors"></i> Montage
-        </a>
-        {% endif %}
+
+        <span class="admin-tabs-sep" aria-hidden="true"></span>
+
+        {# 4. Mesurer #}
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-chart-line"></i> Statistiques
@@ -97,6 +109,14 @@
         <a href="{{ url_for('seo.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/seo') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-magnifying-glass-chart"></i> SEO
+        </a>
+
+        <span class="admin-tabs-sep" aria-hidden="true"></span>
+
+        {# 5. Régler — y compris les auteurs, qui changent une fois l'an. #}
+        <a href="{{ url_for('admin_authors.list_authors') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/authors') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-feather-alt"></i> Auteurs
         </a>
         <a href="{{ url_for('auth.list_users') }}"
            class="btn btn-sm {% if _p.startswith('/admin/users') %}btn-primary{% else %}btn-outline{% endif %}">
