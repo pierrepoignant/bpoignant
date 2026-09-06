@@ -129,12 +129,37 @@ def _access_token():
     return tok
 
 
+def _explain(resp, defaut):
+    """Google's own words rather than a bare status code.
+
+    A 403 here is almost always "the Gmail API is not enabled in this project",
+    which is a two-click fix — but only if the message reaches the person
+    looking at the screen.
+    """
+    try:
+        err = (resp.json() or {}).get('error') or {}
+    except ValueError:
+        return f"{defaut} ({resp.status_code})"
+    message = (err.get('message') or '').strip()
+    if not message:
+        return f"{defaut} ({resp.status_code})"
+    if (err.get('status') == 'PERMISSION_DENIED'
+            and 'has not been used in project' in message):
+        lien = ''
+        for d in err.get('details') or []:
+            lien = ((d.get('metadata') or {}).get('activationUrl')) or lien
+        return ("L'API Gmail n'est pas activée dans le projet Google du site. "
+                "Activez-la dans la console, puis réessayez"
+                + (f" : {lien}" if lien else '.'))
+    return f"{defaut} : {message}"
+
+
 def profile_address(token=None):
     token = token or _access_token()
     r = requests.get(f'{API}/profile', headers={'Authorization': f'Bearer {token}'},
                      timeout=_TIMEOUT)
     if r.status_code != 200:
-        raise GmailError(f"Profil Gmail illisible ({r.status_code}).")
+        raise GmailError(_explain(r, "Profil Gmail illisible"))
     return (r.json() or {}).get('emailAddress') or ''
 
 
@@ -165,7 +190,7 @@ def _messages(token, query, limit):
         r = requests.get(f'{API}/messages', params=params,
                          headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
         if r.status_code != 200:
-            raise GmailError(f"Lecture des messages impossible ({r.status_code}).")
+            raise GmailError(_explain(r, "Lecture des messages impossible"))
         body = r.json() or {}
         ids.extend(m['id'] for m in (body.get('messages') or []))
         page = body.get('nextPageToken')

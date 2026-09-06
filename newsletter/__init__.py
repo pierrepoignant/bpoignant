@@ -1747,6 +1747,10 @@ def gmail_contacts_page():
     return render_template(
         'gmail_contacts_admin.html',
         contacts=contacts, erreur=erreur,
+        # L'URI exacte que Google doit connaître : elle dépend du domaine par
+        # lequel on arrive, et une différence d'un caractère donne
+        # redirect_uri_mismatch. Mieux vaut la donner à copier que la décrire.
+        redirect_uri=url_for('admin_subscribers.gmail_callback', _external=True),
         connected=gmail_contacts.is_connected(),
         adresse=gmail_contacts.address(),
         has_client=gmail_contacts.has_client_credentials(),

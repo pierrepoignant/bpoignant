@@ -32,6 +32,27 @@
         <a href="{{ url_for('admin_subscribers.gmail_connect') }}" class="btn btn-primary">
             <i class="fab fa-google"></i> Connecter Gmail
         </a>
+
+        {# Google refuse la connexion (« redirect_uri_mismatch ») tant que cette
+           adresse exacte n'est pas déclarée dans la console. Elle dépend du
+           domaine par lequel on arrive, d'où l'affichage plutôt qu'une consigne. #}
+        <details style="margin-top: 1.4rem; text-align: left;">
+            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">
+                Google refuse la connexion ?
+            </summary>
+            <p style="font-size: 0.85rem; line-height: 1.65; color: var(--noir); margin: 0.7rem 0 0.5rem;">
+                Dans la console Google Cloud, sur le client OAuth du site, ajoutez cette
+                adresse aux <em>URI de redirection autorisés</em>, puis le scope
+                <code>gmail.readonly</code> à l'écran de consentement :
+            </p>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <code id="uri-redirection" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ redirect_uri }}</code>
+                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="navigator.clipboard.writeText(document.getElementById('uri-redirection').textContent.trim()); this.textContent = 'Copié';">
+                    Copier
+                </button>
+            </div>
+        </details>
     </div>
     {% else %}
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
@@ -54,9 +75,32 @@
     {% endif %}
 
     {% if erreur %}
-    <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+    <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
         {{ erreur }}
     </div>
+    {% endif %}
+
+    {% if connected %}
+    {# La connexion aboutit avant que l'API soit activée et avant que le scope
+       soit accordé : le rappel reste accessible une fois connecté. #}
+    <details style="margin-bottom: 1.5rem;">
+        <summary style="cursor: pointer; font-size: 0.85rem; color: var(--gris);">
+            Réglages Google nécessaires
+        </summary>
+        <p style="font-size: 0.85rem; line-height: 1.65; margin: 0.7rem 0 0.5rem;">
+            Dans la console Google Cloud, sur le projet du site : l'API Gmail doit être
+            <em>activée</em>, cette adresse doit figurer dans les <em>URI de redirection
+            autorisés</em> du client OAuth, et le scope <code>gmail.readonly</code> sur
+            l'écran de consentement.
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <code id="uri-redirection" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ redirect_uri }}</code>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="navigator.clipboard.writeText(document.getElementById('uri-redirection').textContent.trim()); this.textContent = 'Copié';">
+                Copier
+            </button>
+        </div>
+    </details>
     {% endif %}
 
     {% if contacts %}
