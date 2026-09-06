@@ -82,8 +82,9 @@
                font la même chose. Qu'il ait déjà été envoyé se lit sur la
                pastille et dans la fenêtre, pas sur la couleur du bouton. #}
             {% set envoi = minute_sends.get(c.id) %}
-            <button type="button" class="btn btn-sm btn-vert bouton-envoi"
-                    style="border-radius:50px; padding:6px 14px;"
+            <button type="button" class="btn btn-sm bouton-envoi{{ ' btn-vert' if not envoi }}"
+                    style="border-radius:50px; padding:6px 14px;{% if envoi %} background: none; border: 1px solid #e0e0e0; color: var(--gris);{% endif %}"
+                    title="{{ 'Déjà envoyé le %s — seuls les abonnés qui ne l’ont pas reçu seront servis'|format(envoi.sent_at.strftime('%d/%m/%Y')) if envoi else 'Envoyer aux abonnés de La Minute' }}"
                     data-lettre="La Minute"
                     data-titre="{{ c.title }}"
                     data-email="{{ mon_email }}"
