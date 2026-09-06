@@ -107,20 +107,7 @@
             {% endif %}
 
             {% if p.has_video %}
-            {# Les valeurs passent par des attributs data-, pas par un onclick :
-               `tojson` produit des guillemets doubles, qui refermaient
-               l'attribut onclick="…" au premier caractère et empêchaient le
-               gestionnaire de se poser — le bouton ne faisait rien. #}
-            <button type="button" class="btn btn-sm bouton-minute"
-                    data-titre="{{ p.title }}"
-                    data-test="{{ url_for('admin_tiktok.send_minute_test', post_id=p.id) }}"
-                    data-envoi="{{ url_for('admin_tiktok.send_minute', post_id=p.id) }}"
-                    style="padding: 4px 12px; border-radius: 50px; border: 1px solid #e0e0e0;
-                           background: {{ 'var(--gris-clair)' if p.id in minute_sent else 'none' }};
-                           color: {{ 'var(--gris)' if p.id in minute_sent else 'var(--noir)' }};">
-                <i class="far fa-envelope"></i>
-                {{ 'Renvoyer dans La Minute' if p.id in minute_sent else 'Envoyer dans La Minute' }}
-            </button>
+
             {% endif %}
             <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" class="btn btn-sm btn-outline"
                style="color: var(--noir); border-color: #e0e0e0;">
@@ -143,5 +130,4 @@
     </div>
     {% endif %}
 
-{% include 'tiktok_minute_overlay.html' %}
 {% endblock %}

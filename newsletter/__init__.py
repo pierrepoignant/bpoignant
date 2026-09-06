@@ -1240,6 +1240,34 @@ def _send_payload(article_id, campaign_id, payload):
     return successes, errors
 
 
+def send_article_test(article, to_email, intro=None):
+    """Send one article to a single address, to see the real e-mail first.
+
+    The article's stored note is temporarily replaced by the one being tried,
+    so what arrives is what a subscriber would get — then put back, since a
+    test must not modify the article.
+    """
+    ancien = article.newsletter_intro
+    if intro is not None:
+        article.newsletter_intro = intro or None
+    try:
+        html = render_template(
+            'email/newsletter_article.html',
+            article=article,
+            article_url=url_for('articles.public_show', slug=article.slug, _external=True),
+            site_url=url_for('articles.public_list', _external=True),
+            site_name=current_app.config['SITE_NAME'],
+            site_tagline=current_app.config['SITE_TAGLINE'],
+            # Un test n'a pas d'abonné derrière lui : emprunter le jeton de
+            # quelqu'un permettrait à une adresse mal tapée de le désinscrire.
+            unsubscribe_url=url_for('lettre.landing', _external=True),
+        )
+    finally:
+        article.newsletter_intro = ancien
+    return send_email(to_email=to_email, subject=f'[Test] {article.title.upper()}',
+                      html=html, categories=['newsletter', 'article-test'])
+
+
 def enqueue_article_send(article, sent_by=None):
     """Prepare the send and hand the e-mailing to a background thread so the
     request returns immediately (sends can take a while with many subscribers).

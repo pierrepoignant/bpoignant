@@ -1,0 +1,104 @@
+{# Fenêtre d'envoi, partagée par les articles et par les vidéos.
+
+   Les deux faisaient la même chose de deux façons : l'une proposait un envoi
+   de test, l'autre non, et les libellés différaient. Un seul composant, donc,
+   paramétré par les adresses portées en attributs data- sur le bouton qui
+   l'ouvre — la logique ne peut plus diverger d'une page à l'autre.
+
+   L'ordre est celui du geste : le petit mot, puis le test pour vérifier, puis
+   l'envoi réel. #}
+<div id="envoi-overlay" role="dialog" aria-modal="true" aria-labelledby="envoi-titre"
+     style="display: none; position: fixed; inset: 0; z-index: 130; background: rgba(26,26,46,0.55); padding: 5vh 1rem; overflow-y: auto;">
+    <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); padding: 1.5rem 1.7rem;">
+        <div style="display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.3rem;">
+            <h2 id="envoi-titre" style="font-size: 1.15rem; margin: 0; flex: 1;">
+                <i class="far fa-envelope" style="color: var(--rouge);"></i> <span id="envoi-lettre">Envoyer</span>
+            </h2>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="fermerEnvoi()">Fermer</button>
+        </div>
+        <p id="envoi-item" style="font-size: 0.92rem; color: var(--noir); margin: 0 0 0.5rem; font-weight: 600;"></p>
+        <p id="envoi-dernier" style="display: none; background: rgba(255,165,0,0.12); color:#8a6d00; border-radius:8px; padding:8px 12px; font-size:0.85rem; margin: 0 0 0.9rem;"></p>
+
+        <label for="envoi-intro" style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+            Petit mot <span style="text-transform:none; letter-spacing:0;">— facultatif, en tête de l'e-mail</span>
+        </label>
+        <textarea id="envoi-intro" name="intro" rows="3" form="envoi-form"
+                  placeholder="Quelques lignes d'introduction, si vous le souhaitez."
+                  style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.55; margin-bottom: 1.1rem;"></textarea>
+
+        <div style="border-top: 1px solid var(--gris-clair); padding-top: 1.1rem;">
+            <form method="POST" id="envoi-form-test" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.1rem;">
+                <input type="hidden" name="intro" id="envoi-intro-test">
+                <input type="email" name="email" id="envoi-email" placeholder="votre adresse"
+                       style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="document.getElementById('envoi-intro-test').value = document.getElementById('envoi-intro').value;">
+                    <i class="far fa-paper-plane"></i> M'envoyer un test
+                </button>
+            </form>
+
+            <form method="POST" id="envoi-form" onsubmit="return confirmerEnvoi()">
+                <button type="submit" class="btn btn-sm btn-vert">
+                    <i class="fas fa-paper-plane"></i> <span id="envoi-libelle">Envoyer</span>
+                </button>
+                <span style="font-size: 0.82rem; color: var(--gris); margin-left: 0.6rem;">
+                    Un envoi ne peut pas être annulé.
+                </span>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var overlay = document.getElementById('envoi-overlay');
+    var nb = 0;
+
+    window.ouvrirEnvoi = function (btn) {
+        var d = btn.dataset;
+        nb = parseInt(d.nb || '0', 10);
+        document.getElementById('envoi-lettre').textContent = d.lettre || 'Envoyer';
+        document.getElementById('envoi-item').textContent = d.titre || '';
+        document.getElementById('envoi-intro').value = d.intro || '';
+        document.getElementById('envoi-email').value = d.email || '';
+        document.getElementById('envoi-form-test').action = d.test || '';
+        document.getElementById('envoi-form').action = d.envoi || '';
+        document.getElementById('envoi-libelle').textContent =
+            nb ? ('Envoyer aux ' + nb + ' abonnés') : 'Envoyer';
+
+        // Déjà envoyé : le dire avant, pas après. Les destinataires déjà
+        // servis sont écartés, mais on ne le devine pas.
+        var prev = document.getElementById('envoi-dernier');
+        if (d.dernier) {
+            prev.textContent = 'Déjà envoyé le ' + d.dernier +
+                ' — seuls les abonnés qui ne l’ont pas reçu seront servis.';
+            prev.style.display = 'block';
+        } else {
+            prev.style.display = 'none';
+        }
+
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        document.getElementById('envoi-intro').focus();
+    };
+
+    window.fermerEnvoi = function () {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+    };
+
+    window.confirmerEnvoi = function () {
+        return confirm(nb ? 'Envoyer aux ' + nb + ' abonnés ? C’est définitif.'
+                          : 'Confirmer l’envoi ? C’est définitif.');
+    };
+
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) fermerEnvoi(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.style.display === 'block') fermerEnvoi();
+    });
+    document.querySelectorAll('.bouton-envoi').forEach(function (b) {
+        b.addEventListener('click', function () { ouvrirEnvoi(b); });
+    });
+})();
+</script>

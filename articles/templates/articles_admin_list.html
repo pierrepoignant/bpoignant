@@ -64,12 +64,15 @@
 
             <div class="fiche-actions">
                 {% if a.published %}
-                <button type="button" class="btn btn-sm btn-vert" style="border-radius:50px; padding:6px 14px;"
-                        onclick="openSendModal(this)"
-                        data-action="{{ url_for('admin_articles.send_newsletter', article_id=a.id) }}"
-                        data-title="{{ a.title }}"
+                <button type="button" class="btn btn-sm btn-vert bouton-envoi" style="border-radius:50px; padding:6px 14px;"
+                        data-lettre="La lettre"
+                        data-titre="{{ a.title }}"
                         data-intro="{{ a.newsletter_intro or '' }}"
-                        data-last="{{ last.sent_at.strftime('%d/%m/%Y') if last else '' }}">
+                        data-email="{{ mon_email }}"
+                        data-nb="{{ abonnes_lettre }}"
+                        data-test="{{ url_for('admin_articles.send_newsletter_test', article_id=a.id) }}"
+                        data-envoi="{{ url_for('admin_articles.send_newsletter', article_id=a.id) }}"
+                        data-dernier="{{ last.sent_at.strftime('%d/%m/%Y') if last else '' }}">
                     <i class="fas fa-paper-plane"></i> Envoyer
                 </button>
                 {% if x_configured and not a.x_posted_at %}
@@ -118,29 +121,8 @@
     {% endif %}
 
     {# ─── Send-newsletter modal (petit mot) ─────────────────── #}
-    <div id="send-modal" class="modal-overlay" style="display:none;">
-        <div class="modal-card">
-            <h3 style="margin:0 0 0.3rem; font-size:1.2rem;">
-                <i class="fas fa-paper-plane" style="color: var(--vert-fonce);"></i> Envoyer la newsletter
-            </h3>
-            <p id="send-modal-title" style="color: var(--gris); margin:0 0 0.8rem; font-size:0.9rem;"></p>
-            <div id="send-modal-warning" style="display:none; background: rgba(255,165,0,0.12); color:#8a6d00; border-radius:8px; padding:8px 12px; font-size:0.85rem; margin-bottom:0.8rem;"></div>
-            <form id="send-modal-form" method="POST" action="">
-                <label for="send-modal-intro" style="display:block; font-weight:600; font-size:0.9rem; margin-bottom:0.3rem;">
-                    Petit mot (optionnel)
-                </label>
-                <div style="font-size:0.8rem; color: var(--gris); margin-bottom:0.4rem;">
-                    Affiché en italique juste au-dessus de l'article. Laissez vide pour envoyer sans mot.
-                </div>
-                <textarea id="send-modal-intro" name="intro" rows="4"
-                          style="width:100%; padding:10px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit; font-size:0.95rem;"></textarea>
-                <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem;">
-                    <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0;" onclick="closeSendModal()">Annuler</button>
-                    <button type="submit" class="btn btn-sm btn-vert"><i class="fas fa-paper-plane"></i> Envoyer</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    {% include 'admin_envoi_overlay.html' %}
+
 
     {# ─── Share-on-X modal (editable tweet) ─────────────────── #}
     <div id="x-modal" class="modal-overlay" style="display:none;">
@@ -204,29 +186,10 @@
         if (e.key === 'Escape') closeXModal();
     });
 
-    function openSendModal(btn) {
-        var f = document.getElementById('send-modal-form');
-        f.action = btn.dataset.action;
-        document.getElementById('send-modal-title').textContent = btn.dataset.title || '';
-        document.getElementById('send-modal-intro').value = btn.dataset.intro || '';
-        var w = document.getElementById('send-modal-warning');
-        if (btn.dataset.last) {
-            w.style.display = 'block';
-            w.textContent = 'Déjà envoyé le ' + btn.dataset.last + '. Seuls les abonnés ne l’ayant pas encore reçu seront contactés.';
-        } else {
-            w.style.display = 'none';
-        }
-        document.getElementById('send-modal').style.display = 'flex';
-        document.getElementById('send-modal-intro').focus();
-    }
-    function closeSendModal() {
-        document.getElementById('send-modal').style.display = 'none';
-    }
-    document.getElementById('send-modal').addEventListener('click', function (e) {
-        if (e.target === this) closeSendModal();
-    });
+
+
+
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeSendModal();
     });
     </script>
 

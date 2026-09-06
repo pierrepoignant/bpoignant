@@ -401,6 +401,8 @@ def list_articles():
         reactions_by_article=reactions_by_article,
         x_configured=x_configured,
         linkedin_configured=__import__('linkedin').is_configured(),
+        abonnes_lettre=__import__('newsletter')._mailable_query('lettre').count(),
+        mon_email=getattr(current_user, 'email', '') or '',
         x_proposed_by_article=x_proposed_by_article,
     )
 
@@ -482,6 +484,29 @@ def share_linkedin(article_id):
         flash("Article partagé sur LinkedIn.", 'success')
     else:
         flash(f"Échec du partage sur LinkedIn : {detail}", 'danger')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/<int:article_id>/send-newsletter/test', methods=['POST'])
+@admin_required
+def send_newsletter_test(article_id):
+    """Send this article to one address only."""
+    from newsletter import send_article_test, _EMAIL_RE
+    from mail import is_configured as mail_is_configured
+
+    article = db.session.get(Article, article_id) or abort(404)
+    to = (request.form.get('email') or getattr(current_user, 'email', '') or '').strip()
+    if not _EMAIL_RE.match(to):
+        flash("Adresse de test invalide.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if not mail_is_configured():
+        flash("SendGrid n'est pas configuré — envoi impossible.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    ok = send_article_test(article, to, intro=(request.form.get('intro') or '').strip() or None)
+    flash(f"E-mail de test envoyé à {to}." if ok
+          else "L'envoi du test a échoué — voir les journaux.",
+          'success' if ok else 'danger')
     return redirect(url_for('admin_articles.list_articles'))
 
 

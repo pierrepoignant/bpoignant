@@ -1527,3 +1527,22 @@ a:hover { color: var(--rouge-fonce); }
        hasard d'un retour à la ligne n'aide plus, on l'efface. */
     .admin-tabs-sep { display: none; }
 }
+
+/* ── Fiche d'édition d'un clip ──────────────────────────────
+   Deux colonnes sur grand écran, une seule au téléphone : la colonne de droite
+   réclamait 240 px de large et débordait d'un écran de 375. */
+.fiche-edition {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+    align-items: start;
+}
+@media (min-width: 900px) {
+    .fiche-edition { grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1.4rem; }
+}
+@media (max-width: 900px) {
+    /* La vidéo d'abord : c'est d'elle qu'on parle, et les textes sont longs. */
+    .fiche-edition > div:last-child { order: -1; }
+    /* Les zones de texte respirent moins, l'écran est court. */
+    .fiche-edition textarea { font-size: 0.9rem; }
+}
