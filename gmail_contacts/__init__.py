@@ -242,6 +242,12 @@ def _messages(token, query, limit):
     return ids[:limit]
 
 
+# Gmail compte son quota à la minute : c'est la cadence qui le fait sauter, pas
+# le volume total. Une pause courte entre deux lectures coûte quelques minutes
+# sur un gros balayage et évite de passer son temps en marche arrière.
+PAUSE_ENTRE_LECTURES = 0.06
+
+
 def _headers(token, message_id):
     """From/To/Cc/Date of one message. `format=metadata` with an explicit
     header list means Google never sends us the body — we do not want it and
@@ -257,7 +263,7 @@ def _headers(token, message_id):
     return out
 
 
-def recent_contacts(limit=100, scan=600):
+def recent_contacts(limit=100, scan=600, before=None):
     """The people Bernard has most recently written to or heard from.
 
     Walks the sent box and the inbox newest-first and keeps one entry per
@@ -275,10 +281,14 @@ def recent_contacts(limit=100, scan=600):
     # réception ne contient qu'une poignée de messages, et chercher là ne
     # trouvait presque aucun correspondant entrant. `-in:chats` écarte les
     # conversations Hangouts, qui ne sont pas du courrier.
-    for requete, direction in (('in:sent', 'envoyé'),
-                               ('to:me -in:chats -in:sent', 'reçu')):
+    # `before` fait reculer la fenêtre : sans lui, chaque passe repart des
+    # messages les plus récents et relit exactement les mêmes.
+    borne = f' before:{before:%Y/%m/%d}' if before else ''
+    for requete, direction in ((f'in:sent{borne}', 'envoyé'),
+                               (f'to:me -in:chats -in:sent{borne}', 'reçu')):
         for mid in _messages(token, requete, scan // 2):
             h = _headers(token, mid)
+            time.sleep(PAUSE_ENTRE_LECTURES)
             if not h:
                 continue
             try:
