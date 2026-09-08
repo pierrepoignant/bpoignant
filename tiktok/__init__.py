@@ -467,6 +467,16 @@ def attach_video(post_id):
     return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
+def tweet_text_for(post, limit=280):
+    """The text that would go to X: the one already sent if there is one,
+    otherwise the caption condensed to fit.
+
+    Restored after a block edit removed it while leaving its callers behind —
+    publishing a clip to X raised NameError instead of posting.
+    """
+    return post.x_text or _tweet_text(post, limit=limit)
+
+
 def _tweet_text(post, limit=280):
     """The caption, made to fit X without being hacked off mid-sentence.
 
