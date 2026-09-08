@@ -56,7 +56,17 @@ def list_posts():
         .group_by(VideoView.post_id).all()
     )
     import linkedin
+    from sqlalchemy import func
+    totaux = db.session.query(
+        func.count(TikTokPost.id),
+        func.coalesce(func.sum(TikTokPost.views), 0),
+        func.coalesce(func.sum(TikTokPost.likes), 0),
+        func.max(TikTokPost.scraped_at),
+    ).filter(TikTokPost.boosted.is_(False)).first()
     return render_template('tiktok_admin_list.html', posts=posts,
+                           compte=apify.profile(),
+                           nb_posts=totaux[0], total_vues=int(totaux[1] or 0),
+                           total_likes=int(totaux[2] or 0), dernier_relevé=totaux[3],
                            minute_sent=envois, site_views=vues_site,
                            linkedin_ok=linkedin.is_configured(),
                            minute_count=_mailable_query('minute').count(),
@@ -93,6 +103,10 @@ def sync():
         message += (f" {result['skipped']} post(s) de plus de {RECENT_DAYS} jours"
                     " laissés de côté — ils seront actualisés cette nuit.")
     flash(message, 'success')
+    # Revenir d'où l'on vient : le bouton existe sur deux pages.
+    retour = request.referrer or ''
+    if '/stats' in retour:
+        return redirect(url_for('admin_tiktok.stats'))
     return redirect(url_for('admin_tiktok.list_posts'))
 
 

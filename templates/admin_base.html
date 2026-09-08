@@ -74,7 +74,7 @@
            « Montage » n'existe pas, et un groupe d'un seul bouton entre deux
            traits paraissait plus espacé que les autres. #}
         <a href="{{ url_for('admin_tiktok.videos') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/tiktok') and not _p.startswith('/admin/tiktok/stats') %}btn-primary{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok/videos') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-film"></i> Vidéos
         </a>
         {% if video_tools %}
@@ -90,6 +90,10 @@
            class="btn btn-sm {% if (_p.startswith('/admin/subscribers') or _p.startswith('/admin/sends'))
                                  and not _p.startswith('/admin/sends/stats') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="far fa-envelope"></i> Newsletter
+        </a>
+        <a href="{{ url_for('admin_tiktok.list_posts') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/tiktok') and not _p.startswith('/admin/tiktok/videos') and not _p.startswith('/admin/tiktok/stats') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fa-brands fa-tiktok"></i> TikTok
         </a>
         <a href="{{ url_for('admin_tweets.list_tweets') }}"
            class="btn btn-sm {% if _p.startswith('/admin/tweets') and not _p.startswith('/admin/tweets/stats') %}btn-primary{% else %}btn-outline{% endif %}">

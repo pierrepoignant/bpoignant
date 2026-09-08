@@ -6,6 +6,22 @@
 {% block admin_subtitle %}<p>{% if days == 1 %}Clips publiés hier{% else %}Clips des {{ days }} derniers jours{% endif %}.</p>{% endblock %}
 
 {% block admin_content %}
+    {# Les chiffres viennent du relevé de minuit : le bouton évite d'attendre
+       la nuit après une publication. #}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        <p style="margin: 0; font-size: 0.85rem; color: var(--gris);">
+            Relevés chaque nuit par Apify ·
+            <a href="{{ url_for('admin_tiktok.list_posts') }}" style="color: var(--gris);">le compte</a>
+        </p>
+        <form method="POST" action="{{ url_for('admin_tiktok.sync') }}" style="margin: 0;"
+              onsubmit="const b=this.querySelector('button'); b.disabled=true;
+                        b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Relevé en cours…';">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-rotate"></i> Actualiser les chiffres
+            </button>
+        </form>
+    </div>
+
     {{ st.controls('admin_tiktok.stats', days, group, ranges, groups) }}
     {{ st.caveat(excluded) }}
     {{ st.dashboard(points, totals, group, "J'aime", 'Partages') }}

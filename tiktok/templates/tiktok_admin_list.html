@@ -2,14 +2,37 @@
 {% block title %}TikTok{% endblock %}
 
 {% block admin_title %}<i class="fa-brands fa-tiktok" style="color: var(--vert);"></i> TikTok{% endblock %}
-{% block admin_subtitle %}<p>Les clips publiés, leurs chiffres, et ce qui en a été fait.</p>{% endblock %}
+{% block admin_subtitle %}<p>Le compte TikTok : ce qui y est publié et ce que cela fait.</p>{% endblock %}
 
 {% block admin_content %}
-    <p style="margin: 0 0 1.2rem;">
-        <a href="{{ url_for('admin_tiktok.videos') }}" style="color: var(--gris);">
-            <i class="fas fa-arrow-left"></i> Les vidéos
-        </a>
-    </p>
+    {# Les chiffres du compte, comme sur les pages X et LinkedIn : ce qu'on
+       vient voir d'abord, avant la liste. Les posts sponsorisés de 2022 en sont
+       exclus, leur audience ayant été achetée. #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1.4rem;">
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Compte</div>
+            <div style="font-size: 1.1rem; font-weight: 700; margin-top: 0.35rem;">
+                {% if compte %}<a href="https://www.tiktok.com/@{{ compte }}" target="_blank" rel="noopener" style="color: var(--noir);">@{{ compte }}</a>
+                {% else %}<span style="color: var(--gris);">non réglé</span>{% endif %}
+            </div>
+        </div>
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Publications</div>
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ nb_posts }}</div>
+        </div>
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Vues</div>
+            <div style="font-size: 1.9rem; font-weight: 800;">{{ '{:,}'.format(total_vues).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.78rem;">{{ '{:,}'.format(total_likes).replace(',', ' ') }} j'aime</div>
+        </div>
+        <div style="background: white; padding: 1.1rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">Dernier relevé</div>
+            <div style="font-size: 1.05rem; font-weight: 700; margin-top: 0.4rem;">
+                {{ dernier_relevé.strftime('%d/%m/%Y') if dernier_relevé else '—' }}
+            </div>
+            <div style="color: var(--gris); font-size: 0.78rem;">automatique à minuit</div>
+        </div>
+    </div>
     {% if not apify_ok %}
     <div style="background: rgba(255,165,0,0.12); color:#8a6d00; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; margin-bottom: 1.5rem;">
         Apify n'est pas configuré — renseignez le jeton dans
@@ -20,8 +43,9 @@
 
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
         <p style="color: var(--gris); font-size: 0.88rem; margin: 0; max-width: 60ch;">
-            Publiez depuis l'application, puis synchronisez ici. Le montage se rattache
-            ensuite à son post{% if not video_enabled %} depuis le serveur de développement{% endif %}.
+            Les chiffres viennent d'Apify, relevés chaque nuit : ce bouton les rafraîchit
+            à la demande, en n'actualisant que les posts de moins d'une semaine.
+            <a href="{{ url_for('admin_tiktok.stats') }}" style="color: var(--rouge);">Voir les statistiques</a>
         </p>
         {% if apify_ok %}
         {# La récupération prend des minutes et ne donnait aucun signe de vie :
@@ -31,7 +55,7 @@
                         b.disabled = true;
                         b.innerHTML = '<i class=\'fas fa-rotate fa-spin\'></i> Récupération en cours…';">
             <button type="submit" class="btn btn-sm btn-primary">
-                <i class="fas fa-rotate"></i> Récupérer les posts
+                <i class="fas fa-rotate"></i> Actualiser les chiffres
             </button>
         </form>
         {% endif %}
