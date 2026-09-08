@@ -203,6 +203,79 @@ def confirm(token):
     return render_template('subscribe_confirmed.html', email=sub.email, prenom=sub.prenom, newly=newly)
 
 
+# Signatures d'automates dans l'agent utilisateur. La liste ne prétend pas être
+# exhaustive : elle rattrape ce qui s'annonce, le reste est pris par la règle
+# de simultanéité plus bas.
+_ROBOT_UA = re.compile(
+    r'(barracuda|proofpoint|mimecast|symantec|forcepoint|trend\s?micro|'
+    r'microsoft office existence discovery|bitdefender|sophos|fireeye|'
+    r'urldefense|safelinks|linkprotect|crawler|scanner|bot\b|preview)', re.I)
+
+# Trois événements de même nature en deux secondes : une passerelle qui vérifie
+# les liens, pas quelqu'un qui lit. Un lecteur pressé clique deux liens en
+# quelques secondes, jamais sept dans la même.
+RAFALE_MIN = 3
+RAFALE_SECONDES = 2
+
+# Une passerelle revient aussi vérifier les liens des heures plus tard, hors
+# rafale. Au-delà de ce nombre de clics sur un même envoi, ce n'est plus une
+# lecture : les vrais lecteurs plafonnent à quatre ou cinq, le seuil est donc
+# large exprès et ne rattrape que l'aberration franche.
+PLAFOND_PAR_ENVOI = 10
+
+
+def _est_automate(user_agent):
+    return bool(user_agent and _ROBOT_UA.search(user_agent))
+
+
+def marquer_automates():
+    """Flag the events that come from a machine, and return how many.
+
+    Two rules: an announced robot in the user agent, and bursts — several
+    events of the same kind from one address within a couple of seconds. The
+    second is what catches corporate security gateways, which announce nothing
+    and open every message.
+    """
+    from collections import defaultdict
+
+    marques = 0
+    par_cle = defaultdict(list)
+    for ev in EmailEvent.query.order_by(EmailEvent.occurred_at).all():
+        if _est_automate(ev.user_agent):
+            if not ev.automated:
+                ev.automated = True
+                marques += 1
+            continue
+        par_cle[(ev.email, ev.event)].append(ev)
+
+    for evenements in par_cle.values():
+        evenements.sort(key=lambda e: e.occurred_at or datetime.min)
+        debut = 0
+        for fin in range(len(evenements)):
+            while (evenements[fin].occurred_at - evenements[debut].occurred_at
+                   ).total_seconds() > RAFALE_SECONDES:
+                debut += 1
+            if fin - debut + 1 >= RAFALE_MIN:
+                # Toute la rafale, pas seulement son dernier événement.
+                for e in evenements[debut:fin + 1]:
+                    if not e.automated:
+                        e.automated = True
+                        marques += 1
+
+    # Second passage : le volume sur un seul envoi, rafale ou non.
+    par_envoi = defaultdict(list)
+    for ev in EmailEvent.query.filter(EmailEvent.automated.is_(False)).all():
+        par_envoi[(ev.email, ev.event, ev.category)].append(ev)
+    for evenements in par_envoi.values():
+        if len(evenements) > PLAFOND_PAR_ENVOI:
+            for e in evenements:
+                e.automated = True
+                marques += 1
+
+    db.session.commit()
+    return marques
+
+
 def _record_engagement(ev, etype):
     """Store one open/click from the Event Webhook. Returns 1 when a row was
     added, 0 otherwise.
@@ -243,9 +316,12 @@ def _record_engagement(ev, etype):
     ts = ev.get('timestamp')
     occurred = datetime.utcfromtimestamp(int(ts)) if ts else datetime.utcnow()
 
+    ua = (ev.get('useragent') or '')[:300] or None
     db.session.add(EmailEvent(
         sg_event_id=sg_id,
         category=categorie,
+        user_agent=ua,
+        automated=_est_automate(ua),
         email=addr[:255],
         subscriber_id=(sub.id if sub else None),
         article_id=article_id,
@@ -600,6 +676,16 @@ def _parse_import_rows(file_storage, text_blob):
     return rows
 
 
+@admin_subscribers_bp.route('/engagement/reclasser', methods=['POST'])
+@admin_required
+def reclasser_automates():
+    """Re-run the machine detection over every stored event."""
+    n = marquer_automates()
+    flash(f"{n} événement(s) reclassé(s) comme automatiques." if n
+          else "Rien de nouveau à écarter.", 'success')
+    return redirect(url_for('admin_subscribers.engagement'))
+
+
 @admin_subscribers_bp.route('/engagement')
 @admin_required
 def engagement():
@@ -612,6 +698,11 @@ def engagement():
     """
     from sqlalchemy import func
 
+    # Les automates sont écartés par défaut : une passerelle de sécurité qui
+    # ouvre chaque message et suit chaque lien produirait le classement de ses
+    # filtres, pas celui des lecteurs.
+    bruts = request.args.get('bruts') == '1'
+
     tri = request.args.get('tri', 'opens')
     if tri not in ('opens', 'clicks', 'recus', 'envois', 'dernier', 'nom'):
         tri = 'opens'
@@ -619,20 +710,21 @@ def engagement():
     q = (request.args.get('q') or '').strip()
 
     # Un seul passage par table plutôt qu'une requête par abonné.
+    humain = [] if bruts else [EmailEvent.automated.is_(False)]
     ouvertures = dict(db.session.query(EmailEvent.email, func.count(EmailEvent.id))
-                      .filter(EmailEvent.event == 'open')
+                      .filter(EmailEvent.event == 'open', *humain)
                       .group_by(EmailEvent.email).all())
     clics = dict(db.session.query(EmailEvent.email, func.count(EmailEvent.id))
-                 .filter(EmailEvent.event == 'click')
+                 .filter(EmailEvent.event == 'click', *humain)
                  .group_by(EmailEvent.email).all())
     # Envois distincts touchés : la catégorie couvre les trois lettres, alors
     # que l'identifiant d'article n'en couvrait qu'une.
     envois_vus = dict(db.session.query(
         EmailEvent.email, func.count(func.distinct(EmailEvent.category)))
-        .filter(EmailEvent.category.isnot(None))
+        .filter(EmailEvent.category.isnot(None), *humain)
         .group_by(EmailEvent.email).all())
     dernier = dict(db.session.query(EmailEvent.email, func.max(EmailEvent.occurred_at))
-                   .group_by(EmailEvent.email).all())
+                   .filter(*humain).group_by(EmailEvent.email).all())
 
     recus = dict(db.session.query(Delivery.subscriber_id, func.count(Delivery.id))
                  .group_by(Delivery.subscriber_id).all())
@@ -681,7 +773,8 @@ def engagement():
 
     return render_template(
         'subscribers_engagement.html', lignes=lignes[:500], tri=tri, filtre=filtre, q=q,
-        total=len(lignes),
+        total=len(lignes), bruts=bruts,
+        automates=EmailEvent.query.filter_by(automated=True).count(),
         jamais=len([l for l in lignes if l['recus'] and not l['opens']]),
         suivi_depuis=db.session.query(db.func.min(EmailEvent.occurred_at)).scalar(),
     )
@@ -1225,9 +1318,10 @@ def newsletter_stats():
     # ── 3. Most engaged readers ──────────────────────────────
     def _top(event_type):
         rows = (db.session.query(EmailEvent.email,
-                                 func.count(func.distinct(EmailEvent.article_id)).label('articles'),
+                                 func.count(func.distinct(EmailEvent.category)).label('articles'),
                                  func.count(EmailEvent.id).label('n'))
-                .filter(EmailEvent.event == event_type)
+                .filter(EmailEvent.event == event_type,
+                        EmailEvent.automated.is_(False))
                 .group_by(EmailEvent.email)
                 .order_by(func.count(EmailEvent.id).desc())
                 .limit(15).all())

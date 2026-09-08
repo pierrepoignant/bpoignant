@@ -150,6 +150,12 @@ class EmailEvent(db.Model):
     # ouverture de La Minute comptait pour zéro article — d'où des lecteurs
     # affichés à « 75 ouvertures, 0 articles ».
     category = db.Column(db.String(60), nullable=True, index=True)
+    # Vrai quand l'événement vient d'un automate et non d'un lecteur : les
+    # passerelles de sécurité d'entreprise ouvrent chaque message et suivent
+    # chaque lien pour les vérifier. Sept clics dans la même seconde ne sont
+    # pas une lecture, et les compter fausse tout ce qui en dépend.
+    automated = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    user_agent = db.Column(db.String(300), nullable=True)
     event = db.Column(db.String(20), nullable=False, index=True)   # open | click
     url = db.Column(db.String(500), nullable=True)                 # clicks only
     occurred_at = db.Column(db.DateTime, nullable=False, index=True)

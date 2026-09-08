@@ -439,6 +439,23 @@ def _migrate_schema():
 
     if 'newsletter_email_events' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('newsletter_email_events')}
+        if 'automated' not in cols:
+            try:
+                db.session.execute(text(
+                    "ALTER TABLE newsletter_email_events "
+                    "ADD COLUMN automated BOOLEAN NOT NULL DEFAULT 0"))
+                db.session.execute(text(
+                    "ALTER TABLE newsletter_email_events "
+                    "ADD COLUMN user_agent VARCHAR(300) NULL"))
+                db.session.execute(text(
+                    "CREATE INDEX ix_newsletter_email_events_automated "
+                    "ON newsletter_email_events (automated)"))
+                db.session.commit()
+            except OperationalError as exc:
+                db.session.rollback()
+                if 'Duplicate' not in str(exc):
+                    raise
+
         if 'category' not in cols:
             try:
                 db.session.execute(text(

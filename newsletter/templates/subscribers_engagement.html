@@ -27,6 +27,26 @@
         {% endif %}
         Une ouverture ne se détecte que si les images sont chargées, ce que beaucoup
         de messageries bloquent : le nombre réel de lecteurs est plus élevé.
+        {% if automates %}
+        <br><br>
+        <strong>{{ automates }} événement(s) écartés</strong> : les passerelles de sécurité
+        des entreprises ouvrent chaque message et suivent chaque lien pour les vérifier.
+        Sept clics dans la même seconde ne sont pas une lecture, et les compter
+        classerait les filtres plutôt que les lecteurs.
+        {% if bruts %}
+        <a href="{{ url_for('admin_subscribers.engagement', tri=tri, filtre=filtre, q=q) }}"
+           style="color: var(--rouge);">Masquer à nouveau</a>
+        {% else %}
+        <a href="{{ url_for('admin_subscribers.engagement', tri=tri, filtre=filtre, q=q, bruts=1) }}"
+           style="color: var(--rouge);">Voir les chiffres bruts</a>
+        {% endif %}
+        ·
+        <form method="POST" action="{{ url_for('admin_subscribers.reclasser_automates') }}" style="display:inline;">
+            <button type="submit" style="border:none; background:none; color:var(--rouge); cursor:pointer; padding:0; font:inherit;">
+                Relancer la détection
+            </button>
+        </form>
+        {% endif %}
     </div>
 
     <form method="GET" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
