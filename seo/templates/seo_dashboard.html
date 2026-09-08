@@ -34,6 +34,34 @@
                 background: var(--noir); color: #fff; border-radius: 6px; padding: 2px 6px; }
   .bar-row { display: flex; align-items: center; gap: .6rem; margin: .35rem 0; }
   .bar-label { width: 220px; font-size: .85rem; word-break: break-all; flex-shrink: 0; }
+
+  /* Le graphique d'évolution : une colonne par relevé, la date sous sa barre. */
+  .seo-evolution {
+    display: flex; gap: 8px; align-items: flex-end;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .seo-evolution-col {
+    flex: 1 0 44px;                 /* jamais plus étroit qu'un libellé lisible */
+    max-width: 70px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .seo-evolution-rang { font-size: .75rem; font-weight: 700; color: var(--noir); margin-bottom: 2px; }
+  .seo-evolution-piste {
+    width: 100%; max-width: 46px; height: 140px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    border-bottom: 1px solid var(--gris-clair);
+  }
+  .seo-evolution-piste > div { width: 100%; border-radius: 4px 4px 0 0; }
+  .seo-evolution-date { font-size: .7rem; color: var(--gris); margin-top: 6px; white-space: nowrap; }
+
+  @media (max-width: 768px) {
+    /* Les libellés de mots-clés prenaient 220 px d'une largeur de 375. */
+    .bar-row { flex-wrap: wrap; }
+    .bar-label { width: 100%; }
+    .bar-count { width: auto; }
+    .seo-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  }
   .bar-track { flex: 1; background: var(--gris-clair); border-radius: 6px; height: 16px; overflow: hidden; }
   .bar-fill { height: 100%; background: linear-gradient(90deg, var(--rouge), var(--rouge-fonce)); }
   .bar-count { width: 42px; text-align: right; font-weight: 600; font-size: .85rem; }
@@ -128,20 +156,23 @@
       <h2 style="font-size:1.05rem; margin:0 0 .3rem;"><i class="fas fa-arrow-trend-up" style="color:var(--vert-fonce);"></i>
         Évolution du classement de {{ own_domain }}</h2>
       <p style="color:var(--gris); font-size:.82rem; margin:0 0 1rem;">Plus la barre est haute, meilleure est la position. Survolez pour le détail.</p>
-      <div style="display:flex; align-items:flex-end; gap:8px; height:160px; border-bottom:1px solid var(--gris-clair); padding-bottom:4px;">
+      {# Les barres et leurs dates étaient deux rangées à parts égales : sur un
+         téléphone, chaque relevé se réduisait à quelques pixels et les libellés
+         se chevauchaient. Une seule colonne par relevé, d'une largeur minimale
+         lisible, et l'ensemble défile latéralement si les relevés sont
+         nombreux — la date reste sous sa barre parce qu'elle est dans la même
+         colonne, au lieu d'être alignée par calcul. #}
+      <div class="seo-evolution">
         {% for e in evolution %}
-        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;"
+        <div class="seo-evolution-col"
              title="{{ e.date.strftime('%d/%m/%Y %H:%M') }} — {{ ('rang #' ~ e.rank) if e.rank else 'absent' }} ({{ e.total }} résultats)">
-          <span style="font-size:.75rem; font-weight:700; color:var(--noir); margin-bottom:2px;">{{ ('#' ~ e.rank) if e.rank else '—' }}</span>
-          <div style="width:100%; max-width:46px; border-radius:4px 4px 0 0;
-                      background: {{ 'linear-gradient(180deg,var(--vert),var(--vert-fonce))' if e.rank else 'var(--gris-clair)' }};
-                      height: {{ ((evo_worst - e.rank + 1) / evo_worst * 100)|round(1) if e.rank else 3 }}%;"></div>
+          <span class="seo-evolution-rang">{{ ('#' ~ e.rank) if e.rank else '—' }}</span>
+          <div class="seo-evolution-piste">
+            <div style="background: {{ 'linear-gradient(180deg,var(--vert),var(--vert-fonce))' if e.rank else 'var(--gris-clair)' }};
+                        height: {{ ((evo_worst - e.rank + 1) / evo_worst * 100)|round(1) if e.rank else 3 }}%;"></div>
+          </div>
+          <div class="seo-evolution-date">{{ e.date.strftime('%d/%m') }}</div>
         </div>
-        {% endfor %}
-      </div>
-      <div style="display:flex; gap:8px; margin-top:6px;">
-        {% for e in evolution %}
-        <div style="flex:1; text-align:center; font-size:.7rem; color:var(--gris);">{{ e.date.strftime('%d/%m') }}</div>
         {% endfor %}
       </div>
     </div>
