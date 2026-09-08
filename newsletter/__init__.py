@@ -220,16 +220,23 @@ def _record_engagement(ev, etype):
 
     # Which article, if any: newsletter sends carry an `article-<id>` category
     # alongside `newsletter`.
-    article_id = None
+    article_id, categorie = None, None
     cats = ev.get('category') or []
     if isinstance(cats, str):
         cats = [cats]
     for c in cats:
-        if isinstance(c, str) and c.startswith('article-'):
-            try:
-                article_id = int(c.split('-', 1)[1])
-            except ValueError:
-                pass
+        if not isinstance(c, str):
+            continue
+        # La catégorie précise de l'envoi, quelle qu'en soit la sorte : sans
+        # elle, une ouverture de La Minute ou d'un message n'appartenait à
+        # aucun envoi identifiable.
+        if c.startswith(('article-', 'minute-', 'annonce-')):
+            categorie = c[:60]
+            if c.startswith('article-'):
+                try:
+                    article_id = int(c.split('-', 1)[1])
+                except ValueError:
+                    pass
             break
 
     sub = Subscriber.query.filter_by(email=addr).first()
@@ -238,6 +245,7 @@ def _record_engagement(ev, etype):
 
     db.session.add(EmailEvent(
         sg_event_id=sg_id,
+        category=categorie,
         email=addr[:255],
         subscriber_id=(sub.id if sub else None),
         article_id=article_id,
@@ -590,6 +598,93 @@ def _parse_import_rows(file_storage, text_blob):
             })
 
     return rows
+
+
+@admin_subscribers_bp.route('/engagement')
+@admin_required
+def engagement():
+    """Every subscriber and what they do with the mail, sortable.
+
+    The stats page shows only the fifteen most active, which answers "who reads
+    the most" but not "who never opens" — the more actionable of the two, since
+    an address that has received a dozen letters and opened none is either a
+    dead mailbox or a reader lost.
+    """
+    from sqlalchemy import func
+
+    tri = request.args.get('tri', 'opens')
+    if tri not in ('opens', 'clicks', 'recus', 'envois', 'dernier', 'nom'):
+        tri = 'opens'
+    filtre = request.args.get('filtre', 'tous')
+    q = (request.args.get('q') or '').strip()
+
+    # Un seul passage par table plutôt qu'une requête par abonné.
+    ouvertures = dict(db.session.query(EmailEvent.email, func.count(EmailEvent.id))
+                      .filter(EmailEvent.event == 'open')
+                      .group_by(EmailEvent.email).all())
+    clics = dict(db.session.query(EmailEvent.email, func.count(EmailEvent.id))
+                 .filter(EmailEvent.event == 'click')
+                 .group_by(EmailEvent.email).all())
+    # Envois distincts touchés : la catégorie couvre les trois lettres, alors
+    # que l'identifiant d'article n'en couvrait qu'une.
+    envois_vus = dict(db.session.query(
+        EmailEvent.email, func.count(func.distinct(EmailEvent.category)))
+        .filter(EmailEvent.category.isnot(None))
+        .group_by(EmailEvent.email).all())
+    dernier = dict(db.session.query(EmailEvent.email, func.max(EmailEvent.occurred_at))
+                   .group_by(EmailEvent.email).all())
+
+    recus = dict(db.session.query(Delivery.subscriber_id, func.count(Delivery.id))
+                 .group_by(Delivery.subscriber_id).all())
+    for sid, n in (db.session.query(MinuteDelivery.subscriber_id, func.count(MinuteDelivery.id))
+                   .group_by(MinuteDelivery.subscriber_id).all()):
+        recus[sid] = recus.get(sid, 0) + n
+    for sid, n in (db.session.query(AnnouncementDelivery.subscriber_id,
+                                    func.count(AnnouncementDelivery.id))
+                   .group_by(AnnouncementDelivery.subscriber_id).all()):
+        recus[sid] = recus.get(sid, 0) + n
+
+    lignes = []
+    for sub in Subscriber.query.all():
+        adresse = sub.email.lower()
+        lignes.append({
+            'sub': sub,
+            'opens': ouvertures.get(adresse, 0),
+            'clicks': clics.get(adresse, 0),
+            'envois': envois_vus.get(adresse, 0),
+            'recus': recus.get(sub.id, 0),
+            'dernier': dernier.get(adresse),
+        })
+
+    if q:
+        bas = q.lower()
+        lignes = [l for l in lignes
+                  if bas in l['sub'].email.lower()
+                  or bas in (l['sub'].display_name or '').lower()]
+
+    if filtre == 'jamais':
+        # Reçu quelque chose et n'a jamais rien ouvert : le cas qui mérite une
+        # décision. Ceux qui n'ont encore rien reçu ne prouvent rien.
+        lignes = [l for l in lignes if l['recus'] and not l['opens']]
+    elif filtre == 'ouvrent':
+        lignes = [l for l in lignes if l['opens']]
+    elif filtre == 'cliquent':
+        lignes = [l for l in lignes if l['clicks']]
+    elif filtre == 'inactifs':
+        lignes = [l for l in lignes if not l['sub'].is_mailable]
+
+    cles = {'opens': lambda l: l['opens'], 'clicks': lambda l: l['clicks'],
+            'recus': lambda l: l['recus'], 'envois': lambda l: l['envois'],
+            'dernier': lambda l: l['dernier'] or datetime.min,
+            'nom': lambda l: (l['sub'].display_name or l['sub'].email).lower()}
+    lignes.sort(key=cles[tri], reverse=(tri != 'nom'))
+
+    return render_template(
+        'subscribers_engagement.html', lignes=lignes[:500], tri=tri, filtre=filtre, q=q,
+        total=len(lignes),
+        jamais=len([l for l in lignes if l['recus'] and not l['opens']]),
+        suivi_depuis=db.session.query(db.func.min(EmailEvent.occurred_at)).scalar(),
+    )
 
 
 @admin_subscribers_bp.route('/<int:subscriber_id>')

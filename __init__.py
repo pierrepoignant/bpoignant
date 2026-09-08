@@ -437,6 +437,28 @@ def _migrate_schema():
                     if 'Duplicate column' not in str(exc):
                         raise
 
+    if 'newsletter_email_events' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('newsletter_email_events')}
+        if 'category' not in cols:
+            try:
+                db.session.execute(text(
+                    "ALTER TABLE newsletter_email_events ADD COLUMN category VARCHAR(60) NULL"))
+                db.session.execute(text(
+                    "CREATE INDEX ix_newsletter_email_events_category "
+                    "ON newsletter_email_events (category)"))
+                # Les lignes déjà là : la catégorie se déduit de l'article
+                # quand il est connu, et reste vide sinon — l'information
+                # n'existe nulle part pour les anciennes.
+                db.session.execute(text(
+                    "UPDATE newsletter_email_events "
+                    "SET category = CONCAT('article-', article_id) "
+                    "WHERE article_id IS NOT NULL"))
+                db.session.commit()
+            except OperationalError as exc:
+                db.session.rollback()
+                if 'Duplicate' not in str(exc):
+                    raise
+
     if 'gmail_contacts' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('gmail_contacts')}
         if 'created_subscriber' not in cols:

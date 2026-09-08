@@ -145,6 +145,11 @@ class EmailEvent(db.Model):
                               nullable=True, index=True)
     article_id = db.Column(db.Integer, db.ForeignKey('articles.id'),
                            nullable=True, index=True)
+    # La catégorie SendGrid de l'envoi : « article-42 », « minute-30 »,
+    # « annonce-2 ». `article_id` ne couvre que le premier cas, si bien qu'une
+    # ouverture de La Minute comptait pour zéro article — d'où des lecteurs
+    # affichés à « 75 ouvertures, 0 articles ».
+    category = db.Column(db.String(60), nullable=True, index=True)
     event = db.Column(db.String(20), nullable=False, index=True)   # open | click
     url = db.Column(db.String(500), nullable=True)                 # clicks only
     occurred_at = db.Column(db.DateTime, nullable=False, index=True)

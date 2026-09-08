@@ -136,12 +136,16 @@
           and not _p.startswith('/admin/sends/stats') %}
     <nav class="admin-tabs" aria-label="Newsletter" style="margin-top: -0.4rem;">
         <a href="{{ url_for('admin_subscribers.list_subscribers') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/subscribers') and not _p.startswith('/admin/subscribers/gmail') %}btn-vert{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers') and not _p.startswith('/admin/subscribers/gmail') and not _p.startswith('/admin/subscribers/engagement') %}btn-vert{% else %}btn-outline{% endif %}">
             Abonnés
         </a>
         <a href="{{ url_for('admin_sends.list_sends') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends') and not _p.startswith('/admin/sends/stats') and not _p.startswith('/admin/sends/messages') %}btn-vert{% else %}btn-outline{% endif %}">
             Envois
+        </a>
+        <a href="{{ url_for('admin_subscribers.engagement') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/subscribers/engagement') %}btn-vert{% else %}btn-outline{% endif %}">
+            Engagement
         </a>
         <a href="{{ url_for('admin_subscribers.gmail_contacts_page') }}"
            class="btn btn-sm {% if _p.startswith('/admin/subscribers/gmail') %}btn-vert{% else %}btn-outline{% endif %}">

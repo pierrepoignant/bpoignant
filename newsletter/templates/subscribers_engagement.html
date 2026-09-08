@@ -1,0 +1,96 @@
+{% extends 'admin_base.html' %}
+{% block title %}Engagement{% endblock %}
+
+{% block admin_title %}<i class="fas fa-user-check" style="color: var(--vert);"></i> Engagement des abonnés{% endblock %}
+{% block admin_subtitle %}<p>Qui reçoit, qui ouvre, qui clique — et qui n'ouvre jamais.</p>{% endblock %}
+
+{% macro entete(cle, libelle, aligne='right') %}
+{# L'en-tête est le bouton de tri : la flèche dit la colonne en cours. #}
+<th style="padding: 0.55rem 0.9rem; text-align: {{ aligne }}; white-space: nowrap;">
+    <a href="{{ url_for('admin_subscribers.engagement', tri=cle, filtre=filtre, q=q) }}"
+       style="color: {{ 'var(--noir)' if tri == cle else 'var(--gris)' }}; font-weight: {{ '700' if tri == cle else '600' }};">
+        {{ libelle }}{% if tri == cle %} <i class="fas fa-caret-down"></i>{% endif %}
+    </a>
+</th>
+{% endmacro %}
+
+{% block admin_content %}
+    {# Le suivi ne remonte pas plus loin que sa mise en service : SendGrid ne
+       rejoue pas le passé, donc « n'a jamais ouvert » ne vaut que pour les
+       envois postérieurs à cette date. #}
+    <div style="background: var(--gris-clair); border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; line-height: 1.65; margin-bottom: 1.3rem;">
+        {% if suivi_depuis %}
+        Ouvertures et clics enregistrés depuis le <strong>{{ suivi_depuis.strftime('%d/%m/%Y') }}</strong> :
+        un envoi antérieur n'a pas été mesuré, donc « jamais ouvert » ne porte que sur ce qui a suivi.
+        {% else %}
+        Aucun événement enregistré pour l'instant.
+        {% endif %}
+        Une ouverture ne se détecte que si les images sont chargées, ce que beaucoup
+        de messageries bloquent : le nombre réel de lecteurs est plus élevé.
+    </div>
+
+    <form method="GET" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+        <input type="hidden" name="tri" value="{{ tri }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Chercher un nom, une adresse…"
+               style="flex: 1; min-width: 220px; padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+        <select name="filtre" onchange="this.form.submit()"
+                style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+            {% for cle, nom in [('tous', 'Tous'), ('jamais', "N'ouvrent jamais"), ('ouvrent', 'Ont ouvert'),
+                                ('cliquent', 'Ont cliqué'), ('inactifs', 'Désinscrits ou en rebond')] %}
+            <option value="{{ cle }}" {{ 'selected' if filtre == cle }}>{{ nom }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-primary">Filtrer</button>
+    </form>
+
+    <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1rem;">
+        {{ total }} abonné{{ 's' if total > 1 else '' }}
+        {%- if filtre == 'tous' and jamais %} · <strong style="color: var(--rouge);">{{ jamais }}</strong>
+        n'{{ 'ont' if jamais > 1 else 'a' }} jamais ouvert malgré des envois reçus{% endif %}
+        {%- if total > 500 %} · les 500 premiers sont affichés{% endif %}
+    </p>
+
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;">
+        <div class="admin-table-wrap">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+            <thead>
+                <tr style="background: var(--gris-clair);">
+                    {{ entete('nom', 'Abonné', 'left') }}
+                    {{ entete('recus', 'Reçus') }}
+                    {{ entete('envois', 'Lus') }}
+                    {{ entete('opens', 'Ouvertures') }}
+                    {{ entete('clicks', 'Clics') }}
+                    {{ entete('dernier', 'Dernière fois', 'left') }}
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in lignes %}
+                <tr style="border-top: 1px solid var(--gris-clair);">
+                    <td style="padding: 0.5rem 0.9rem;">
+                        <a href="{{ url_for('admin_subscribers.show_subscriber', subscriber_id=l.sub.id) }}"
+                           style="color: var(--noir); font-weight: 600;">
+                            {{ l.sub.display_name or l.sub.email }}
+                        </a>
+                        {% if l.sub.display_name %}
+                        <div style="color: var(--gris); font-size: 0.78rem; word-break: break-all;">{{ l.sub.email }}</div>
+                        {% endif %}
+                        {% if not l.sub.is_mailable %}
+                        <span style="font-size: 0.7rem; color: var(--rouge);">
+                            {% if l.sub.bounced_at %}rebond{% elif l.sub.unsubscribed_at %}désinscrit{% else %}en attente{% endif %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right;">{{ l.recus or '—' }}</td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right;" title="Envois distincts ouverts ou cliqués">{{ l.envois or '—' }}</td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right; font-weight: {{ '700' if l.opens else '400' }};">{{ l.opens or '—' }}</td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right; font-weight: {{ '700' if l.clicks else '400' }}; color: {{ 'var(--rouge)' if l.clicks else 'inherit' }};">{{ l.clicks or '—' }}</td>
+                    <td style="padding: 0.5rem 0.9rem; color: var(--gris); white-space: nowrap;">
+                        {{ l.dernier.strftime('%d/%m/%Y') if l.dernier else '—' }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+{% endblock %}
