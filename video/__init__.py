@@ -25,10 +25,13 @@ import os
 import re
 import shutil
 import subprocess
+import logging
 import tempfile
 import threading
 import uuid
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────
 
@@ -711,7 +714,7 @@ def start_job(src_path, original_name, vertical=False, title=None):
 
     def _work():
         try:
-            _set(job_id, status='running', step='Analyse du son…')
+            _set(job_id, status='running', step='Analyse du son…', error=None)
             duration = probe_duration(src_path)
             silences = detect_silences(src_path)
             segments = keep_segments(duration, silences)
@@ -778,7 +781,7 @@ def apply_banner(job_id, banner=None):
         return False
 
     banner = (banner if banner is not None else job.get('title')) or None
-    _set(job_id, title=banner, status='running',
+    _set(job_id, title=banner, status='running', error=None,
          step='Égalisation du son et de l’image…')
 
     def _work():
@@ -788,12 +791,15 @@ def apply_banner(job_id, banner=None):
                    title=banner)
             _set(job_id, output=dest, status='done', step='Terminé')
             # Enchaînement : dix minutes après, le serveur ira chercher le post
-            # TikTok correspondant et publiera ailleurs. Sans incidence si la
-            # bascule est éteinte — le veilleur ignore alors les jobs armés.
+            # TikTok correspondant et publiera ailleurs.
+            #
+            # On arme sans consulter le réglage : le lire demande la base, et ce
+            # fil n'a pas de contexte applicatif. Le veilleur, lui, en a un et
+            # ignore les jobs armés quand l'enchaînement est éteint. Armer n'a
+            # aucun effet en soi — c'est une mention dans le fichier du job.
             try:
-                from tiktok.auto import armer, is_enabled
-                if is_enabled():
-                    armer(job_id)
+                from tiktok.auto import armer
+                armer(job_id)
             except Exception:
                 log.exception('auto-publication : armement impossible (%s)', job_id)
             # The intermediate is only useful if the polish pass failed.
