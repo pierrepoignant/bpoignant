@@ -2,7 +2,7 @@
 {% block title %}Stats newsletter{% endblock %}
 
 {% block admin_title %}<i class="far fa-envelope-open" style="color: var(--vert);"></i> Stats newsletter{% endblock %}
-{% block admin_subtitle %}<p>Envois, ouvertures et clics — par semaine, par article, par lecteur.</p>{% endblock %}
+{% block admin_subtitle %}<p>Envois, ouvertures et clics — par semaine, par article, par lecteur. Les trois lettres comptent : articles, La Minute et les messages.</p>{% endblock %}
 
 {% macro pct(v) %}{% if v is none %}<span style="color: var(--gris);">—</span>{% else %}{{ '%.0f' % (v * 100) }} %{% endif %}{% endmacro %}
 
@@ -80,7 +80,18 @@
                 {% for w in weeks %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.55rem 1rem;">{{ w.week }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">{{ w.sent or '—' }}</td>
+                    <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">
+                        {{ w.sent or '—' }}
+                        {# Le détail par lettre : sans lui on ne sait pas si une
+                           semaine chargée vient des articles ou de La Minute. #}
+                        {% if w.detail and w.detail|length > 1 %}
+                        <div style="font-weight: 400; font-size: 0.72rem; color: var(--gris); white-space: nowrap;">
+                            {% for cle, nom in [('lettre', 'lettre'), ('minute', 'Minute'), ('message', 'message')] %}
+                            {%- if w.detail.get(cle) %}{{ w.detail[cle] }} {{ nom }}{% if not loop.last %} · {% endif %}{% endif %}
+                            {%- endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
                     <td style="padding: 0.55rem 1rem; text-align: right;">{{ w.opens or '—' }}</td>
                     <td style="padding: 0.55rem 1rem; text-align: right;">{{ w.clicks or '—' }}</td>
                     <td style="padding: 0.55rem 1rem;">
@@ -101,45 +112,58 @@
     </section>
 
     <section id="stat-article" class="volet-stat" style="display:none;">
-    <h2 style="font-size: 1.2rem; margin: 0 0 0.8rem;"><i class="fas fa-table" style="color: var(--rouge);"></i> Par article</h2>
+    <h2 style="font-size: 1.2rem; margin: 0 0 0.8rem;">
+        <i class="fas fa-table" style="color: var(--rouge);"></i> Par envoi
+    </h2>
     <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 2rem;">
         <div class="admin-table-wrap">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
             <thead>
                 <tr style="background: var(--gris-clair); text-align: left;">
-                    <th style="padding: 0.6rem 1rem;">Article</th>
-                    <th style="padding: 0.6rem 1rem;">Dernier envoi</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Envois</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Ouvertures</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Taux</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Clics</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Taux</th>
-                    <th style="padding: 0.6rem 1rem; text-align: right;">Vues site</th>
+                    <th style="padding: 0.55rem 0.9rem;">Envoi</th>
+                    <th style="padding: 0.55rem 0.9rem; white-space: nowrap;">Dernier</th>
+                    <th style="padding: 0.55rem 0.9rem; text-align: right;">Envois</th>
+                    <th style="padding: 0.55rem 0.9rem; text-align: right;">Ouv.</th>
+                    <th style="padding: 0.55rem 0.9rem; text-align: right;">Clics</th>
+                    <th style="padding: 0.55rem 0.9rem; text-align: right;">Site</th>
                 </tr>
             </thead>
             <tbody>
                 {% for r in per_article %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td style="padding: 0.55rem 1rem;">
-                        <a href="{{ url_for('admin_articles.article_stats', article_id=r.article.id) }}"
-                           style="color: var(--noir); font-weight: 600;">{{ r.article.title }}</a>
-                        {% if r.campaigns > 1 %}
-                        <span style="color: var(--gris); font-size: 0.78rem;">· {{ r.campaigns }} envois</span>
-                        {% endif %}
+                    <td style="padding: 0.5rem 0.9rem;">
+                        <span style="display:inline-block; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--gris); border:1px solid #e6e6e6; border-radius:20px; padding:0 6px; margin-right:0.35rem; vertical-align:1px;">
+                            {{ 'Minute' if r.kind == 'minute' else 'Lettre' }}
+                        </span>
+                        <a href="{{ r.url }}" style="color: var(--noir); font-weight: 600;">{{ r.title|truncate(64) }}</a>
+                        {% if r.campaigns > 1 %}<span style="color: var(--gris); font-size: 0.75rem;"> · {{ r.campaigns }}×</span>{% endif %}
+                        {# Le petit mot passe derrière une pastille : affiché en
+                           clair sous chaque titre, il doublait la hauteur du
+                           tableau pour un texte qu'on relit rarement. #}
                         {% if r.intro %}
-                        {# Le petit mot qui accompagnait l'envoi, tel que les abonnés l'ont lu. #}
-                        <div style="color: var(--gris); font-size: 0.8rem; font-style: italic; margin-top: 0.25rem; max-width: 46ch;">
-                            « {{ r.intro }} »
-                        </div>
+                        <button type="button" class="voir-mot"
+                                data-titre="{{ r.title }}" data-mot="{{ r.intro }}"
+                                title="Voir le petit mot"
+                                style="border:none; background:none; color:var(--rouge); cursor:pointer; padding:0 0 0 .35rem; font-size:0.8rem;">
+                            <i class="far fa-comment-dots"></i>
+                        </button>
                         {% endif %}
                     </td>
-                    <td style="padding: 0.55rem 1rem; color: var(--gris);">{{ r.last_sent.strftime('%d/%m/%Y') }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right; font-weight: 600;">{{ r.sent }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ r.opens or '—' }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ pct(r.open_rate) }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ r.clicks or '—' }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right;">{{ pct(r.click_rate) }}</td>
-                    <td style="padding: 0.55rem 1rem; text-align: right; color: var(--gris);">{{ r.site_views }}</td>
+                    <td style="padding: 0.5rem 0.9rem; color: var(--gris); white-space: nowrap;">
+                        {{ r.last_sent.strftime('%d/%m/%y') }}
+                    </td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right; font-weight: 600;">{{ r.sent or '—' }}</td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right;">
+                        {{ r.opens or '—' }}
+                        {%- if r.open_rate %}<span style="color: var(--gris); font-size: 0.74rem;"> {{ '%.0f'|format(r.open_rate * 100) }}%</span>{% endif %}
+                    </td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right;">
+                        {{ r.clicks or '—' }}
+                        {%- if r.click_rate %}<span style="color: var(--gris); font-size: 0.74rem;"> {{ '%.0f'|format(r.click_rate * 100) }}%</span>{% endif %}
+                    </td>
+                    <td style="padding: 0.5rem 0.9rem; text-align: right; color: var(--gris);">
+                        {{ r.site_views if r.site_views is not none else '—' }}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -147,7 +171,35 @@
         </div>
     </div>
 
-    {# ── 3. Lecteurs les plus engagés ── #}
+    {# Le petit mot, en grand, à la demande. #}
+    <div id="mot-overlay" role="dialog" aria-modal="true"
+         style="display:none; position:fixed; inset:0; z-index:140; background:rgba(26,26,46,.55); padding:8vh 1rem; overflow-y:auto;">
+        <div style="max-width:520px; margin:0 auto; background:#fff; border-radius:14px; box-shadow:0 10px 40px rgba(0,0,0,.25); padding:1.4rem 1.6rem;">
+            <div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:.6rem;">
+                <h3 id="mot-titre" style="font-size:1rem; margin:0; flex:1;"></h3>
+                <button type="button" class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;"
+                        onclick="document.getElementById('mot-overlay').style.display='none'">Fermer</button>
+            </div>
+            <p id="mot-texte" style="font-style:italic; font-size:.95rem; line-height:1.7; white-space:pre-line; margin:0; color:var(--noir);"></p>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var boite = document.getElementById('mot-overlay');
+        document.querySelectorAll('.voir-mot').forEach(function (b) {
+            b.addEventListener('click', function () {
+                document.getElementById('mot-titre').textContent = b.dataset.titre || '';
+                document.getElementById('mot-texte').textContent = b.dataset.mot || '';
+                boite.style.display = 'block';
+            });
+        });
+        boite.addEventListener('click', function (e) { if (e.target === boite) boite.style.display = 'none'; });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') boite.style.display = 'none';
+        });
+    })();
+    </script>
     </section>
 
     <section id="stat-lecteur" class="volet-stat" style="display:none;">

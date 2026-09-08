@@ -979,7 +979,12 @@ def newsletter_stats():
     # ── 1. Weekly activity ────────────────────────────────────
     # Sends are counted from Delivery (one row per person actually mailed),
     # which is the honest denominator for an open rate.
+    # Les trois sortes d'envoi comptent : la lettre, La Minute et les messages
+    # portent tous la catégorie SendGrid « newsletter », donc leurs ouvertures
+    # arrivaient déjà dans ce tableau. Ne compter que les articles au
+    # dénominateur gonflait mécaniquement le taux d'ouverture.
     sends_by_week = {}
+    detail_by_week = {}
     for d, n in (db.session.query(
             func.date(func.subdate(Delivery.sent_at,
                                    func.weekday(Delivery.sent_at))),
@@ -988,6 +993,18 @@ def newsletter_stats():
                                              func.weekday(Delivery.sent_at))))
             .all()):
         sends_by_week[str(d)] = n
+        detail_by_week.setdefault(str(d), {})['lettre'] = n
+
+    for modele, cle in ((MinuteDelivery, 'minute'), (AnnouncementDelivery, 'message')):
+        for d, n in (
+            db.session.query(
+                func.date(func.subdate(modele.sent_at, func.weekday(modele.sent_at))),
+                func.count(modele.id))
+            .group_by(func.date(func.subdate(modele.sent_at,
+                                             func.weekday(modele.sent_at)))).all()
+        ):
+            sends_by_week[str(d)] = sends_by_week.get(str(d), 0) + n
+            detail_by_week.setdefault(str(d), {})[cle] = n
 
     # Fetched daily and bucketed here rather than asking SendGrid for
     # aggregated_by=week: its weekly rollup omits the current, incomplete week,
@@ -1013,6 +1030,7 @@ def newsletter_stats():
     for wk in sorted(set(sends_by_week) | set(opens_by_week) | set(clicks_by_week),
                      reverse=True):
         sent = sends_by_week.get(wk, 0)
+        detail = detail_by_week.get(wk, {})
         opened = opens_by_week.get(wk, 0)
         clicked = clicks_by_week.get(wk, 0)
         # Deliberately no per-week rate. Opens are bucketed by the date the
@@ -1023,7 +1041,8 @@ def newsletter_stats():
         # column by the other would produce a confident-looking but meaningless
         # number. Rates live in the per-article table, where opens are tied to
         # the campaign by category rather than by date.
-        weeks.append({'week': wk, 'sent': sent, 'opens': opened, 'clicks': clicked})
+        weeks.append({'week': wk, 'sent': sent, 'opens': opened, 'clicks': clicked,
+                      'detail': detail})
 
     # ── 2. Per-article table ─────────────────────────────────
     # One multi-category call rather than one per article.
@@ -1056,7 +1075,10 @@ def newsletter_stats():
         cs = [c for c in campaigns if c.article_id == aid]
         latest = max(cs, key=lambda c: c.sent_at)
         per_article.append({
+            'kind': 'article',
             'article': art,
+            'title': art.title,
+            'url': url_for('admin_articles.article_stats', article_id=art.id),
             'intro': latest.intro,
             'last_sent': latest.sent_at,
             'campaigns': len(cs),
@@ -1067,6 +1089,42 @@ def newsletter_stats():
             'click_rate': (clicks / sent) if sent else None,
             'site_views': views_by_path.get(f'/articles/{art.slug}', 0),
         })
+    # La Minute a aussi ses envois : les laisser dehors donnait un tableau
+    # « par envoi » qui n'en montrait qu'une sorte.
+    from tiktok.models import TikTokPost
+
+    minute_par_post = {}
+    for m in MinuteSend.query.all():
+        minute_par_post.setdefault(m.post_id, []).append(m)
+    delivered_by_post = dict(
+        db.session.query(MinuteDelivery.post_id, func.count(MinuteDelivery.id))
+        .group_by(MinuteDelivery.post_id).all())
+
+    voulus_minute = [c for c in (f'minute-{pid}' for pid in minute_par_post) if c in known]
+    sg_minute = _cached_stats('minute', voulus_minute,
+                              first_send - timedelta(days=1), 'day') if voulus_minute else {}
+
+    for pid, envois in minute_par_post.items():
+        clip = db.session.get(TikTokPost, pid)
+        if clip is None:
+            continue
+        sent = delivered_by_post.get(pid, 0)
+        sg = (sg_minute or {}).get(f'minute-{pid}') or {}
+        opens, clicks = sg.get('unique_opens', 0), sg.get('unique_clicks', 0)
+        dernier = max(envois, key=lambda e: e.sent_at)
+        per_article.append({
+            'kind': 'minute',
+            'title': clip.title,
+            'url': url_for('admin_tiktok.post_stats', post_id=clip.id),
+            'intro': dernier.intro,
+            'last_sent': dernier.sent_at,
+            'campaigns': len(envois),
+            'sent': sent, 'opens': opens, 'clicks': clicks,
+            'open_rate': (opens / sent) if sent else None,
+            'click_rate': (clicks / sent) if sent else None,
+            'site_views': None,
+        })
+
     per_article.sort(key=lambda r: r['last_sent'], reverse=True)
 
     # ── 3. Most engaged readers ──────────────────────────────
