@@ -233,7 +233,10 @@
             </div>
 
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">
+                {# Jeton à usage unique : un second envoi du même formulaire est
+                   reconnu côté serveur et ignoré, plutôt que de créer un jumeau. #}
+                {% if form_token %}<input type="hidden" name="form_token" value="{{ form_token }}">{% endif %}
+                <button type="submit" class="btn btn-primary" data-envoi>
                     <i class="fas fa-save"></i> Enregistrer
                 </button>
                 {% if article and article.published %}
@@ -508,4 +511,29 @@
     })();
     {% endif %}
 </script>
+
+<script>
+(function () {
+    // Enregistrer prend quelques secondes — le temps d'écrire l'article et de
+    // demander résumé, accroche et thèmes à l'IA. Sans retour visible, on
+    // reclique, et l'article partait en double. Le serveur refuse déjà le
+    // second envoi ; ici on l'empêche simplement de partir.
+    var f = document.getElementById('article-form');
+    if (!f) return;
+    f.addEventListener('submit', function () {
+        var b = f.querySelector('[data-envoi]');
+        if (!b) return;
+        b.disabled = true;
+        b.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement…';
+        // Un formulaire refusé côté navigateur (champ obligatoire vide) ne
+        // part pas : on rend le bouton après un instant pour ne pas bloquer.
+        setTimeout(function () {
+            if (!f.checkValidity || f.checkValidity()) return;
+            b.disabled = false;
+            b.innerHTML = '<i class="fas fa-save"></i> Enregistrer';
+        }, 50);
+    });
+})();
+</script>
+
 {% endblock %}

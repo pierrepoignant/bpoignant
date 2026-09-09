@@ -3,7 +3,7 @@ from datetime import datetime, date, time, timedelta
 import bleach
 from flask import (
     Blueprint, abort, current_app, flash, jsonify, redirect, render_template,
-    request, url_for,
+    request, session, url_for,
 )
 from flask_login import current_user
 from slugify import slugify
@@ -550,6 +550,13 @@ def send_newsletter(article_id):
 @admin_required
 def create_article():
     if request.method == 'POST':
+        if _jeton_deja_vu(request.form.get('form_token')):
+            # Deuxième envoi du même formulaire : ne pas créer un jumeau, et
+            # emmener là où le premier a mené.
+            dernier = (Article.query.order_by(Article.id.desc()).first())
+            flash("Cet article vient d'être créé — le second envoi a été ignoré.", 'info')
+            return redirect(url_for('admin_articles.edit_article', article_id=dernier.id)
+                            if dernier else url_for('admin_articles.list_articles'))
         return _save_article(None)
     # Default a new article's author to Bernard Poignant (fallback: first author).
     authors = _all_authors()
@@ -558,6 +565,7 @@ def create_article():
     return render_template(
         'articles_admin_form.html',
         article=None,
+        form_token=_jeton_neuf(),
         authors=authors,
         default_author_id=(default.id if default else None),
         gdrive_configured=gdrive_is_configured(),
@@ -829,6 +837,36 @@ def _auto_themes(title, content_html):
         from flask import current_app
         current_app.logger.warning(f"AI themes on save failed: {exc}")
         return []
+
+
+_JETONS_UTILISES = 'articles_jetons_soumis'
+_JETONS_MAX = 20
+
+
+def _jeton_neuf():
+    """A one-shot token placed in the creation form."""
+    import secrets as _s
+    return _s.token_urlsafe(16)
+
+
+def _jeton_deja_vu(jeton):
+    """True when this form has already been submitted.
+
+    Bernard clicks Créer twice — the first click has no visible effect while
+    the article is being saved, so a second is the natural thing to do. The
+    button is disabled on submit as well, but that only helps where the script
+    runs and not at all on a reload of the posted form, so the guard belongs
+    here too. Consumed tokens are kept in the session, capped, since only the
+    last few can plausibly be resubmitted.
+    """
+    if not jeton:
+        return False
+    vus = session.get(_JETONS_UTILISES) or []
+    if jeton in vus:
+        return True
+    vus.append(jeton)
+    session[_JETONS_UTILISES] = vus[-_JETONS_MAX:]
+    return False
 
 
 def _save_article(article):
