@@ -32,13 +32,27 @@
         <p style="margin: 0; font-size: 0.9rem;">
             <i class="fas fa-circle-check" style="color: var(--vert);"></i>
             Connecté à <strong>{{ adresse or 'la boîte' }}</strong>
+            {% if dernier_balayage %}
+            <span style="color: var(--gris);">· dernière lecture le {{ dernier_balayage.strftime('%d/%m/%Y à %H:%M') }}</span>
+            {% endif %}
         </p>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {# Deux balayages : le rapide ne lit que ce qui est arrivé depuis la
+               dernière fois — quelques secondes — le complet reprend six cents
+               messages et sert à rattraper un oubli. #}
+            <form method="POST" action="{{ url_for('admin_subscribers.gmail_sync') }}" style="margin: 0;"
+                  onsubmit="const b=this.querySelector('button[type=submit]'); b.disabled=true;
+                            b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture…';">
+                <input type="hidden" name="rapide" value="1">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fas fa-rotate"></i> Nouveaux messages
+                </button>
+            </form>
             <form method="POST" action="{{ url_for('admin_subscribers.gmail_sync') }}" style="margin: 0;"
                   onsubmit="const b=this.querySelector('button'); b.disabled=true;
-                            b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture en cours…';">
-                <button type="submit" class="btn btn-sm btn-primary">
-                    <i class="fas fa-rotate"></i> Lire la boîte
+                            b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Balayage…';">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                    Balayage complet
                 </button>
             </form>
             <form method="POST" action="{{ url_for('admin_subscribers.gmail_disconnect') }}" style="margin: 0;"

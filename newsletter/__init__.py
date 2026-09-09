@@ -149,6 +149,7 @@ def subscribe():
         ville=ville,
         token=secrets.token_urlsafe(24),
         spam_score=score,
+        source='site',
         confirmed_at=None if needs_confirmation else datetime.utcnow(),
     )
     db.session.add(sub)
@@ -452,7 +453,14 @@ def list_subscribers():
     # Recherche : la liste dépasse la centaine et retrouver quelqu'un en
     # feuilletant cinquante lignes à la fois n'est pas raisonnable.
     q = (request.args.get('q') or '').strip()
+    # Filtre par provenance : inscription depuis le site, import de fichier,
+    # correspondant Gmail retenu, ou origine inconnue d'avant le suivi.
+    source = request.args.get('source') or ''
     base = _mailable_query('tous')
+    if source == 'inconnu':
+        base = base.filter(Subscriber.source.is_(None))
+    elif source:
+        base = base.filter(Subscriber.source == source)
     if q:
         motif = f'%{q}%'
         base = base.filter(db.or_(
@@ -489,6 +497,16 @@ def list_subscribers():
         .order_by(Subscriber.unsubscribed_at.desc())
         .all()
     )
+    # Le filtre de provenance vaut pour les quatre listes de la page : ne
+    # l'appliquer qu'aux actifs donnait quatre tableaux qui ne parlaient pas
+    # de la même population.
+    if source:
+        def de_cette_source(sub):
+            return (sub.source is None) if source == 'inconnu' else (sub.source == source)
+        pending = [x for x in pending if de_cette_source(x)]
+        bounced = [x for x in bounced if de_cette_source(x)]
+        unsubscribed = [x for x in unsubscribed if de_cette_source(x)]
+
     if q:
         # Une recherche qui ne trouve pas quelqu'un parce qu'il s'est
         # désinscrit répond à côté de la question posée.
@@ -521,6 +539,10 @@ def list_subscribers():
         suspicious_ids=suspicious_ids,
         suspicious_count=len(suspicious_ids),
         q=q,
+        source=source,
+        par_source=dict(db.session.query(
+            db.func.coalesce(Subscriber.source, 'inconnu'), db.func.count(Subscriber.id))
+            .group_by(Subscriber.source).all()),
     )
 
 
@@ -885,6 +907,7 @@ def import_subscribers():
             nom=row.get('nom'),
             ville=row.get('ville'),
             token=secrets.token_urlsafe(24),
+            source='import',
             subscribed_at=row.get('subscribed_at') or datetime.utcnow(),
             # Imported lists are admin-curated — treat them as confirmed so
             # they're mailable without a double opt-in step.
@@ -1990,7 +2013,7 @@ _GMAIL_STATE = 'gmail_oauth_state'
 GMAIL_STATUTS = ('nouveau', 'ignoré', 'invité', 'ajouté')
 
 
-def sync_gmail_contacts(limit=100):
+def sync_gmail_contacts(limit=100, depuis_dernier=False):
     """Read the mailbox and record the correspondents found.
 
     Upserts on the address: a contact already decided keeps its decision and
@@ -1998,7 +2021,12 @@ def sync_gmail_contacts(limit=100):
     """
     import gmail_contacts
 
-    trouves = gmail_contacts.recent_contacts(limit=limit)
+    # Le balayage rapide ne lit que ce qui est arrivé depuis la dernière fois :
+    # quelques dizaines de messages au lieu de six cents, donc quelques
+    # secondes au lieu de plusieurs minutes.
+    depuis = gmail_contacts.last_sync() if depuis_dernier else None
+    trouves = gmail_contacts.recent_contacts(
+        limit=limit, scan=150 if depuis else 600, after=depuis)
     maintenant = datetime.utcnow()
     crees = revus = 0
     for c in trouves:
@@ -2019,6 +2047,7 @@ def sync_gmail_contacts(limit=100):
             row.direction = c.get('direction')
         row.last_seen_at = maintenant
     db.session.commit()
+    gmail_contacts.note_sync()
     return crees, revus
 
 
@@ -2038,7 +2067,7 @@ def _invite_contact(contact, par=None):
             email=contact.email,
             prenom=nom.split(' ')[0] if nom else None,
             nom=' '.join(nom.split(' ')[1:]) or None,
-            token=secrets.token_urlsafe(32), confirmed_at=None)
+            token=secrets.token_urlsafe(32), confirmed_at=None, source='gmail')
         db.session.add(sub)
         db.session.commit()
         contact.created_subscriber = True
@@ -2063,7 +2092,7 @@ def _add_contact(contact, par=None):
             prenom=nom.split(' ')[0] if nom else None,
             nom=' '.join(nom.split(' ')[1:]) or None,
             token=secrets.token_urlsafe(32),
-            confirmed_at=datetime.utcnow()))
+            confirmed_at=datetime.utcnow(), source='gmail'))
         contact.created_subscriber = True
     elif existant.confirmed_at is None:
         existant.confirmed_at = datetime.utcnow()
@@ -2110,6 +2139,7 @@ def gmail_contacts_page():
     return render_template(
         'gmail_contacts_admin.html',
         contacts=contacts, compte=compte, filtre=filtre, masques=masques,
+        dernier_balayage=gmail_contacts.last_sync(),
         total=sum(compte.values()),
         connected=gmail_contacts.is_connected(),
         adresse=gmail_contacts.address(),
@@ -2123,9 +2153,11 @@ def gmail_contacts_page():
 @admin_required
 def gmail_sync():
     import gmail_contacts
+    rapide = request.form.get('rapide') == '1'
     try:
         crees, revus = sync_gmail_contacts(
-            limit=request.form.get('n', 100, type=int) or 100)
+            limit=request.form.get('n', 100, type=int) or 100,
+            depuis_dernier=rapide)
     except gmail_contacts.GmailError as exc:
         return redirect(url_for('admin_subscribers.gmail_contacts_page', erreur=str(exc)))
     flash(f"{crees} nouveau(x) correspondant(s), {revus} déjà connu(s).", 'success')

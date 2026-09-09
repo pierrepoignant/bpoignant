@@ -402,6 +402,18 @@ def _migrate_schema():
         if 'bounce_reason' not in cols:
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN bounce_reason VARCHAR(255) NULL"))
             db.session.commit()
+        if 'source' not in cols:
+            try:
+                db.session.execute(text(
+                    "ALTER TABLE subscribers ADD COLUMN source VARCHAR(12) NULL"))
+                db.session.execute(text(
+                    "CREATE INDEX ix_subscribers_source ON subscribers (source)"))
+                db.session.commit()
+            except OperationalError as exc:
+                db.session.rollback()
+                if 'Duplicate' not in str(exc):
+                    raise
+
         if 'spam_score' not in cols:
             db.session.execute(text("ALTER TABLE subscribers ADD COLUMN spam_score INTEGER NULL"))
             db.session.commit()

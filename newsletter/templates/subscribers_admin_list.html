@@ -12,6 +12,20 @@
         <input type="search" name="q" value="{{ q or '' }}"
                placeholder="Chercher un nom, une adresse, une ville…"
                style="flex: 1; min-width: 240px; padding: 9px 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+        {# La provenance : distinguer qui s'est inscrit de qui a été ajouté, ce
+           qui ne se voit nulle part ailleurs et change la lecture d'une
+           désinscription. #}
+        <select name="source" onchange="this.form.submit()"
+                style="padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+            <option value="">Toutes provenances</option>
+            {% for cle, nom in [('site', 'Inscrits sur le site'), ('import', 'Importés'),
+                                ('gmail', 'Contacts Gmail'), ('manuel', 'Ajoutés à la main'),
+                                ('inconnu', 'Origine inconnue')] %}
+            <option value="{{ cle }}" {{ 'selected' if source == cle }}>
+                {{ nom }}{% if par_source.get(cle) %} ({{ par_source[cle] }}){% endif %}
+            </option>
+            {% endfor %}
+        </select>
         <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-magnifying-glass"></i> Chercher</button>
         {% if q %}
         <a href="{{ url_for('admin_subscribers.list_subscribers') }}" class="btn btn-sm btn-outline"
@@ -98,7 +112,15 @@
             <tbody>
                 {% for s in active %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td data-label="Email" style="padding: 0.8rem 1rem; word-break: break-all;"><a href="{{ url_for('admin_subscribers.show_subscriber', subscriber_id=s.id) }}" style="color: var(--noir);"><strong>{{ s.email }}</strong></a>{% if s.id in suspicious_ids %} <span style="display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--rouge); background: rgba(230,0,62,0.1); border-radius: 20px; padding: 1px 8px; vertical-align: middle;">suspect</span>{% endif %}</td>
+                    <td data-label="Email" style="padding: 0.8rem 1rem; word-break: break-all;"><a href="{{ url_for('admin_subscribers.show_subscriber', subscriber_id=s.id) }}" style="color: var(--noir);"><strong>{{ s.email }}</strong></a>
+                        {% set etiquettes = {'site': ('site', 'var(--vert-fonce)'), 'import': ('import', 'var(--gris)'),
+                                             'gmail': ('gmail', '#8a6d00'), 'manuel': ('manuel', 'var(--gris)')} %}
+                        {% if etiquettes.get(s.source) %}
+                        <span title="Provenance de l'inscription"
+                              style="display:inline-block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.04em;
+                                     color:{{ etiquettes[s.source][1] }}; border:1px solid #e6e6e6; border-radius:20px;
+                                     padding:0 6px; margin-left:0.35rem; vertical-align:1px;">{{ etiquettes[s.source][0] }}</span>
+                        {% endif %}{% if s.id in suspicious_ids %} <span style="display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--rouge); background: rgba(230,0,62,0.1); border-radius: 20px; padding: 1px 8px; vertical-align: middle;">suspect</span>{% endif %}</td>
                     <td data-label="Prénom" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.prenom or '—' }}</td>
                     <td data-label="Nom" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.nom or '—' }}</td>
                     <td data-label="Ville" style="padding: 0.8rem 1rem; color: var(--gris);">{{ s.ville or '—' }}</td>

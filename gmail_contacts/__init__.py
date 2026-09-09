@@ -16,7 +16,7 @@ fastest way to have the domain treated as a spammer.
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import getaddresses, parsedate_to_datetime
 from urllib.parse import urlencode
 
@@ -35,6 +35,9 @@ SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
 
 KEY_REFRESH_TOKEN = 'gmail_refresh_token'
 KEY_ADDRESS = 'gmail_address'
+# Date du dernier balayage : elle borne le suivant, qui n'a plus qu'à lire ce
+# qui est arrivé depuis au lieu de relire six cents messages.
+KEY_LAST_SYNC = 'gmail_last_sync'
 
 _TIMEOUT = 30
 
@@ -211,8 +214,19 @@ def _get(url, token, params=None, tentatives=5):
     """
     attente = 2
     for essai in range(tentatives):
-        r = requests.get(url, params=params,
-                         headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+        try:
+            r = requests.get(url, params=params,
+                             headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+        except requests.RequestException as exc:
+            # Une connexion coupée en cours de balayage : Google ferme parfois
+            # la sienne après quelques centaines d'appels. Réessayer coûte une
+            # seconde, abandonner coûte tout le balayage.
+            if essai == tentatives - 1:
+                raise GmailError(f"Connexion à Gmail interrompue : {exc}") from exc
+            log.info('Gmail: connexion interrompue, nouvelle tentative dans %ss', attente)
+            time.sleep(attente)
+            attente *= 2
+            continue
         if r.status_code != 429 and not (r.status_code == 403 and 'ratelimit' in r.text.lower()
                                          or 'Quota exceeded' in r.text):
             return r
@@ -263,7 +277,7 @@ def _headers(token, message_id):
     return out
 
 
-def recent_contacts(limit=100, scan=600, before=None):
+def recent_contacts(limit=100, scan=600, before=None, after=None):
     """The people Bernard has most recently written to or heard from.
 
     Walks the sent box and the inbox newest-first and keeps one entry per
@@ -284,6 +298,10 @@ def recent_contacts(limit=100, scan=600, before=None):
     # `before` fait reculer la fenêtre : sans lui, chaque passe repart des
     # messages les plus récents et relit exactement les mêmes.
     borne = f' before:{before:%Y/%m/%d}' if before else ''
+    # `after:` est inclusif au jour près : on recule d'un jour pour ne pas
+    # perdre les messages du jour du dernier balayage.
+    if after:
+        borne += f' after:{(after - timedelta(days=1)):%Y/%m/%d}'
     for requete, direction in ((f'in:sent{borne}', 'envoyé'),
                                (f'to:me -in:chats -in:sent{borne}', 'reçu')):
         for mid in _messages(token, requete, scan // 2):
@@ -320,3 +338,17 @@ def recent_contacts(limit=100, scan=600, before=None):
     contacts = sorted(trouves.values(),
                       key=lambda c: c['last'] or datetime.min, reverse=True)
     return contacts[:limit]
+
+
+def last_sync():
+    brut = (get_config(KEY_LAST_SYNC) or '').strip()
+    if not brut:
+        return None
+    try:
+        return datetime.fromisoformat(brut)
+    except ValueError:
+        return None
+
+
+def note_sync():
+    set_config(KEY_LAST_SYNC, datetime.utcnow().isoformat(timespec='seconds'))

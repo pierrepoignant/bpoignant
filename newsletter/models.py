@@ -34,6 +34,12 @@ class Subscriber(db.Model):
     # address — such rows are never e-mailed again.
     bounced_at = db.Column(db.DateTime, nullable=True)
     bounce_reason = db.Column(db.String(255), nullable=True)
+    # D'où vient l'inscription : « site » (formulaire public), « import »
+    # (fichier), « gmail » (correspondant retenu), « manuel » (ajouté à la
+    # main). Vide pour les lignes antérieures au suivi : l'information n'était
+    # nulle part, et la deviner aurait été inventer.
+    source = db.Column(db.String(12), nullable=True, index=True)
+
     # Spam heuristic score computed at signup, kept for admin visibility.
     spam_score = db.Column(db.Integer, nullable=True)
 
