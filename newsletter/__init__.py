@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from datetime import datetime
 
 from flask import (
@@ -1474,13 +1475,88 @@ def _build_payload(article, recipients):
     return payload
 
 
+# Un envoi lancé, un seul à la fois pour un même contenu. La réservation par
+# destinataire empêche déjà le double envoi ; ce verrou évite en plus qu'un
+# second fil parte pour rien, lise la liste et écrive des lignes concurrentes.
+_ENVOIS_EN_COURS = set()
+_ENVOIS_VERROU = threading.Lock()
+
+
+def _prendre_le_jeton(cle):
+    with _ENVOIS_VERROU:
+        if cle in _ENVOIS_EN_COURS:
+            return False
+        _ENVOIS_EN_COURS.add(cle)
+        return True
+
+
+def _rendre_le_jeton(cle):
+    with _ENVOIS_VERROU:
+        _ENVOIS_EN_COURS.discard(cle)
+
+
+def _reserver(modele, **cles):
+    """Claim a recipient before mailing them. False when already claimed.
+
+    The unique constraint on the delivery table is what makes this atomic: two
+    concurrent sends both try to insert, one succeeds, the other is refused,
+    and only the winner sends. Doing it the other way round — send, then
+    record — leaves the duplicate mail already delivered when the constraint
+    finally objects.
+    """
+    from sqlalchemy.exc import IntegrityError, OperationalError
+
+    for essai in range(3):
+        try:
+            db.session.add(modele(**cles))
+            db.session.commit()
+            return True
+        except IntegrityError:
+            # Déjà réservé : quelqu'un d'autre sert cette personne.
+            db.session.rollback()
+            return False
+        except OperationalError as exc:
+            # MySQL rend un verrou mortel quand deux envois écrivent en même
+            # temps dans la même table. C'est passager et la transaction est
+            # à rejouer : abandonner ici interromprait l'envoi au milieu.
+            db.session.rollback()
+            if 'Deadlock' not in str(exc) or essai == 2:
+                log.exception('réservation impossible (%s)', cles)
+                return False
+            time.sleep(0.2 * (essai + 1))
+    return False
+
+
+def _liberer(modele, **cles):
+    """Give a claim back after a failed send, so a later retry serves them."""
+    try:
+        ligne = modele.query.filter_by(**cles).first()
+        if ligne is not None:
+            db.session.delete(ligne)
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception('libération de réservation impossible (%s)', cles)
+
+
 def _send_payload(article_id, campaign_id, payload):
     """Send the pre-rendered e-mails and record deliveries. Requires an active
     app context; safe to run in a background thread."""
     # Tag every message so opens/clicks can be pulled per-article later.
     categories = ['newsletter', article_category(article_id)]
-    successes, errors = 0, 0
+    successes, errors, doublons = 0, 0, 0
     for item in payload:
+        # La place est réservée AVANT l'envoi, pas après. Deux clics sur
+        # « Envoyer » lancent deux fils : le second calculait ses
+        # destinataires pendant que le premier écrivait encore les siens, et
+        # renvoyait à des gens déjà servis. La base refusait bien la ligne en
+        # double, mais l'e-mail était déjà parti. Réserver d'abord fait de la
+        # contrainte d'unicité un verrou plutôt qu'un constat.
+        if not _reserver(Delivery, article_id=article_id,
+                         subscriber_id=item['subscriber_id'], email=item['email']):
+            doublons += 1
+            continue
+
         ok = send_email(
             to_email=item['email'],
             to_name=item['name'],
@@ -1490,20 +1566,16 @@ def _send_payload(article_id, campaign_id, payload):
         )
         if ok:
             successes += 1
-            # Record each delivery immediately so an interrupted run still
-            # remembers who was emailed; the unique constraint guards against
-            # duplicates.
-            db.session.add(Delivery(
-                article_id=article_id,
-                subscriber_id=item['subscriber_id'],
-                email=item['email'],
-            ))
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
         else:
             errors += 1
+            # L'envoi a échoué : rendre la place, sinon un renvoi ultérieur
+            # sauterait cette personne en la croyant servie.
+            _liberer(Delivery, article_id=article_id,
+                     subscriber_id=item['subscriber_id'])
+
+    if doublons:
+        log.info("envoi article %s : %s destinataire(s) déjà servis, ignorés",
+                 article_id, doublons)
 
     campaign = db.session.get(Campaign, campaign_id)
     if campaign is not None:
@@ -1545,9 +1617,17 @@ def enqueue_article_send(article, sent_by=None):
     """Prepare the send and hand the e-mailing to a background thread so the
     request returns immediately (sends can take a while with many subscribers).
     Returns the Campaign; success/error counts are filled in by the worker."""
+    cle = ('article', article.id)
+    if not _prendre_le_jeton(cle):
+        # Un envoi de cet article tourne déjà : ne pas en lancer un second,
+        # qui lirait la liste avant que le premier ait fini de l'écrire.
+        log.info("envoi article %s déjà en cours — second départ refusé", article.id)
+        return _create_campaign(article, [], 0, sent_by)
+
     recipients, skipped = _pending_recipients(article)
     campaign = _create_campaign(article, recipients, skipped, sent_by)
     if not recipients:
+        _rendre_le_jeton(cle)
         return campaign
 
     payload = _build_payload(article, recipients)
@@ -1564,6 +1644,7 @@ def enqueue_article_send(article, sent_by=None):
             except Exception:
                 log.exception("background newsletter send failed (campaign %s)", campaign_id)
             finally:
+                _rendre_le_jeton(cle)
                 db.session.remove()
 
     threading.Thread(target=_worker, name=f"newsletter-send-{campaign_id}", daemon=True).start()
@@ -1655,6 +1736,9 @@ def _send_announcement_payload(announcement_id, payload):
     categories = ['newsletter', 'annonce', announcement_category(announcement_id)]
     successes, errors = 0, 0
     for item in payload:
+        if not _reserver(AnnouncementDelivery, announcement_id=announcement_id,
+                         subscriber_id=item['subscriber_id'], email=item['email']):
+            continue
         ok = send_email(
             to_email=item['email'],
             to_name=item['name'],
@@ -1664,17 +1748,10 @@ def _send_announcement_payload(announcement_id, payload):
         )
         if ok:
             successes += 1
-            db.session.add(AnnouncementDelivery(
-                announcement_id=announcement_id,
-                subscriber_id=item['subscriber_id'],
-                email=item['email'],
-            ))
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
         else:
             errors += 1
+            _liberer(AnnouncementDelivery, announcement_id=announcement_id,
+                     subscriber_id=item['subscriber_id'])
 
     ann = db.session.get(Announcement, announcement_id)
     if ann is not None:
@@ -1928,22 +2005,19 @@ def _send_minute_payload(post_id, send_id, payload):
     categories = ['newsletter', 'minute', minute_category(post_id)]
     successes, errors = 0, 0
     for item in payload:
+        if not _reserver(MinuteDelivery, post_id=post_id,
+                         subscriber_id=item['subscriber_id'], email=item['email']):
+            continue
         ok = send_email(
             to_email=item['email'], to_name=item['name'],
             subject=item['subject'], html=item['html'], categories=categories,
         )
         if ok:
             successes += 1
-            db.session.add(MinuteDelivery(
-                post_id=post_id, subscriber_id=item['subscriber_id'],
-                email=item['email'],
-            ))
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
         else:
             errors += 1
+            _liberer(MinuteDelivery, post_id=post_id,
+                     subscriber_id=item['subscriber_id'])
 
     send = db.session.get(MinuteSend, send_id)
     if send is not None:
@@ -1976,6 +2050,15 @@ def send_minute_test(post, to_email, intro=None):
 
 def enqueue_minute_send(post, sent_by=None, intro=None):
     """Send a clip to the Minute subscribers, in the background."""
+    cle = ('minute', post.id)
+    if not _prendre_le_jeton(cle):
+        log.info("envoi Minute du clip %s déjà en cours — second départ refusé", post.id)
+        envoi = MinuteSend(post_id=post.id, sent_by_id=getattr(sent_by, 'id', None),
+                           recipient_count=0)
+        db.session.add(envoi)
+        db.session.commit()
+        return envoi
+
     recipients, _skipped = minute_recipients(post)
     # Rendu avant l'enregistrement de l'envoi, comme pour les annonces : sinon
     # un échec de rendu laisserait une trace d'envoi que personne n'a reçu.
@@ -1986,6 +2069,7 @@ def enqueue_minute_send(post, sent_by=None, intro=None):
     db.session.add(send)
     db.session.commit()
     if not recipients:
+        _rendre_le_jeton(cle)
         return send
 
     app = current_app._get_current_object()
@@ -1999,6 +2083,7 @@ def enqueue_minute_send(post, sent_by=None, intro=None):
             except Exception:
                 log.exception("background Minute send failed (send %s)", send_id)
             finally:
+                _rendre_le_jeton(cle)
                 db.session.remove()
 
     threading.Thread(target=_worker, name=f'minute-send-{send_id}', daemon=True).start()

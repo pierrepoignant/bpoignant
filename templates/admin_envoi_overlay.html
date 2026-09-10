@@ -38,7 +38,15 @@
                 </button>
             </form>
 
-            <form method="POST" id="envoi-form" onsubmit="return confirmerEnvoi()">
+            {# Le bouton se verrouille dès le premier clic : l'envoi part en
+               tâche de fond et la page ne change pas tout de suite, ce qui
+               invite à recliquer. Le serveur refuse déjà un second départ,
+               mais autant qu'il n'ait pas lieu. #}
+            <form method="POST" id="envoi-form"
+                  onsubmit="if (!confirmerEnvoi()) return false;
+                            const b = this.querySelector('button[type=submit]');
+                            b.disabled = true;
+                            b.innerHTML = '<i class=\'fas fa-spinner fa-spin\'></i> Envoi en cours…';">
                 <button type="submit" class="btn btn-sm btn-vert">
                     <i class="fas fa-paper-plane"></i> <span id="envoi-libelle">Envoyer</span>
                 </button>
