@@ -27,6 +27,31 @@
             <i class="fab fa-google"></i> Connecter Gmail
         </a>
     </div>
+    {% elif panne %}
+    {# Jeton stocké mais refusé par Google : l'écran doit proposer de
+       reconnecter, pas de déconnecter — c'est déjà fait, sans l'avoir voulu. #}
+    <div style="background: #FDECEA; border: 1px solid #E6003E; border-radius: 12px; padding: 1.4rem; margin-bottom: 1.5rem;">
+        <p style="margin: 0 0 0.6rem; color: #8a1c1c; font-size: 0.95rem;">
+            <i class="fas fa-triangle-exclamation"></i>
+            {{ panne }}
+        </p>
+        <p style="margin: 0 0 1rem; color: var(--gris); font-size: 0.85rem; line-height: 1.6;">
+            Cela arrive quand le consentement est retiré, le mot de passe du compte changé,
+            ou si le client OAuth est resté en mode « test » sur la console Google — dans ce
+            dernier cas l'autorisation meurt au bout de sept jours et il faut publier
+            l'application pour qu'elle tienne.
+            Les {{ total }} correspondants déjà lus restent en place.
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('admin_subscribers.gmail_connect') }}" class="btn btn-primary">
+                <i class="fab fa-google"></i> Reconnecter Gmail
+            </a>
+            <form method="POST" action="{{ url_for('admin_subscribers.gmail_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Oublier la boîte Gmail ? Les contacts déjà lus restent en place.')">
+                <button type="submit" class="btn btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Oublier la boîte</button>
+            </form>
+        </div>
+    </div>
     {% else %}
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
         <p style="margin: 0; font-size: 0.9rem;">
@@ -63,13 +88,15 @@
     </div>
     {% endif %}
 
-    {% if erreur %}
+    {# L'erreur renvoyée par le balayage, sauf quand c'est la panne
+       d'autorisation déjà expliquée plus haut avec son bouton. #}
+    {% if erreur and not panne %}
     <div style="background: #FDECEA; border: 1px solid #E6003E; color: #8a1c1c; border-radius: 10px; padding: 12px 16px; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
         {{ erreur }}
     </div>
     {% endif %}
 
-    {% if connected %}
+    {% if connected and not panne %}
     {# L'autorisation aboutit avant que l'API soit activée : « connecté » et
        « fonctionne » ne sont pas le même état, d'où ce rappel disponible. #}
     <details style="margin-bottom: 1.4rem;">

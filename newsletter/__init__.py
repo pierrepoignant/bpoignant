@@ -2227,6 +2227,9 @@ def gmail_contacts_page():
         dernier_balayage=gmail_contacts.last_sync(),
         total=sum(compte.values()),
         connected=gmail_contacts.is_connected(),
+        # Un jeton stocké ne veut pas dire une boîte qui répond : Google révoque
+        # sans prévenir, et l'écran doit alors proposer de reconnecter.
+        panne=gmail_contacts.check_auth(),
         adresse=gmail_contacts.address(),
         has_client=gmail_contacts.has_client_credentials(),
         erreur=request.args.get('erreur'),

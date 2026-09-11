@@ -38,6 +38,11 @@ KEY_ADDRESS = 'gmail_address'
 # Date du dernier balayage : elle borne le suivant, qui n'a plus qu'à lire ce
 # qui est arrivé depuis au lieu de relire six cents messages.
 KEY_LAST_SYNC = 'gmail_last_sync'
+# Pourquoi la connexion ne répond plus, écrit au moment où Google le dit.
+# Sans cela, le jeton stocké fait croire à une boîte connectée alors qu'elle
+# ne l'est plus, et l'écran propose « Déconnecter » là où il faudrait
+# « Reconnecter ».
+KEY_AUTH_ERROR = 'gmail_auth_error'
 
 _TIMEOUT = 30
 
@@ -74,9 +79,70 @@ def is_connected():
     return bool(refresh_token())
 
 
+def auth_error():
+    """Why the stored authorisation stopped working, if it did.
+
+    Google revokes a refresh token without warning — consent withdrawn,
+    password changed, or simply an OAuth client still in « test » mode, where
+    tokens die after seven days. The mailbox then looks connected and answers
+    nothing, so the reason is kept and shown with the way out.
+    """
+    return (get_config(KEY_AUTH_ERROR) or '').strip()
+
+
+# Un contrôle d'autorisation coûte un aller-retour chez Google ; le refaire à
+# chaque affichage de la page serait payer cher une réponse qui ne change pas
+# d'une minute à l'autre. Dix minutes de mémoire suffisent à dire la vérité
+# sans faire attendre.
+_DERNIER_CONTROLE = [0.0]
+CONTROLE_TTL = 600
+
+
+def check_auth(force=False):
+    """Whether the stored authorisation is still accepted, as a reason or ''.
+
+    The page needs this because a revoked token leaves everything looking
+    connected: the address is stored, the button says « Déconnecter », and
+    nothing says the mailbox stopped answering until someone clicks and reads
+    a red box. A network hiccup is not an authorisation problem and returns ''.
+    """
+    if not is_connected():
+        return ''
+    deja = auth_error()
+    if deja:
+        return deja
+    if not force and time.time() - _DERNIER_CONTROLE[0] < CONTROLE_TTL:
+        return ''
+    try:
+        _access_token()
+    except GmailAuthError as exc:
+        return auth_error() or str(exc)
+    except Exception:
+        return ''
+    _DERNIER_CONTROLE[0] = time.time()
+    return ''
+
+
+def _note_auth_error(message):
+    try:
+        if (get_config(KEY_AUTH_ERROR) or '') != message:
+            set_config(KEY_AUTH_ERROR, message)
+    except Exception:
+        log.exception('Gmail : impossible de noter la panne d\'autorisation')
+
+
+def _clear_auth_error():
+    try:
+        if get_config(KEY_AUTH_ERROR):
+            delete_config(KEY_AUTH_ERROR)
+    except Exception:
+        log.exception("Gmail : impossible d'effacer la panne d'autorisation")
+
+
 def disconnect():
     delete_config(KEY_REFRESH_TOKEN)
     delete_config(KEY_ADDRESS)
+    _clear_auth_error()
 
 
 def authorization_url(redirect_uri, state):
@@ -109,6 +175,7 @@ def exchange_code(code, redirect_uri):
     if not jeton:
         raise GmailError("Google n'a pas renvoyé de refresh token. Réessayez la connexion.")
     set_config(KEY_REFRESH_TOKEN, jeton.strip())
+    _clear_auth_error()
     try:
         set_config(KEY_ADDRESS, profile_address(_access_token()))
     except GmailError:
@@ -125,11 +192,18 @@ def _access_token():
         'refresh_token': jeton, 'grant_type': 'refresh_token',
     }, timeout=_TIMEOUT)
     if resp.status_code != 200:
-        raise GmailAuthError(
-            f"Autorisation Gmail refusée : {resp.text[:160]} Reconnectez la boîte.")
+        brut = resp.text[:200]
+        if 'invalid_grant' in brut:
+            message = ("L'autorisation Gmail a expiré ou a été révoquée par Google.")
+        else:
+            message = f"Autorisation Gmail refusée : {brut[:160]}"
+        _note_auth_error(message)
+        raise GmailAuthError(message + " Reconnectez la boîte.")
     tok = (resp.json() or {}).get('access_token')
     if not tok:
         raise GmailError("Réponse Google sans jeton d'accès.")
+    # Le jeton répond de nouveau : la panne notée plus tôt n'a plus lieu d'être.
+    _clear_auth_error()
     return tok
 
 
