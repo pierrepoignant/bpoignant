@@ -55,6 +55,23 @@ def toggle_auto():
     return redirect(url_for('admin_video.index'))
 
 
+def _notify_email():
+    """Where to write when a montage finishes: the person who started it.
+
+    Falls back to the other admins — an unattended import is exactly the case
+    where nobody is watching the page, and a montage nobody is told about is a
+    montage nobody publishes.
+    """
+    from flask_login import current_user
+    adresse = (getattr(current_user, 'email', '') or '').strip()
+    if adresse:
+        return adresse
+    from auth.models import User
+    autre = User.query.filter(User.is_admin.is_(True),
+                              User.email.isnot(None)).first()
+    return (autre.email if autre else None)
+
+
 @admin_video_bp.route('/upload', methods=['POST'])
 @admin_required
 def upload():
@@ -80,9 +97,13 @@ def upload():
         flash(f"Fichier trop lourd ({size // (1024*1024)} Mo, maximum {MAX_BYTES // (1024*1024)} Mo).", 'danger')
         return redirect(url_for('admin_video.index'))
 
+    # Adresse et racine résolues ici : le fil qui finira le montage n'aura ni
+    # requête ni contexte applicatif pour les retrouver.
     job_id = video.start_job(src, f.filename,
                              vertical=bool(request.form.get('vertical')),
-                             title=(request.form.get('title') or '').strip() or None)
+                             title=(request.form.get('title') or '').strip() or None,
+                             notify_email=_notify_email(),
+                             base_url=request.url_root)
     return redirect(url_for('admin_video.job_page', job_id=job_id))
 
 

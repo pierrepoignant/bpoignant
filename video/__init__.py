@@ -327,7 +327,26 @@ FACE_MIN_RATIO = 0.7
 FACE_MAX_JUMP = 0.12
 
 
-def detect_face_bottom(path, samples=FACE_SAMPLES):
+def _cover_crop(frame, ratio=1080 / 1920):
+    """The centre crop `render(vertical=True)` will apply, done on one frame.
+
+    Scaling is irrelevant here — a fraction of the height stays the same
+    fraction — so only the crop has to be reproduced. Without it, a face
+    measured on a wide source would be placed against the wrong frame.
+    """
+    h, w = frame.shape[:2]
+    if not h or not w:
+        return frame
+    if w / h > ratio:
+        nw = max(1, int(round(h * ratio)))
+        x = (w - nw) // 2
+        return frame[:, x:x + nw]
+    nh = max(1, int(round(w / ratio)))
+    y = (h - nh) // 2
+    return frame[y:y + nh]
+
+
+def detect_face_bottom(path, samples=FACE_SAMPLES, vertical=False):
     """How low the face reaches over the whole clip, as a fraction of height.
 
     Returns ``{'bottom': …, 'at': seconds}`` or None — None being an honest
@@ -364,6 +383,8 @@ def detect_face_bottom(path, samples=FACE_SAMPLES):
             ok, frame = cap.read()
             if not ok:
                 continue
+            if vertical:
+                frame = _cover_crop(frame)
             h, w = frame.shape[:2]
             # Détecter sur une image réduite : la précision utile est de
             # quelques pixels sur 1920, et un cadre entier coûte dix fois plus.
@@ -833,63 +854,92 @@ def all_jobs():
         return sorted(JOBS.values(), key=lambda j: j.get('created_at', ''), reverse=True)
 
 
-def start_job(src_path, original_name, vertical=False, title=None):
-    """First phase: cut, measure, transcribe, and propose a band title.
+def notify(job):
+    """Tell whoever uploaded the clip that it is ready — or that it failed.
 
-    It stops there rather than rendering straight through. The band is burnt
-    into the picture and cannot be undone afterwards, and the proposal is the
-    one step worth a human glance — so the job waits for the text to be
-    confirmed, and `apply_banner` finishes it.
+    Sent from the worker thread, so it goes straight through SendGrid rather
+    than a template: `mail.send_email` reads its configuration from the
+    environment and needs no application context. The publication text travels
+    with the message, because the next thing anyone does is copy it.
+    """
+    if not job:
+        return
+    adresse = (job.get('notify_email') or '').strip()
+    if not adresse:
+        return
+    try:
+        from mail import send_email
+    except Exception:
+        log.exception('notification : mail indisponible')
+        return
+
+    base = (job.get('base_url')
+            or os.environ.get('VIDEO_BASE_URL')
+            or os.environ.get('SITE_BASE_URL') or '').rstrip('/')
+    lien_page = f"{base}/admin/video/job/{job.get('id')}"
+    lien_fichier = f"{lien_page}/download"
+    nom = job.get('name') or 'la vidéo'
+    rate = job.get('status') == 'error'
+
+    if rate:
+        sujet = f"Montage en échec : {nom}"
+        corps = (f"<p>Le montage de <strong>{_echapper(nom)}</strong> s'est "
+                 f"arrêté :</p><p style=\"color:#8a1c1c\">{_echapper(job.get('error') or 'raison inconnue')}</p>"
+                 f"<p><a href=\"{lien_page}\">Voir le détail</a></p>")
+    else:
+        texte = job.get('caption') or ''
+        minutes = job.get('kept')
+        resume = (f"{minutes:.0f} secondes retenues sur {job.get('duration', 0):.0f}"
+                  if isinstance(minutes, (int, float)) else '')
+        sujet = f"Montage terminé : {nom}"
+        corps = (
+            f"<p>Le montage de <strong>{_echapper(nom)}</strong> est prêt"
+            + (f" — {resume}." if resume else ".") + "</p>"
+            f"<p><a href=\"{lien_fichier}\" style=\"display:inline-block;background:#16213E;"
+            f"color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none\">"
+            f"Télécharger le MP4</a></p>"
+            f"<p style=\"font-size:14px;color:#666\">Ou depuis la page du montage : "
+            f"<a href=\"{lien_page}\">{lien_page}</a></p>"
+            + (f"<h3 style=\"font-size:16px;margin-top:28px\">Texte à publier</h3>"
+               f"<pre style=\"white-space:pre-wrap;font-family:inherit;font-size:15px;"
+               f"line-height:1.6;background:#f5f5f7;padding:16px;border-radius:8px\">"
+               f"{_echapper(texte)}</pre>" if texte else '')
+        )
+    try:
+        send_email(adresse, sujet, corps, categories=['video', f"video-{job.get('id')}"])
+    except Exception:
+        log.exception('notification : envoi impossible (%s)', adresse)
+
+
+def _echapper(texte):
+    return (str(texte or '').replace('&', '&amp;')
+            .replace('<', '&lt;').replace('>', '&gt;'))
+
+
+def start_job(src_path, original_name, vertical=False, title=None,
+              notify_email=None, base_url=None):
+    """First phase: listen to the clip and propose a band. Nothing is rendered.
+
+    The order is deliberate. Everything that has to happen before a human can
+    answer « is this the right band? » happens here — the transcript, the
+    proposed wording, and where the face sits — and everything else waits for
+    the answer. Cutting and encoding before asking made someone watch a
+    progress bar for a question that had not been asked yet.
     """
     job_id = uuid.uuid4().hex[:12]
     _set(job_id, id=job_id, name=original_name, status='queued', step='En attente…',
          created_at=datetime.utcnow().isoformat(timespec='seconds'),
-         vertical=vertical, title=title, src=src_path)
+         vertical=vertical, title=title, src=src_path,
+         notify_email=notify_email, base_url=base_url)
 
     def _work():
         try:
-            _set(job_id, status='running', step='Analyse du son…', error=None)
-            duration = probe_duration(src_path)
-            silences = detect_silences(src_path)
-            segments = keep_segments(duration, silences)
-            kept = sum(e - s for s, e in segments)
-            _set(job_id, duration=round(duration, 1), kept=round(kept, 1),
-                 removed=round(duration - kept, 1), cuts=len(segments))
-
-            _set(job_id, step='Montage…')
-            cut = os.path.join(WORKDIR, f'{job_id}-cut.mp4')
-            render(src_path, segments, cut, vertical=vertical)
-
-            # Repérage du visage : il décide de la hauteur du bandeau, et le
-            # faire ici plutôt qu'à la pose permet de l'annoncer avant de
-            # graver quoi que ce soit.
-            _set(job_id, step='Repérage du visage…')
-            visage = detect_face_bottom(cut)
-            _set(job_id,
-                 face_bottom=(visage or {}).get('bottom'),
-                 face_at=(visage or {}).get('at'))
-
-            _set(job_id, step='Mesure du son et de l’image…')
-            loudness = measure_loudness(cut)
-            luma = measure_brightness(cut)
-            gamma = gamma_for(luma)
-            # Conservés dans le job : la deuxième phase en a besoin et tourne
-            # dans une autre requête, souvent après un redémarrage.
-            _set(job_id, luma=luma, gamma=gamma, cut=cut, loudness=loudness,
-                 lufs_before=(round(float(loudness['input_i']), 1)
-                              if loudness and loudness.get('input_i') not in (None, '-inf')
-                              else None))
-
-            # Transcribe before proposing the band: its text is derived from
-            # what is actually said, so the words have to exist first.
-            # Transcribing the cut is also cheaper than the original — the
-            # silence is already gone.
-            _set(job_id, step='Transcription…')
-            tr = transcribe(cut)
+            # La transcription lit la source telle quelle : elle porte sur la
+            # parole, que le montage ne change pas, et l'attendre coûterait à
+            # celui qui doit répondre.
+            _set(job_id, status='running', step='Transcription…', error=None)
+            tr = transcribe(src_path)
             _set(job_id, transcript=tr['text'], segments_text=tr['segments'])
-
-            _set(job_id, step='Rédaction du texte…')
-            _set(job_id, caption=write_caption(tr['text']))
 
             # A separate name on purpose: assigning to `title` here would make
             # it local to this closure, and reading it below would raise
@@ -898,42 +948,86 @@ def start_job(src_path, original_name, vertical=False, title=None):
             if not banner:
                 _set(job_id, step='Titre du bandeau…')
                 banner = generate_banner_title(tr['text'])
+
+            # Repérage du visage : il décide de la hauteur du bandeau, sur le
+            # cadrage final et non sur la source, qui peut être plus large.
+            _set(job_id, step='Repérage du visage…')
+            visage = detect_face_bottom(src_path, vertical=vertical)
+            _set(job_id,
+                 face_bottom=(visage or {}).get('bottom'),
+                 face_at=(visage or {}).get('at'))
+
             _set(job_id, title=banner, status='awaiting_banner',
                  step='Bandeau à confirmer')
         except Exception as exc:
             _set(job_id, status='error', step='Échec', error=str(exc)[:400])
+            # Même en première phase : la transcription prend assez de temps
+            # pour qu'on soit parti faire autre chose.
+            notify(get_job(job_id))
 
     threading.Thread(target=_work, name=f'video-{job_id}', daemon=True).start()
     return job_id
 
 
 def apply_banner(job_id, banner=None, offset=0.0):
-    """Second phase: burn the confirmed band in and finish the render.
+    """Second phase: cut, level, burn the band in, write the caption, and say
+    so by e-mail.
 
-    Returns immediately; the page polls as it does for the first phase. Passing
-    an empty banner renders the clip without a band, which is a legitimate
-    choice rather than a missing value.
+    Returns immediately. Everything here runs unattended, which is the point:
+    the only question worth a human was asked in phase one.
     """
     job = get_job(job_id)
     if not job:
         return False
-    cut = job.get('cut')
-    if not cut or not os.path.exists(cut):
+    src = job.get('src')
+    if not src or not os.path.exists(src):
         _set(job_id, status='error', step='Échec',
-             error="Le montage intermédiaire a disparu — relancez l'import.")
+             error="Le fichier d'origine a disparu — relancez l'import.")
         return False
 
     banner = (banner if banner is not None else job.get('title')) or None
     _set(job_id, title=banner, band_offset=offset, status='running', error=None,
-         step='Égalisation du son et de l’image…')
+         step='Analyse du son…')
 
     def _work():
+        cut = None
         try:
+            duration = probe_duration(src)
+            silences = detect_silences(src)
+            segments = keep_segments(duration, silences)
+            kept = sum(e - s for s, e in segments)
+            _set(job_id, duration=round(duration, 1), kept=round(kept, 1),
+                 removed=round(duration - kept, 1), cuts=len(segments))
+
+            _set(job_id, step='Montage…')
+            cut = os.path.join(WORKDIR, f'{job_id}-cut.mp4')
+            render(src, segments, cut, vertical=job.get('vertical'))
+
+            _set(job_id, step='Mesure du son et de l’image…')
+            loudness = measure_loudness(cut)
+            gamma = gamma_for(measure_brightness(cut))
+            _set(job_id, gamma=gamma,
+                 lufs_before=(round(float(loudness['input_i']), 1)
+                              if loudness and loudness.get('input_i') not in (None, '-inf')
+                              else None))
+
+            _set(job_id, step='Égalisation et bandeau…')
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
-            polish(cut, dest, loudness=job.get('loudness'), gamma=job.get('gamma'),
-                   title=banner, face_bottom=job.get('face_bottom'),
-                   band_offset=offset)
-            _set(job_id, output=dest, status='done', step='Terminé')
+            polish(cut, dest, loudness=loudness, gamma=gamma, title=banner,
+                   face_bottom=job.get('face_bottom'), band_offset=offset)
+
+            # Le texte de publication vient après l'image : personne ne
+            # l'attend pour répondre, et il part dans l'e-mail de fin.
+            _set(job_id, step='Rédaction du texte…')
+            try:
+                texte = write_caption(job.get('transcript') or '')
+            except Exception:
+                # L'image est faite : un modèle indisponible ne doit pas
+                # transformer un montage réussi en montage en échec.
+                log.exception('texte de publication indisponible (%s)', job_id)
+                texte = ''
+            _set(job_id, caption=texte, output=dest, status='done', step='Terminé')
+
             # Enchaînement : dix minutes après, le serveur ira chercher le post
             # TikTok correspondant et publiera ailleurs.
             #
@@ -946,13 +1040,17 @@ def apply_banner(job_id, banner=None, offset=0.0):
                 armer(job_id)
             except Exception:
                 log.exception('auto-publication : armement impossible (%s)', job_id)
-            # The intermediate is only useful if the polish pass failed.
-            try:
-                os.remove(cut)
-            except OSError:
-                pass
+            notify(get_job(job_id))
         except Exception as exc:
             _set(job_id, status='error', step='Échec', error=str(exc)[:400])
+            notify(get_job(job_id))
+        finally:
+            # The intermediate is only useful if the polish pass failed.
+            if cut:
+                try:
+                    os.remove(cut)
+                except OSError:
+                    pass
 
     threading.Thread(target=_work, name=f'video-band-{job_id}', daemon=True).start()
     return True
@@ -982,9 +1080,13 @@ def banner_preview(job, title, offset=0.0, width=405):
     lowest — the worst case, the one that decides — and burns the band in
     exactly as the render will, at one twentieth of the cost.
     """
-    src = job.get('cut') or job.get('output')
+    # Avant le montage il n'y a que la source : l'aperçu lui applique le même
+    # recadrage vertical que le rendu, sinon il montrerait un cadre qui
+    # n'existera pas.
+    src = job.get('cut') or job.get('output') or job.get('src')
     if not src or not os.path.exists(src):
         return None
+    recadre = bool(job.get('vertical')) and not (job.get('cut') or job.get('output'))
     title = (title or '').strip()
     os.makedirs(PREVIEW_DIR, exist_ok=True)
     cle = hashlib.sha1(
@@ -995,19 +1097,22 @@ def banner_preview(job, title, offset=0.0, width=405):
         return dest
     _prune_previews()
 
+    largeur = 1080 if recadre else probe_width(src)
     chain, textfiles = (None, [])
     if title:
-        chain, textfiles = title_filter(title, width=probe_width(src),
+        chain, textfiles = title_filter(title, width=largeur,
                                         workdir=PREVIEW_DIR,
                                         face_bottom=job.get('face_bottom'),
                                         offset=offset)
-    filtres = ([chain] if chain else []) + [f'scale={int(width)}:-2']
+    filtres = ['scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920'] if recadre else []
+    filtres += ([chain] if chain else []) + [f'scale={int(width)}:-2']
     # L'instant du pire cadrage quand il est connu ; sinon le milieu du clip,
     # qui vaut mieux que la première image, souvent prise avant que Bernard
     # ait fini de s'installer.
     quand = job.get('face_at')
     if quand is None:
         quand = (job.get('kept') or job.get('duration') or 4) / 2
+
     try:
         code, _, err = _run([
             _bin('ffmpeg'), '-hide_banner', '-nostats', '-y',
