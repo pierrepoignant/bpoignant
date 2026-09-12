@@ -144,6 +144,28 @@ def render_preview(filename):
                      conditional=True)
 
 
+@admin_video_bp.route('/job/<job_id>/apercu')
+@admin_required
+def banner_preview(job_id):
+    """A still of the clip with the band as it will actually be burnt in.
+
+    Asked for on every keystroke (debounced): the result is cached on the
+    text and the nudge, so typing a title costs one render per pause, not one
+    per letter.
+    """
+    job = video.get_job(job_id)
+    if not job:
+        abort(404)
+    try:
+        path = video.banner_preview(job, request.args.get('title') or '',
+                                    offset=request.args.get('d', 0.0, type=float) or 0.0)
+    except video.VideoError:
+        abort(500)
+    if not path:
+        abort(404)
+    return send_file(path, mimetype='image/jpeg', max_age=0)
+
+
 @admin_video_bp.route('/job/<job_id>/banner', methods=['POST'])
 @admin_required
 def confirm_banner(job_id):
@@ -158,6 +180,8 @@ def confirm_banner(job_id):
     banner = (request.form.get('title') or '').strip()
     if request.form.get('sans_bandeau'):
         banner = ''
-    if not video.apply_banner(job_id, banner):
+    # Le décalage manuel : la détection place le bandeau, l'œil tranche.
+    decalage = request.form.get('decalage', 0.0, type=float) or 0.0
+    if not video.apply_banner(job_id, banner, offset=max(-0.15, min(0.15, decalage))):
         flash("Impossible de terminer le montage — voir le détail ci-dessous.", 'danger')
     return redirect(url_for('admin_video.job_page', job_id=job_id))

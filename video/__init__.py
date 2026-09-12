@@ -19,6 +19,7 @@ The pipeline, in order:
                           voice adapted to the format.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -28,6 +29,7 @@ import subprocess
 import logging
 import tempfile
 import threading
+import time
 import uuid
 from datetime import datetime
 
@@ -71,7 +73,20 @@ TITLE_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 # 1920 : un bandeau collé au bord y disparaîtrait.
 TITLE_BAND_TOP = 0.72        # bord supérieur, en fraction de la hauteur
 TITLE_BAND_HEIGHT = 0.09
+# Deux lignes tiennent dans un bandeau moins haut que 1,75 fois celui d'une
+# ligne : le texte y occupait la moitié de la hauteur, le reste était du bleu.
+# Cette marge coûtait cher dès lors que le bandeau doit descendre sous le
+# menton sans finir sous la légende de TikTok.
+TITLE_BAND_TWO_LINES = 1.45
 TITLE_SIDE_PADDING = 48      # marge gauche/droite, en pixels sur 1080
+# Écart minimal entre le menton et le haut du bandeau, en fraction de hauteur —
+# une trentaine de pixels sur 1920. En dessous, le bandeau ne coupe pas le
+# visage mais le touche, ce qui se voit autant.
+TITLE_BAND_GAP = 0.025
+# Le bandeau ne descend jamais plus bas que cela : TikTok écrit la légende, le
+# pseudo et le bandeau musical sur le bas du cadre, et un titre poussé dedans
+# devient illisible. Mieux vaut effleurer le menton que finir sous la légende.
+TITLE_BAND_MAX_BOTTOM = 0.88
 
 TARGET_LUMA = 120.0
 DARK_THRESHOLD = 100.0
@@ -292,6 +307,123 @@ def gamma_for(luma):
     return round(min(max(g, 1.0), MAX_GAMMA), 3)
 
 
+# ── Repérage du visage ───────────────────────────────────────
+
+# Le détecteur s'arrête vers la lèvre inférieure : le menton tombe un peu plus
+# bas que la boîte qu'il renvoie. Six pour cent de la hauteur de la boîte
+# rattrapent l'écart, mesuré sur les clips de Bernard.
+CHIN_BELOW_BOX = 0.06
+# Assez d'images pour attraper l'instant où le menton descend le plus : sur un
+# clip de trente secondes, une image toutes les demi-secondes. Un échantillon
+# clairsemé rate ce pic d'une vingtaine de pixels, et c'est exactement celui
+# qui coupe le menton.
+FACE_SAMPLES = 64
+# Une détection nettement plus petite que les autres n'est pas un visage : un
+# pli de rideau, un bouton de chemise. Elle ferait descendre le bandeau pour
+# rien, ou pire, l'empêcherait de descendre.
+FACE_MIN_RATIO = 0.7
+# Et un visage ne saute pas d'un huitième de l'image d'une seconde à l'autre :
+# au-delà, c'est le détecteur qui a glissé, pas Bernard qui a bougé.
+FACE_MAX_JUMP = 0.12
+
+
+def detect_face_bottom(path, samples=FACE_SAMPLES):
+    """How low the face reaches over the whole clip, as a fraction of height.
+
+    Returns ``{'bottom': …, 'at': seconds}`` or None — None being an honest
+    answer, and the one that leaves the band where it has always been.
+
+    Sampled across the clip rather than read off one frame: the band is burnt
+    in for the whole duration, so what counts is the lowest the chin ever goes,
+    not where it sits at second three. The worst frame's timestamp comes back
+    too, because that is the frame worth showing before burning anything in.
+    """
+    try:
+        import cv2
+    except ImportError:
+        log.info('OpenCV absent : bandeau placé par défaut')
+        return None
+
+    cap = None
+    try:
+        cap = cv2.VideoCapture(path)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0) or 30.0
+        if total <= 0:
+            return None
+        casc = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        if casc.empty():
+            log.info('cascade de visages introuvable : bandeau placé par défaut')
+            return None
+
+        pas = max(1, total // max(1, samples))
+        trouves = []
+        for index in range(0, total, pas):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            h, w = frame.shape[:2]
+            # Détecter sur une image réduite : la précision utile est de
+            # quelques pixels sur 1920, et un cadre entier coûte dix fois plus.
+            petit = cv2.resize(frame, (360, max(1, int(360 * h / w))))
+            gris = cv2.equalizeHist(cv2.cvtColor(petit, cv2.COLOR_BGR2GRAY))
+            boites = casc.detectMultiScale(gris, 1.1, 5, minSize=(60, 60))
+            if len(boites) == 0:
+                continue
+            x, y, bw, bh = max(boites, key=lambda b: b[2] * b[3])
+            trouves.append((bh / petit.shape[0],
+                            (y + bh + bh * CHIN_BELOW_BOX) / petit.shape[0],
+                            index / fps))
+    except Exception:
+        log.exception('repérage du visage impossible')
+        return None
+    finally:
+        if cap is not None:
+            cap.release()
+
+    if len(trouves) < 3:
+        return None
+    tailles = sorted(t[0] for t in trouves)
+    mediane = tailles[len(tailles) // 2]
+    milieu = sorted(t[1] for t in trouves)[len(trouves) // 2]
+    retenus = [t for t in trouves
+               if t[0] >= mediane * FACE_MIN_RATIO
+               and abs(t[1] - milieu) <= FACE_MAX_JUMP]
+    if not retenus:
+        return None
+    # Le plus bas, pas la moyenne : le bandeau est gravé pour toute la durée du
+    # clip, donc ce qui compte est l'instant où le menton descend le plus. Les
+    # deux filtres ci-dessus ont déjà écarté les fausses détections, qui sont
+    # la seule raison de ne pas prendre le maximum.
+    choisi = max(retenus, key=lambda t: t[1])
+    # Des flottants Python, pas des scalaires numpy : le job part en JSON, et
+    # `json` ne sait pas écrire un np.float64.
+    return {'bottom': round(float(choisi[1]), 4), 'at': round(float(choisi[2]), 2)}
+
+
+def band_geometry(lines, face_bottom=None, offset=0.0):
+    """Where the band sits: (top, height) as fractions of the frame height.
+
+    The default is unchanged — low in the frame but clear of TikTok's own
+    furniture. A detected chin only ever pushes the band *down*, never up, and
+    never past the point where TikTok's caption would sit on top of it: a band
+    grazing the chin is a nuisance, a band under the caption is unreadable.
+    """
+    hauteur = (TITLE_BAND_HEIGHT if lines <= 1
+               else TITLE_BAND_HEIGHT * TITLE_BAND_TWO_LINES)
+    # Deux lignes : le bandeau grandit autour du même centre, donc son bord
+    # supérieur remonte — c'est là qu'il attrape le menton.
+    haut = TITLE_BAND_TOP - (hauteur - TITLE_BAND_HEIGHT) / 2
+    plancher = TITLE_BAND_MAX_BOTTOM - hauteur
+    if face_bottom:
+        haut = max(haut, min(face_bottom + TITLE_BAND_GAP, plancher))
+    if offset:
+        haut = max(0.45, min(haut + offset, plancher))
+    return haut, hauteur
+
+
 def _fit_font_size(text, usable_px, ceiling, floor):
     """Largest point size whose rendered width fits `usable_px`.
 
@@ -347,7 +479,7 @@ def wrap_banner(text, max_line=BANNER_MAX_LINE):
     return list(meilleur)
 
 
-def title_filter(text, width=1080, workdir=None):
+def title_filter(text, width=1080, workdir=None, face_bottom=None, offset=0.0):
     """Filter chain drawing a title band across the lower part of the frame.
 
     The text goes through a file rather than inline: drawtext treats colons,
@@ -384,10 +516,9 @@ def title_filter(text, width=1080, workdir=None):
                           ceiling=int(width * plafond),
                           floor=int(width * 0.030))
 
-    # Le bandeau s'agrandit pour deux lignes, et remonte d'autant pour rester
-    # au même endroit dans l'image.
-    hauteur = TITLE_BAND_HEIGHT if len(lignes) == 1 else TITLE_BAND_HEIGHT * 1.75
-    haut = TITLE_BAND_TOP - (hauteur - TITLE_BAND_HEIGHT) / 2
+    # Placement : par défaut le bas du cadre, abaissé si le menton descend
+    # jusque-là.
+    haut, hauteur = band_geometry(len(lignes), face_bottom, offset)
 
     interligne = 1.24            # hauteur d'une ligne, en multiples du corps
     bloc = size * (1 + interligne * (len(lignes) - 1))
@@ -408,7 +539,8 @@ def title_filter(text, width=1080, workdir=None):
     return ','.join(parties), paths
 
 
-def polish(src, dest, loudness=None, gamma=None, title=None):
+def polish(src, dest, loudness=None, gamma=None, title=None,
+           face_bottom=None, band_offset=0.0):
     """Second pass: normalise loudness, and lift the picture when it is dark.
 
     Video is stream-copied when no regrade is needed, so the common case costs
@@ -436,7 +568,9 @@ def polish(src, dest, loudness=None, gamma=None, title=None):
         video_chain.append(f'eq=gamma={gamma}')
     if title:
         chain, textfiles = title_filter(title, width=probe_width(src),
-                                        workdir=os.path.dirname(dest))
+                                        workdir=os.path.dirname(dest),
+                                        face_bottom=face_bottom,
+                                        offset=band_offset)
         if chain:
             video_chain.append(chain)
 
@@ -726,6 +860,15 @@ def start_job(src_path, original_name, vertical=False, title=None):
             cut = os.path.join(WORKDIR, f'{job_id}-cut.mp4')
             render(src_path, segments, cut, vertical=vertical)
 
+            # Repérage du visage : il décide de la hauteur du bandeau, et le
+            # faire ici plutôt qu'à la pose permet de l'annoncer avant de
+            # graver quoi que ce soit.
+            _set(job_id, step='Repérage du visage…')
+            visage = detect_face_bottom(cut)
+            _set(job_id,
+                 face_bottom=(visage or {}).get('bottom'),
+                 face_at=(visage or {}).get('at'))
+
             _set(job_id, step='Mesure du son et de l’image…')
             loudness = measure_loudness(cut)
             luma = measure_brightness(cut)
@@ -764,7 +907,7 @@ def start_job(src_path, original_name, vertical=False, title=None):
     return job_id
 
 
-def apply_banner(job_id, banner=None):
+def apply_banner(job_id, banner=None, offset=0.0):
     """Second phase: burn the confirmed band in and finish the render.
 
     Returns immediately; the page polls as it does for the first phase. Passing
@@ -781,14 +924,15 @@ def apply_banner(job_id, banner=None):
         return False
 
     banner = (banner if banner is not None else job.get('title')) or None
-    _set(job_id, title=banner, status='running', error=None,
+    _set(job_id, title=banner, band_offset=offset, status='running', error=None,
          step='Égalisation du son et de l’image…')
 
     def _work():
         try:
             dest = os.path.join(WORKDIR, f'{job_id}.mp4')
             polish(cut, dest, loudness=job.get('loudness'), gamma=job.get('gamma'),
-                   title=banner)
+                   title=banner, face_bottom=job.get('face_bottom'),
+                   band_offset=offset)
             _set(job_id, output=dest, status='done', step='Terminé')
             # Enchaînement : dix minutes après, le serveur ira chercher le post
             # TikTok correspondant et publiera ailleurs.
@@ -812,6 +956,73 @@ def apply_banner(job_id, banner=None):
 
     threading.Thread(target=_work, name=f'video-band-{job_id}', daemon=True).start()
     return True
+
+
+PREVIEW_DIR = os.path.join(WORKDIR, 'apercus')
+
+
+def _prune_previews(max_age=86400):
+    """Aperçus d'hier : une frappe en produit une poignée, et personne ne les
+    regarde deux jours de suite."""
+    limite = time.time() - max_age
+    try:
+        for nom in os.listdir(PREVIEW_DIR):
+            chemin = os.path.join(PREVIEW_DIR, nom)
+            if os.path.isfile(chemin) and os.path.getmtime(chemin) < limite:
+                os.remove(chemin)
+    except OSError:
+        pass
+
+
+def banner_preview(job, title, offset=0.0, width=405):
+    """A real frame of the clip with the band drawn on it, as a JPEG path.
+
+    A CSS mock-up of the band says what the words will read; it cannot say
+    whether they land on the chin. This takes the frame where the face sits
+    lowest — the worst case, the one that decides — and burns the band in
+    exactly as the render will, at one twentieth of the cost.
+    """
+    src = job.get('cut') or job.get('output')
+    if not src or not os.path.exists(src):
+        return None
+    title = (title or '').strip()
+    os.makedirs(PREVIEW_DIR, exist_ok=True)
+    cle = hashlib.sha1(
+        f"{job.get('id')}|{title}|{offset}|{os.path.getmtime(src)}".encode()
+    ).hexdigest()[:14]
+    dest = os.path.join(PREVIEW_DIR, f'{cle}.jpg')
+    if os.path.exists(dest):
+        return dest
+    _prune_previews()
+
+    chain, textfiles = (None, [])
+    if title:
+        chain, textfiles = title_filter(title, width=probe_width(src),
+                                        workdir=PREVIEW_DIR,
+                                        face_bottom=job.get('face_bottom'),
+                                        offset=offset)
+    filtres = ([chain] if chain else []) + [f'scale={int(width)}:-2']
+    # L'instant du pire cadrage quand il est connu ; sinon le milieu du clip,
+    # qui vaut mieux que la première image, souvent prise avant que Bernard
+    # ait fini de s'installer.
+    quand = job.get('face_at')
+    if quand is None:
+        quand = (job.get('kept') or job.get('duration') or 4) / 2
+    try:
+        code, _, err = _run([
+            _bin('ffmpeg'), '-hide_banner', '-nostats', '-y',
+            '-ss', f'{max(0, float(quand)):.2f}', '-i', src,
+            '-frames:v', '1', '-vf', ','.join(filtres), '-q:v', '4', dest,
+        ], timeout=120)
+    finally:
+        for chemin in textfiles:
+            try:
+                os.remove(chemin)
+            except OSError:
+                pass
+    if code != 0:
+        raise VideoError(f"Aperçu impossible : {err.strip()[-200:]}")
+    return dest
 
 
 THUMB_DIR = os.path.join(WORKDIR, 'thumbs')

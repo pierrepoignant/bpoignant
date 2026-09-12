@@ -42,10 +42,33 @@
                 <span id="banner-count"></span>
             </div>
 
-            <div style="background: var(--noir); border-radius: 8px; padding: 1.6rem 1rem; text-align: center; margin-bottom: 1rem;">
-                <div id="banner-preview"
-                     style="background: #16213E; color: white; font-weight: 700; text-transform: uppercase;
-                            padding: 0.5rem 1rem; border-radius: 2px; line-height: 1.25; letter-spacing: 0.01em;"></div>
+            {# Une vraie image du clip, prise à l'instant où le visage descend le
+               plus bas, avec le bandeau gravé comme il le sera. Une maquette en
+               CSS dit ce que le bandeau racontera ; elle ne dit pas s'il tombe
+               sur le menton. #}
+            <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 1rem;">
+                <div style="position: relative; width: 216px; max-width: 100%; background: var(--noir);
+                            border-radius: 8px; overflow: hidden; flex: 0 0 auto;">
+                    <img id="apercu-image" alt="Aperçu du bandeau sur l'image"
+                         style="display: block; width: 100%; transition: opacity .15s;">
+                </div>
+                <div style="flex: 1; min-width: 210px;">
+                    <p id="placement" style="font-size: 0.85rem; color: var(--gris); line-height: 1.6; margin: 0 0 0.7rem;"></p>
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+                        <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                                onclick="bougerBandeau(-0.02)" title="Remonter le bandeau">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                                onclick="bougerBandeau(0.02)" title="Descendre le bandeau">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+                        <button type="button" id="raz-decalage" class="btn btn-sm btn-outline"
+                                style="display: none; color: var(--noir); border-color: #e0e0e0;"
+                                onclick="bougerBandeau(null)">Replacer</button>
+                    </div>
+                    <input type="hidden" name="decalage" id="decalage" value="0">
+                </div>
             </div>
 
             <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
@@ -111,14 +134,44 @@
         return meilleur;
     }
 
+    const APERCU = "{{ url_for('admin_video.banner_preview', job_id=job.id) }}";
+    let minuteurApercu = null, visageTrouve = null;
+
     function apercuBandeau() {
         const champ = document.getElementById('banner-input');
         const lignes = decouperBandeau(champ.value);
-        const boite = document.getElementById('banner-preview');
-        boite.innerHTML = lignes.length ? lignes.map(l => '<div>' + l.replace(/[<>&]/g, '') + '</div>').join('') : '&nbsp;';
-        boite.style.fontSize = lignes.length > 1 ? '1.1rem' : '1.45rem';
         document.getElementById('banner-count').textContent =
             champ.value.length + ' / 44 caractères · ' + (lignes.length > 1 ? 'deux lignes' : 'une ligne');
+        // L'image coûte un ffmpeg : on attend la fin de la frappe.
+        clearTimeout(minuteurApercu);
+        minuteurApercu = setTimeout(rafraichirApercu, 450);
+    }
+
+    function rafraichirApercu() {
+        const img = document.getElementById('apercu-image');
+        const titre = document.getElementById('banner-input').value;
+        const d = document.getElementById('decalage').value;
+        img.style.opacity = '0.4';
+        img.onload = img.onerror = () => { img.style.opacity = '1'; };
+        img.src = APERCU + '?title=' + encodeURIComponent(titre) + '&d=' + d;
+    }
+
+    function bougerBandeau(pas) {
+        const champ = document.getElementById('decalage');
+        champ.value = pas === null ? '0' : (parseFloat(champ.value || 0) + pas).toFixed(3);
+        majPlacement();
+        rafraichirApercu();
+    }
+
+    function majPlacement() {
+        const d = parseFloat(document.getElementById('decalage').value || 0);
+        document.getElementById('raz-decalage').style.display = d ? '' : 'none';
+        const bouge = d ? (d > 0 ? ' Descendu à la main.' : ' Remonté à la main.') : '';
+        document.getElementById('placement').innerHTML = (visageTrouve
+            ? '<i class="fas fa-user-check" style="color: var(--vert);"></i> Visage repéré — le bandeau est posé sous le menton, '
+              + 'à l\'instant du clip où le visage descend le plus bas.'
+            : '<i class="fas fa-user-slash" style="color: var(--gris);"></i> Visage non repéré — bandeau à sa place habituelle.')
+            + bouge + ' Les flèches le déplacent si besoin.';
     }
 
     (function () {
@@ -163,6 +216,8 @@
                     }
                     document.getElementById('transcript-attente').textContent = j.transcript || '';
                     document.getElementById('bandeau').style.display = 'block';
+                    visageTrouve = !!j.face_bottom;
+                    majPlacement();
                     apercuBandeau();
                     return;
                 }

@@ -11,3 +11,6 @@
 static-ffmpeg==2.13
 faster-whisper==1.2.1
 pillow==11.3.0
+# Repérage du visage, pour que le bandeau ne tombe pas sur le menton.
+# Version 4.x : OpenCV 5 ne livre plus les cascades de Haar.
+opencv-python-headless==4.12.0.88
