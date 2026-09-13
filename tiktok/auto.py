@@ -1,8 +1,14 @@
 """Enchaînement automatique après un montage.
 
-Bernard monte une vidéo, la publie depuis l'application TikTok, et plus rien ne
-devrait lui être demandé : dix minutes plus tard le serveur récupère le post,
-lui rattache le fichier monté, puis le publie sur X et sur LinkedIn.
+Bernard monte une vidéo, elle part sur TikTok — depuis le serveur ou depuis son
+téléphone — et plus rien ne devrait lui être demandé : dix minutes plus tard le
+serveur récupère le post, lui rattache le fichier monté, puis le publie sur X et
+sur LinkedIn.
+
+Quand le clip est parti par l'API, TikTok a rendu l'identifiant du post et le
+rattachement se fait sur cet identifiant. Sinon on reprend le post le plus
+récent qui n'a pas encore de vidéo, ce qui est une supposition — juste, mais une
+supposition.
 
 Le délai existe parce que le scrapeur ne voit un post qu'une fois indexé par
 TikTok, ce qui n'est pas immédiat. Et parce que rien ne garantit qu'il aura été
@@ -66,6 +72,20 @@ def _fin(job_id, etat, detail):
     log.info('auto-publication %s : %s — %s', job_id, etat, detail)
 
 
+def _candidat_connu(post_ids):
+    """The post TikTok itself named, when the clip went out through the API.
+
+    Worth preferring over any guess: it is the difference between « the newest
+    post is probably the one we just made » and knowing.
+    """
+    from tiktok.models import TikTokPost
+    for post_id in post_ids:
+        post = TikTokPost.query.filter_by(tiktok_id=str(post_id)).first()
+        if post is not None:
+            return post
+    return None
+
+
 def _candidat(post_scrape_depuis):
     """The most recent scraped post that has no video attached yet."""
     from tiktok.models import TikTokPost
@@ -109,12 +129,23 @@ def _traiter(app, job_id):
         log.warning('auto-publication %s : récupération impossible (%s)', job_id, exc)
         return False
 
-    post = _candidat(datetime.utcnow() - FENETRE_POST)
-    if post is None:
-        auto['detail'] = (f"Pas encore de post sans vidéo "
-                          f"(essai {auto['essais']}). Nouvelle tentative dans 5 minutes.")
-        video._set(job_id, auto=auto)
-        return False
+    # Quand le clip est parti par l'API, TikTok a rendu l'identifiant du post :
+    # on rattache à celui-là, sans deviner.
+    connus = (job.get('tiktok') or {}).get('post_ids') or []
+    if connus:
+        post = _candidat_connu(connus)
+        if post is None:
+            auto['detail'] = (f"Post {connus[0]} pas encore indexé par TikTok "
+                              f"(essai {auto['essais']}). Nouvelle tentative dans 5 minutes.")
+            video._set(job_id, auto=auto)
+            return False
+    else:
+        post = _candidat(datetime.utcnow() - FENETRE_POST)
+        if post is None:
+            auto['detail'] = (f"Pas encore de post sans vidéo "
+                              f"(essai {auto['essais']}). Nouvelle tentative dans 5 minutes.")
+            video._set(job_id, auto=auto)
+            return False
 
     erreur = attach_render(post, sortie)
     if erreur:

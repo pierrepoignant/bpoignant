@@ -162,6 +162,96 @@
         </p>
         {% endif %}
     </div>
+    {# TikTok : publier depuis le serveur. Deux régimes, et ce n'est pas nous
+       qui choisissons — tant que l'application n'a pas passé l'audit de
+       TikTok, une publication directe reste privée, donc invisible. #}
+    <section id="tiktok" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.6rem; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">
+            <i class="fa-brands fa-tiktok"></i> TikTok — publication
+        </h2>
+        <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1.1rem; line-height: 1.6;">
+            Envoyer le montage depuis le serveur, au lieu de le transférer sur le
+            téléphone. TikTok renvoie alors l'identifiant du post, ce qui évite à
+            l'enchaînement vers X et LinkedIn de deviner quel post vient d'être publié.
+        </p>
+
+        {% if tiktok_connected %}
+        <p style="font-size: 0.92rem; margin: 0 0 0.6rem;">
+            <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+            Connecté à <strong>{{ tiktok_username or 'ce compte' }}</strong>
+            {% if tiktok_days_left is not none %}
+            — autorisation valable encore
+            <strong style="{% if tiktok_days_left < 15 %}color: var(--rouge);{% endif %}">{{ tiktok_days_left }} jour{{ 's' if tiktok_days_left > 1 else '' }}</strong>.
+            {% endif %}
+        </p>
+        <p style="font-size: 0.88rem; color: var(--gris); margin: 0 0 1rem;">
+            {% if tiktok_mode == 'direct' %}
+            <i class="fas fa-paper-plane" style="color: var(--vert);"></i>
+            Les envois sont <strong>publiés directement</strong>.
+            {% else %}
+            <i class="fas fa-inbox"></i>
+            Les envois sont <strong>déposés en brouillon</strong> — Bernard reçoit une
+            notification dans TikTok et publie d'un geste. Cinq dépôts en attente par 24 h.
+            {% endif %}
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
+            <form method="POST" action="{{ url_for('admin_settings.tiktok_verify') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Vérifier</button>
+            </form>
+            <a href="{{ url_for('admin_settings.tiktok_connect') }}" class="btn btn-sm btn-primary">Renouveler l'autorisation</a>
+            <form method="POST" action="{{ url_for('admin_settings.tiktok_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Déconnecter TikTok ?')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Déconnecter</button>
+            </form>
+        </div>
+        {% elif tiktok_client_key and tiktok_has_secret %}
+        <a href="{{ url_for('admin_settings.tiktok_connect') }}" class="btn btn-primary" style="margin-bottom: 1.2rem;">
+            <i class="fa-brands fa-tiktok"></i> Connecter le compte de Bernard
+        </a>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('admin_settings.tiktok_credentials') }}">
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Client key</label>
+            <input type="text" name="client_key" value="{{ tiktok_client_key }}"
+                   style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
+
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+                Client secret {% if tiktok_has_secret %}<span style="text-transform:none; letter-spacing:0; color:#bbb;">— enregistré, laissez vide pour le conserver</span>{% endif %}
+            </label>
+            <input type="password" name="client_secret" placeholder="{{ '••••••••' if tiktok_has_secret else '' }}"
+                   style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.9rem;">
+
+            <label style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.88rem; margin-bottom: 1rem; cursor: pointer;">
+                <input type="checkbox" name="force_inbox" value="1" {% if tiktok_force_inbox %}checked{% endif %}
+                       style="margin-top: 3px;">
+                <span>Toujours déposer en brouillon, même si la publication directe est autorisée —
+                    <span style="color: var(--gris);">à garder coché tant que l'application n'a pas passé l'audit TikTok.</span></span>
+            </label>
+
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+        </form>
+
+        <div style="margin-top: 1.2rem; padding-top: 1.1rem; border-top: 1px solid var(--gris-clair);">
+            <p style="font-size: 0.83rem; color: var(--gris); line-height: 1.7; margin: 0 0 0.6rem;">
+                Sur <a href="https://developers.tiktok.com/" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">developers.tiktok.com</a> :
+                créez l'application, ajoutez les produits <em>Login Kit</em> et <em>Content Posting API</em>,
+                demandez les autorisations <code>video.upload</code> et <code>video.publish</code>,
+                et déclarez l'adresse de retour ci-dessous. La publication directe demande en plus
+                de passer l'audit ; sans lui, tout ce qui est publié reste privé.
+            </p>
+            {% if tiktok_scopes %}
+            <p style="font-size: 0.83rem; margin: 0 0 0.6rem;">
+                Autorisations accordées : <strong>{{ tiktok_scopes | join(', ') }}</strong>
+            </p>
+            {% endif %}
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <code id="tiktok-uri" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ tiktok_redirect_uri }}</code>
+                <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="navigator.clipboard.writeText(document.getElementById('tiktok-uri').textContent.trim()); this.textContent='Copié';">Copier</button>
+            </div>
+        </div>
+    </section>
+
     {# LinkedIn : publier sur le profil personnel de Bernard. Les statistiques
        n'existent pas pour un membre — seules les pages d'organisation en ont —
        et l'autorisation expire au bout de soixante jours, ce que la console

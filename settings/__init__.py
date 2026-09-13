@@ -51,8 +51,18 @@ def index():
     import gdrive
     import apify
     import linkedin
+    from tiktok import publish as tiktok_publish
     return render_template(
         'settings_index.html',
+        tiktok_client_key=tiktok_publish._client_key(),
+        tiktok_has_secret=bool(tiktok_publish._client_secret()),
+        tiktok_connected=tiktok_publish.is_connected(),
+        tiktok_username=tiktok_publish.username(),
+        tiktok_days_left=tiktok_publish.days_left(),
+        tiktok_scopes=tiktok_publish.granted_scopes(),
+        tiktok_mode=tiktok_publish.mode(),
+        tiktok_force_inbox=tiktok_publish.force_inbox(),
+        tiktok_redirect_uri=url_for('admin_settings.tiktok_callback', _external=True),
         linkedin_client_id=linkedin._client_id(),
         linkedin_has_secret=bool(linkedin._client_secret()),
         linkedin_connected=linkedin.is_configured(),
@@ -151,6 +161,94 @@ def linkedin_disconnect():
     linkedin.disconnect()
     flash("LinkedIn déconnecté.", 'success')
     return redirect(url_for('admin_settings.index') + '#linkedin')
+
+
+# ─── TikTok : publication par l'API ─────────────────────────
+
+@admin_settings_bp.route('/tiktok/credentials', methods=['POST'])
+@admin_required
+def tiktok_credentials():
+    from tiktok import publish as tiktok_publish
+    tiktok_publish.save_settings(request.form.get('client_key'),
+                                 request.form.get('client_secret'))
+    tiktok_publish.set_force_inbox(bool(request.form.get('force_inbox')))
+    flash("Réglages TikTok enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index') + '#tiktok')
+
+
+@admin_settings_bp.route('/tiktok/connect')
+@admin_required
+def tiktok_connect():
+    from tiktok import publish as tiktok_publish
+    etat = secrets.token_urlsafe(24)
+    session['tiktok_oauth_state'] = etat
+    try:
+        url = tiktok_publish.authorization_url(
+            url_for('admin_settings.tiktok_callback', _external=True), etat)
+    except tiktok_publish.TikTokPublishError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#tiktok')
+    return redirect(url)
+
+
+@admin_settings_bp.route('/tiktok/callback')
+@admin_required
+def tiktok_callback():
+    from tiktok import publish as tiktok_publish
+    attendu = session.pop('tiktok_oauth_state', None)
+    if not attendu or request.args.get('state') != attendu:
+        flash("Réponse TikTok inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_settings.index') + '#tiktok')
+    if request.args.get('error'):
+        flash(f"Connexion refusée : "
+              f"{request.args.get('error_description') or request.args['error']}", 'danger')
+        return redirect(url_for('admin_settings.index') + '#tiktok')
+    try:
+        tiktok_publish.exchange_code(
+            request.args.get('code'),
+            url_for('admin_settings.tiktok_callback', _external=True))
+    except tiktok_publish.TikTokPublishError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#tiktok')
+    manquants = [s for s in ('video.upload', 'video.publish')
+                 if s not in tiktok_publish.granted_scopes()]
+    message = f"TikTok connecté — {tiktok_publish.username() or 'compte'}."
+    if manquants:
+        # Dire lequel manque : sans `video.publish` l'envoi direct est
+        # impossible, et l'écran doit expliquer pourquoi plutôt que de le
+        # laisser découvrir au premier envoi.
+        message += (" Autorisations non accordées : " + ', '.join(manquants)
+                    + ". Faites-les approuver sur le portail développeur.")
+    flash(message, 'success' if not manquants else 'warning')
+    return redirect(url_for('admin_settings.index') + '#tiktok')
+
+
+@admin_settings_bp.route('/tiktok/verify', methods=['POST'])
+@admin_required
+def tiktok_verify():
+    from tiktok import publish as tiktok_publish
+    ok, message = tiktok_publish.verify_credentials()
+    if ok:
+        # L'audit ne se voit qu'ici : une application non auditée ne se voit
+        # proposer que la visibilité privée.
+        try:
+            infos = tiktok_publish.creator_info()
+            message += ("" if infos['audite'] else
+                        " Attention : l'application n'a pas passé l'audit TikTok, "
+                        "une publication directe resterait privée.")
+        except tiktok_publish.TikTokPublishError as exc:
+            message += f" (informations du compte illisibles : {exc})"
+    flash(message, 'success' if ok else 'danger')
+    return redirect(url_for('admin_settings.index') + '#tiktok')
+
+
+@admin_settings_bp.route('/tiktok/disconnect', methods=['POST'])
+@admin_required
+def tiktok_disconnect():
+    from tiktok import publish as tiktok_publish
+    tiktok_publish.disconnect()
+    flash("TikTok déconnecté.", 'success')
+    return redirect(url_for('admin_settings.index') + '#tiktok')
 
 
 @admin_settings_bp.route('/apify/credentials', methods=['POST'])

@@ -109,6 +109,46 @@
             </p>
         </div>
 
+        {# Publier depuis le serveur. Ce que TikTok accepte dépend du compte et
+           de l'audit de l'application, donc l'écran ne se dessine qu'une fois
+           TikTok interrogé — proposer « public » à une application non auditée
+           ne produirait qu'un post que personne ne voit. #}
+        <div id="carte-tiktok" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;">
+                <i class="fa-brands fa-tiktok"></i> Publier sur TikTok
+            </h2>
+            <div id="tiktok-etat" style="font-size: 0.9rem; line-height: 1.6;"></div>
+            <form id="tiktok-form" method="POST" action="{{ url_for('admin_video.tiktok_post', job_id=job.id) }}"
+                  style="display: none; margin-top: 0.9rem;"
+                  onsubmit="const b=this.querySelector('button[type=submit]'); b.disabled=true;
+                            b.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Envoi…';">
+                <div id="tiktok-legende">
+                    <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Légende</label>
+                    <textarea name="title" id="tiktok-title" rows="5" maxlength="2200"
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.92rem; line-height: 1.6; margin-bottom: 0.9rem;"></textarea>
+                </div>
+                <div id="tiktok-options" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Visibilité</label>
+                        <select name="privacy" id="tiktok-privacy"
+                                style="padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;"></select>
+                    </div>
+                    <label style="font-size: 0.86rem; display: flex; gap: 0.4rem; align-items: center;">
+                        <input type="checkbox" name="disable_comment" value="1" id="tiktok-nocom"> Commentaires fermés
+                    </label>
+                    <label style="font-size: 0.86rem; display: flex; gap: 0.4rem; align-items: center;">
+                        <input type="checkbox" name="disable_duet" value="1" id="tiktok-noduet"> Duo interdit
+                    </label>
+                    <label style="font-size: 0.86rem; display: flex; gap: 0.4rem; align-items: center;">
+                        <input type="checkbox" name="disable_stitch" value="1" id="tiktok-nostitch"> Couture interdite
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-brands fa-tiktok"></i> <span id="tiktok-bouton">Publier sur TikTok</span>
+                </button>
+            </form>
+        </div>
+
         <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-bottom: 1.5rem;">
             <h2 style="font-size: 1.05rem; margin: 0 0 0.6rem;"><i class="fas fa-pen-nib" style="color: var(--rouge);"></i> Texte à publier</h2>
             <pre id="caption" style="white-space: pre-wrap; font-family: inherit; font-size: 0.95rem; line-height: 1.6; margin: 0; background: var(--gris-clair); padding: 1rem; border-radius: 8px;"></pre>
@@ -141,6 +181,78 @@
             if (ecart === null || d < ecart) { meilleur = [haut, bas]; ecart = d; }
         }
         return meilleur;
+    }
+
+    const TIKTOK_INFOS = "{{ url_for('admin_video.tiktok_infos', job_id=job.id) }}";
+    let tiktokPrepare = false;
+
+    // L'état d'un envoi, tel que le fil de fond l'a écrit sur le job.
+    const TIKTOK_ICONES = {
+        envoi: ['fa-spinner fa-spin', 'var(--gris)'],
+        attente: ['fa-spinner fa-spin', 'var(--gris)'],
+        publie: ['fa-circle-check', 'var(--vert)'],
+        brouillon: ['fa-inbox', 'var(--vert)'],
+        echec: ['fa-circle-exclamation', 'var(--rouge)'],
+        inconnu: ['fa-triangle-exclamation', '#8a6d00'],
+    };
+
+    function majTikTok(j) {
+        const boite = document.getElementById('tiktok-etat');
+        const form = document.getElementById('tiktok-form');
+        const tt = j.tiktok || null;
+        if (tt && tt.etat) {
+            const [icone, couleur] = TIKTOK_ICONES[tt.etat] || TIKTOK_ICONES.inconnu;
+            let html = '<i class="fas ' + icone + '" style="color:' + couleur + '"></i> ' + (tt.detail || '');
+            if (tt.url) html += ' <a href="' + tt.url + '" target="_blank" rel="noopener">Voir le post</a>';
+            boite.innerHTML = html;
+            // Après un échec, on peut corriger et renvoyer.
+            form.style.display = (tt.etat === 'echec') ? 'block' : 'none';
+            if (tt.etat === 'echec') preparerTikTok(j);
+            return;
+        }
+        preparerTikTok(j);
+    }
+
+    function preparerTikTok(j) {
+        if (tiktokPrepare) return;
+        tiktokPrepare = true;
+        const boite = document.getElementById('tiktok-etat');
+        const form = document.getElementById('tiktok-form');
+        boite.innerHTML = '<span style="color:var(--gris)">Interrogation de TikTok…</span>';
+        fetch(TIKTOK_INFOS).then(r => r.json()).then(info => {
+            if (!info.connecte) {
+                boite.innerHTML = '<span style="color:var(--gris)">' + (info.message || '') + '</span>';
+                return;
+            }
+            if (info.erreur) {
+                boite.innerHTML = '<i class="fas fa-circle-exclamation" style="color:var(--rouge)"></i> ' + info.erreur;
+                return;
+            }
+            const brouillon = info.mode !== 'direct' || !info.audite;
+            document.getElementById('tiktok-title').value = (j.caption || '');
+            const select = document.getElementById('tiktok-privacy');
+            select.innerHTML = (info.privacy_options || []).map(o =>
+                '<option value="' + o + '">' + ((info.libelles || {})[o] || o) + '</option>').join('');
+            // En brouillon, TikTok n'accepte ni légende ni visibilité : tout se
+            // choisit dans l'application au moment de publier.
+            document.getElementById('tiktok-legende').style.display = brouillon ? 'none' : '';
+            document.getElementById('tiktok-options').style.display = brouillon ? 'none' : 'flex';
+            document.getElementById('tiktok-bouton').textContent =
+                brouillon ? 'Envoyer dans les brouillons TikTok' : 'Publier sur TikTok';
+            if (info.comment_disabled) document.getElementById('tiktok-nocom').checked = true;
+            if (info.duet_disabled) document.getElementById('tiktok-noduet').checked = true;
+            if (info.stitch_disabled) document.getElementById('tiktok-nostitch').checked = true;
+            boite.innerHTML = brouillon
+                ? '<span style="color:var(--gris)">Compte <strong>' + (info.username || '') + '</strong>. '
+                  + (info.audite ? '' : "L'application n'a pas passé l'audit TikTok — ")
+                  + 'la vidéo sera déposée en brouillon, à publier depuis l\'application. '
+                  + 'Le texte ci-dessous reste à coller à la main.</span>'
+                : '<span style="color:var(--gris)">Compte <strong>' + (info.username || '') + '</strong>'
+                  + (info.max_duration ? ' · ' + info.max_duration + ' s au maximum' : '') + '.</span>';
+            form.style.display = 'block';
+        }).catch(() => {
+            boite.innerHTML = '<span style="color:var(--gris)">TikTok injoignable.</span>';
+        });
     }
 
     const APERCU = "{{ url_for('admin_video.banner_preview', job_id=job.id) }}";
@@ -244,6 +356,11 @@
                     document.getElementById('caption').textContent = j.caption || '(aucun texte — clé ANTHROPIC absente ?)';
                     document.getElementById('transcript').textContent = j.transcript || '';
                     document.getElementById('result').style.display = 'block';
+                    majTikTok(j);
+                    // Un envoi en cours vaut qu'on continue à regarder ; sinon
+                    // il n'y a plus rien à attendre.
+                    const e = (j.tiktok || {}).etat;
+                    if (e === 'envoi' || e === 'attente') setTimeout(tick, 4000);
                     return;
                 }
                 setTimeout(tick, 1500);

@@ -138,6 +138,65 @@ def download(job_id):
                      download_name=f"tiktok-{os.path.splitext(name)[0]}.mp4")
 
 
+# ─── Publication sur TikTok ─────────────────────────────────
+
+@admin_video_bp.route('/job/<job_id>/tiktok/infos')
+@admin_required
+def tiktok_infos(job_id):
+    """What the account allows, asked of TikTok at the moment of asking.
+
+    Not cached: TikTok requires the posting screen to offer the account's
+    current options, and they are also how we find out whether the app has
+    been audited — an unaudited one is only ever offered « privé ».
+    """
+    from tiktok import publish as tiktok_publish
+    if not video.get_job(job_id):
+        abort(404)
+    if not tiktok_publish.is_connected():
+        return jsonify({'connecte': False,
+                        'message': "TikTok n'est pas connecté — voir Réglages."})
+    try:
+        infos = tiktok_publish.creator_info()
+    except tiktok_publish.TikTokPublishError as exc:
+        return jsonify({'connecte': True, 'erreur': str(exc)})
+    infos['connecte'] = True
+    infos['mode'] = tiktok_publish.mode()
+    infos['libelles'] = tiktok_publish.PRIVACY_LABELS
+    return jsonify(infos)
+
+
+@admin_video_bp.route('/job/<job_id>/tiktok', methods=['POST'])
+@admin_required
+def tiktok_post(job_id):
+    from flask import current_app
+    from tiktok import publish as tiktok_publish
+
+    job = video.get_job(job_id)
+    if not job:
+        abort(404)
+    if job.get('status') != 'done' or not job.get('output'):
+        flash("Ce montage n'est pas terminé.", 'danger')
+        return redirect(url_for('admin_video.job_page', job_id=job_id))
+    if not tiktok_publish.is_connected():
+        flash("TikTok n'est pas connecté — voir Réglages.", 'danger')
+        return redirect(url_for('admin_video.job_page', job_id=job_id))
+    # Un envoi déjà en route ne se relance pas : le clic double existe, et
+    # TikTok publierait deux fois.
+    etat = (job.get('tiktok') or {}).get('etat')
+    if etat in ('envoi', 'attente'):
+        flash("Un envoi est déjà en cours pour ce montage.", 'danger')
+        return redirect(url_for('admin_video.job_page', job_id=job_id))
+
+    tiktok_publish.envoyer_job(
+        current_app._get_current_object(), job_id,
+        titre=(request.form.get('title') or '').strip() or None,
+        privacy_level=(request.form.get('privacy') or '').strip() or None,
+        disable_comment=bool(request.form.get('disable_comment')),
+        disable_duet=bool(request.form.get('disable_duet')),
+        disable_stitch=bool(request.form.get('disable_stitch')))
+    return redirect(url_for('admin_video.job_page', job_id=job_id))
+
+
 def _render_path(filename):
     """Resolve a render by name, refusing anything that escapes WORKDIR."""
     safe = os.path.basename(filename)
