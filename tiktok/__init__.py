@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os
 
 from flask import (
-    Blueprint, abort, flash, redirect, render_template, request, url_for,
+    Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for,
 )
 
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +19,7 @@ from init_db import db
 from flask_login import current_user
 
 from auth import admin_required
-from tiktok.models import TikTokPost, VideoView
+from tiktok.models import TikTokPost, VideoView, TikTokComment
 
 import logging
 
@@ -322,6 +322,7 @@ def videos():
     return render_template(
         'tiktok_admin_videos.html', clips=clips, minute_sends=envois,
         a_rattacher=a_rattacher,
+        commentaires=__import__('tiktok.comments', fromlist=['compter']).compter([c.id for c in clips]),
         site_views=vues, minute_count=_mailable_query('minute').count(),
         linkedin_ok=linkedin.is_configured(),
         video_enabled=video_mod.is_enabled(),
@@ -631,9 +632,14 @@ def edit(post_id):
     from newsletter import _mailable_query
     from newsletter.models import MinuteSend, MinuteDelivery
 
+    from tiktok import comments as commentaires
     post = db.session.get(TikTokPost, post_id) or abort(404)
     return render_template(
         'tiktok_admin_edit.html', p=post,
+        commentaires=commentaires.visibles(post),
+        commentaires_masques=post.tiktok_comments.filter_by(hidden=True).count(),
+        commentaires_lus_le=(db.session.query(db.func.max(TikTokComment.scraped_at))
+                             .filter(TikTokComment.post_id == post.id).scalar()),
         all_themes=Theme.query.order_by(Theme.name).all(),
         video_enabled=video.is_enabled(), local_videos=video.local_renders(),
         storage_ok=storage.is_configured(),
@@ -644,6 +650,69 @@ def edit(post_id):
         site_views=VideoView.query.filter_by(post_id=post.id).count(),
         mon_email=getattr(current_user, 'email', '') or '',
     )
+
+
+# ─── Commentaires ───────────────────────────────────────────
+
+@admin_tiktok_bp.route('/<int:post_id>/commentaires/lire', methods=['POST'])
+@admin_required
+def comments_refresh(post_id):
+    """Read the clip's comments on TikTok and have the engine propose replies."""
+    from tiktok import comments as commentaires
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    try:
+        flash(commentaires.refresh(post), 'success')
+    except commentaires.CommentsError as exc:
+        db.session.rollback()
+        flash(str(exc), 'danger')
+    except Exception as exc:
+        db.session.rollback()
+        log.exception('commentaires : lecture impossible (%s)', post_id)
+        flash(f"Lecture des commentaires impossible : {exc}", 'danger')
+    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+
+
+@admin_tiktok_bp.route('/<int:post_id>/commentaires/<int:comment_id>/masquer', methods=['POST'])
+@admin_required
+def comment_hide(post_id, comment_id):
+    """Tick: done with this one. Answers JSON so the line fades without a reload.
+
+    Nothing is deleted — the comment keeps its text and its proposal, it just
+    stops being shown. `visible=1` brings it back.
+    """
+    ligne = db.session.get(TikTokComment, comment_id)
+    if ligne is None or ligne.post_id != post_id:
+        abort(404)
+    masquer = request.form.get('visible') != '1'
+    ligne.hidden = masquer
+    ligne.hidden_at = datetime.utcnow() if masquer else None
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True, 'hidden': ligne.hidden})
+    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+
+
+@admin_tiktok_bp.route('/<int:post_id>/commentaires/<int:comment_id>/proposer', methods=['POST'])
+@admin_required
+def comment_suggest(post_id, comment_id):
+    """Ask the engine again for this one comment — after a first pass judged
+    it needed no answer, or to get another wording."""
+    from tiktok import comments as commentaires
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    ligne = db.session.get(TikTokComment, comment_id)
+    if ligne is None or ligne.post_id != post_id:
+        abort(404)
+    try:
+        commentaires.suggest_replies(post, [ligne])
+    except commentaires.CommentsError as exc:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': False, 'erreur': str(exc)}), 400
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True, 'reponse': ligne.suggested_reply, 'note': ligne.suggestion_note})
+    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
 
 
 @admin_tiktok_bp.route('/<int:post_id>/update', methods=['POST'])

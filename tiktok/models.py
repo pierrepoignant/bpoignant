@@ -146,3 +146,37 @@ class VideoView(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     post = db.relationship('TikTokPost')
+
+
+class TikTokComment(db.Model):
+    """One comment left under a clip on TikTok, as the scraper saw it.
+
+    Kept so the reading is done once: the same comment is not proposed again
+    after Bernard has answered it or decided it needs no answer. `hidden` is
+    that decision — nothing is deleted, the list simply stops showing it.
+    """
+    __tablename__ = 'tiktok_comments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('tiktok_posts.id'), nullable=False, index=True)
+    # TikTok's own id (cid), unique so a re-scrape updates rather than duplicates.
+    comment_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    author = db.Column(db.String(120), nullable=True)
+    author_id = db.Column(db.String(64), nullable=True)
+    text = db.Column(db.Text, nullable=False, default='')
+    likes = db.Column(db.Integer, nullable=True)
+    replies_count = db.Column(db.Integer, nullable=True)
+    posted_at = db.Column(db.DateTime, nullable=True)
+    scraped_at = db.Column(db.DateTime, nullable=True)
+
+    # Ce que le moteur propose de répondre — vide quand il a jugé qu'il n'y
+    # avait rien à répondre, et la raison à côté pour qu'on puisse en juger.
+    suggested_reply = db.Column(db.Text, nullable=True)
+    suggestion_note = db.Column(db.String(200), nullable=True)
+    suggested_at = db.Column(db.DateTime, nullable=True)
+
+    hidden = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    hidden_at = db.Column(db.DateTime, nullable=True)
+
+    post = db.relationship('TikTokPost', backref=db.backref(
+        'tiktok_comments', lazy='dynamic', cascade='all, delete-orphan'))

@@ -45,6 +45,9 @@
                 {% if c.duration_seconds %} · {{ '%.0f'|format(c.duration_seconds) }} s{% endif %}
                 · <i class="far fa-eye"></i> {{ site_views.get(c.id, 0) }} sur le site
                 {% if c.views is not none %} · <i class="fa-brands fa-tiktok"></i> {{ c.views }}{% endif %}
+                {# Commentaires encore à traiter, et combien ont une réponse prête. #}
+                {% set cm = commentaires.get(c.id) %}
+                {% if cm and cm[0] %} · <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}#commentaires" style="color: var(--rouge);"><i class="fas fa-comments"></i> {{ cm[0] }} à traiter{% if cm[1] %}, {{ cm[1] }} réponse{{ 's' if cm[1] > 1 }} prête{{ 's' if cm[1] > 1 }}{% endif %}</a>{% endif %}
                 {% if c.x_view_count is not none %} · <i class="fa-brands fa-x-twitter"></i> {{ c.x_view_count }}{% endif %}
             </div>
 

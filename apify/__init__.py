@@ -34,6 +34,10 @@ DEFAULT_ACTOR = 'clockworks~tiktok-scraper'
 DEFAULT_ACTOR_LINKEDIN = 'harvestapi~linkedin-profile-scraper'
 DEFAULT_ACTOR_LINKEDIN_COMPANY = 'pratikdani~linkedin-company-profile-scraper'
 KEY_ACTOR_LINKEDIN = 'apify_actor_linkedin'
+# Les commentaires sont un autre acteur du même auteur : le scrapeur de posts
+# ne rend que leur nombre. Facturé au commentaire (0,50 $ les mille).
+DEFAULT_ACTOR_COMMENTS = 'clockworks~tiktok-comments-scraper'
+KEY_ACTOR_COMMENTS = 'apify_actor_comments'
 KEY_ACTOR_LINKEDIN_COMPANY = 'apify_actor_linkedin_company'
 
 _TIMEOUT = 30
@@ -187,6 +191,26 @@ def normalise(item):
         'shares': pick('shareCount', 'shares'),
         'author': (item.get('authorMeta') or {}).get('name') or pick('authorName'),
     }
+
+
+def comments_actor():
+    return (get_config(KEY_ACTOR_COMMENTS)
+            or os.environ.get('APIFY_ACTOR_COMMENTS')
+            or DEFAULT_ACTOR_COMMENTS).strip()
+
+
+def scrape_comments(urls, limit=100):
+    """Top-level comments under the given TikTok post URLs.
+
+    Replies are left out: what Bernard answers is what people said to him,
+    not what they said to each other underneath.
+    """
+    urls = [u for u in (urls or []) if u]
+    if not urls:
+        return []
+    return run_actor({'postURLs': urls, 'commentsPerPost': limit,
+                      'topLevelCommentsPerPost': limit, 'maxRepliesPerComment': 0},
+                     actor_id=comments_actor())
 
 
 def linkedin_actor():
