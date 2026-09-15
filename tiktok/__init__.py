@@ -63,8 +63,10 @@ def list_posts():
         func.coalesce(func.sum(TikTokPost.likes), 0),
         func.max(TikTokPost.scraped_at),
     ).filter(TikTokPost.boosted.is_(False)).first()
+    from tiktok import comments as commentaires
     return render_template('tiktok_admin_list.html', posts=posts,
                            compte=apify.profile(),
+                           commentaires=commentaires.compter([p.id for p in posts]),
                            nb_posts=totaux[0], total_vues=int(totaux[1] or 0),
                            total_likes=int(totaux[2] or 0), dernier_relevé=totaux[3],
                            minute_sent=envois, site_views=vues_site,
@@ -636,10 +638,7 @@ def edit(post_id):
     post = db.session.get(TikTokPost, post_id) or abort(404)
     return render_template(
         'tiktok_admin_edit.html', p=post,
-        commentaires=commentaires.visibles(post),
-        commentaires_masques=post.tiktok_comments.filter_by(hidden=True).count(),
-        commentaires_lus_le=(db.session.query(db.func.max(TikTokComment.scraped_at))
-                             .filter(TikTokComment.post_id == post.id).scalar()),
+        commentaires_a_traiter=post.tiktok_comments.filter_by(hidden=False).count(),
         all_themes=Theme.query.order_by(Theme.name).all(),
         video_enabled=video.is_enabled(), local_videos=video.local_renders(),
         storage_ok=storage.is_configured(),
@@ -653,6 +652,25 @@ def edit(post_id):
 
 
 # ─── Commentaires ───────────────────────────────────────────
+
+@admin_tiktok_bp.route('/<int:post_id>/commentaires')
+@admin_required
+def comments_page(post_id):
+    """The clip's comments on a page of their own, newest first.
+
+    Made for a phone: this is read on the sofa with TikTok open in the other
+    hand, the reply copied from here and pasted there.
+    """
+    from tiktok import comments as commentaires
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    return render_template(
+        'tiktok_admin_comments.html', p=post,
+        commentaires=commentaires.visibles(post),
+        masques=post.tiktok_comments.filter_by(hidden=True).count(),
+        lus_le=(db.session.query(db.func.max(TikTokComment.scraped_at))
+                .filter(TikTokComment.post_id == post.id).scalar()),
+    )
+
 
 @admin_tiktok_bp.route('/<int:post_id>/commentaires/lire', methods=['POST'])
 @admin_required
@@ -669,7 +687,7 @@ def comments_refresh(post_id):
         db.session.rollback()
         log.exception('commentaires : lecture impossible (%s)', post_id)
         flash(f"Lecture des commentaires impossible : {exc}", 'danger')
-    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+    return redirect(url_for('admin_tiktok.comments_page', post_id=post_id))
 
 
 @admin_tiktok_bp.route('/<int:post_id>/commentaires/<int:comment_id>/masquer', methods=['POST'])
@@ -689,7 +707,7 @@ def comment_hide(post_id, comment_id):
     db.session.commit()
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'hidden': ligne.hidden})
-    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+    return redirect(url_for('admin_tiktok.comments_page', post_id=post_id))
 
 
 @admin_tiktok_bp.route('/<int:post_id>/commentaires/<int:comment_id>/proposer', methods=['POST'])
@@ -709,10 +727,10 @@ def comment_suggest(post_id, comment_id):
         if request.headers.get('X-Requested-With') == 'fetch':
             return jsonify({'ok': False, 'erreur': str(exc)}), 400
         flash(str(exc), 'danger')
-        return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+        return redirect(url_for('admin_tiktok.comments_page', post_id=post_id))
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'reponse': ligne.suggested_reply, 'note': ligne.suggestion_note})
-    return redirect(url_for('admin_tiktok.edit', post_id=post_id) + '#commentaires')
+    return redirect(url_for('admin_tiktok.comments_page', post_id=post_id))
 
 
 @admin_tiktok_bp.route('/<int:post_id>/update', methods=['POST'])

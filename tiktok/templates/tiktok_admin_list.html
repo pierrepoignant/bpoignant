@@ -130,8 +130,15 @@
             </form>
             {% endif %}
 
-            {% if p.has_video %}
-
+            {# Commentaires : rouge quand il en reste à traiter, avec le compte ;
+               gris sinon — le bouton mène à la section, où se fait la lecture. #}
+            {% set cm = commentaires.get(p.id) %}
+            {% if p.posted_url %}
+            <a href="{{ url_for('admin_tiktok.comments_page', post_id=p.id) }}" class="btn btn-sm btn-outline"
+               title="{% if cm and cm[0] %}{{ cm[0] }} commentaire{{ 's' if cm[0] > 1 }} à traiter{% if cm[1] %}, {{ cm[1] }} réponse{{ 's' if cm[1] > 1 }} prête{{ 's' if cm[1] > 1 }}{% endif %}{% else %}Commentaires{% endif %}"
+               style="{% if cm and cm[0] %}color: var(--rouge); border-color: var(--rouge);{% else %}color: var(--noir); border-color: #e0e0e0;{% endif %}">
+                <i class="fas fa-comments"></i>{% if cm and cm[0] %} {{ cm[0] }}{% endif %}
+            </a>
             {% endif %}
             <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" class="btn btn-sm btn-outline"
                style="color: var(--noir); border-color: #e0e0e0;">

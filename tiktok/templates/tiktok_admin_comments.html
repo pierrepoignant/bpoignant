@@ -1,0 +1,118 @@
+{% extends 'admin_base.html' %}
+{% block title %}Commentaires — {{ p.title|truncate(50) }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-comments" style="color: var(--vert);"></i> Commentaires{% endblock %}
+{% block admin_subtitle %}
+<p style="margin: 0;">
+    <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" style="color: var(--gris);"><i class="fas fa-arrow-left"></i> {{ p.title|truncate(70) }}</a>
+    {% if p.posted_url %} · <a href="{{ p.posted_url }}" target="_blank" rel="noopener" style="color: var(--gris);"><i class="fa-brands fa-tiktok"></i> Voir sur TikTok</a>{% endif %}
+</p>
+{% endblock %}
+
+{% block admin_content %}
+    {# Une page pensée pour le téléphone : une colonne, des cibles larges, la
+       réponse proposée sous le commentaire avec un seul bouton qui compte — Copier —
+       puis la coche pour ne plus le voir. Les plus récents d'abord, comme sur TikTok. #}
+    <style>
+        .cm-tete { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+        .cm-carte { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1rem 1.1rem; margin-bottom: 0.8rem; transition: opacity .25s, transform .25s; }
+        .cm-meta { font-size: 0.8rem; color: var(--gris); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.35rem; }
+        .cm-texte { margin: 0 0 0.7rem; font-size: 0.95rem; line-height: 1.55; word-break: break-word; }
+        .cm-reponse { background: var(--gris-clair); border-left: 3px solid var(--vert); border-radius: 0 8px 8px 0; padding: 0.6rem 0.8rem; font-size: 0.92rem; line-height: 1.55; margin-bottom: 0.6rem; }
+        .cm-sans { font-size: 0.82rem; color: var(--gris); margin-bottom: 0.6rem; }
+        .cm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .cm-actions .btn { min-height: 40px; padding: 8px 16px; }
+        .cm-fait { margin-left: auto; display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--gris); cursor: pointer; padding: 6px 4px; }
+        .cm-fait input { width: 22px; height: 22px; accent-color: var(--vert); }
+        @media (max-width: 480px) {
+            .cm-actions .btn { flex: 1 1 auto; text-align: center; }
+            .cm-fait { margin-left: 0; width: 100%; justify-content: flex-end; padding-top: 0.3rem; }
+        }
+    </style>
+
+    <div class="cm-tete">
+        <p style="margin: 0; font-size: 0.9rem;">
+            <strong>{{ commentaires|length }}</strong> à traiter
+            {% if masques %} · {{ masques }} traité{{ 's' if masques > 1 }}{% endif %}
+            {% if p.comments_count %} · {{ p.comments_count }} sur TikTok{% endif %}
+            {% if lus_le %}<br><span style="color: var(--gris); font-size: 0.82rem;">Dernière lecture le {{ lus_le.strftime('%d/%m/%Y à %H:%M') }}</span>{% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('admin_tiktok.comments_refresh', post_id=p.id) }}" style="margin: 0;"
+              onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture…';">
+            <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;"
+                    {% if not p.posted_url %}disabled title="Ce clip n'a pas d'adresse TikTok"{% endif %}>
+                <i class="fas fa-rotate"></i> {{ 'Relire' if lus_le else 'Lire les commentaires' }}
+            </button>
+        </form>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--gris); margin: 0 0 1.1rem; line-height: 1.6;">
+        Le moteur propose une réponse quand il y a quelque chose à répondre — pas aux compliments,
+        ni aux insultes, ni aux polémiques. Copiez, collez dans TikTok, cochez.
+    </p>
+
+    {% if not commentaires %}
+    <div class="cm-carte" style="text-align: center; color: var(--gris); font-size: 0.92rem;">
+        {% if lus_le %}Rien à traiter — tout a été vu.{% else %}Aucun commentaire lu pour l'instant.{% endif %}
+    </div>
+    {% endif %}
+
+    {% for c in commentaires %}
+    <div class="cm-carte" id="commentaire-{{ c.id }}">
+        <div class="cm-meta">
+            <strong style="color: var(--noir);">@{{ c.author or 'inconnu' }}</strong>
+            {% if c.posted_at %}<span>{{ c.posted_at.strftime('%d/%m/%Y') }}</span>{% endif %}
+            {% if c.likes %}<span><i class="fas fa-heart" style="font-size: 0.7rem;"></i> {{ c.likes }}</span>{% endif %}
+            {% if c.replies_count %}<span>{{ c.replies_count }} réponse{{ 's' if c.replies_count > 1 }}</span>{% endif %}
+        </div>
+        <p class="cm-texte">{{ c.text }}</p>
+
+        {% if c.suggested_reply %}
+        <div class="cm-reponse" id="reponse-{{ c.id }}">{{ c.suggested_reply }}</div>
+        {% if c.suggestion_note %}<div class="cm-sans" style="margin-top: -0.3rem;">{{ c.suggestion_note }}</div>{% endif %}
+        <div class="cm-actions">
+            <button type="button" class="btn btn-sm btn-primary"
+                    onclick="navigator.clipboard.writeText(document.getElementById('reponse-{{ c.id }}').textContent.trim()); this.innerHTML='<i class=\'fas fa-check\'></i> Copié';">
+                <i class="far fa-copy"></i> Copier
+            </button>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="reproposer({{ c.id }}, this)" title="Une autre formulation">
+                <i class="fas fa-rotate"></i> Autre
+            </button>
+            <label class="cm-fait"><input type="checkbox" onchange="masquerCommentaire({{ c.id }}, this)"> Traité</label>
+        </div>
+        {% else %}
+        <div class="cm-sans">
+            <i class="fas fa-minus" style="font-size: 0.7rem;"></i>
+            {% if c.suggested_at %}Sans réponse{% if c.suggestion_note %} — {{ c.suggestion_note }}{% endif %}{% else %}Pas encore relu{% endif %}
+        </div>
+        <div class="cm-actions">
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="reproposer({{ c.id }}, this)">Proposer quand même</button>
+            <label class="cm-fait"><input type="checkbox" onchange="masquerCommentaire({{ c.id }}, this)"> Traité</label>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <script>
+    const URL_COMMENTAIRES = "{{ url_for('admin_tiktok.comments_page', post_id=p.id) }}/";
+    // La coche part tout de suite : une carte qui s'efface, pas une page qui recharge.
+    function masquerCommentaire(id, case_) {
+        const carte = document.getElementById('commentaire-' + id);
+        carte.style.opacity = '0.3'; carte.style.transform = 'translateX(12px)';
+        fetch(URL_COMMENTAIRES + id + '/masquer', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error();
+                setTimeout(() => carte.remove(), 250);
+            }).catch(() => { carte.style.opacity = '1'; carte.style.transform = ''; case_.checked = false; alert('Impossible de masquer ce commentaire.'); });
+    }
+    function reproposer(id, bouton) {
+        bouton.disabled = true; bouton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        fetch(URL_COMMENTAIRES + id + '/proposer', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error(j.erreur || '');
+                location.reload();   // la carte change de forme selon la réponse : plus simple à redessiner
+            }).catch(e => { bouton.disabled = false; bouton.textContent = 'Réessayer'; if (e.message) alert(e.message); });
+    }
+    </script>
+{% endblock %}

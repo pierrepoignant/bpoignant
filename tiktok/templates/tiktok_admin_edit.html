@@ -107,9 +107,12 @@
                 </div>
                 {% endif %}
 
-                <p style="font-size: 0.83rem; color: var(--gris); margin: 0 0 0.8rem;">
+                <p style="font-size: 0.83rem; color: var(--gris); margin: 0 0 0.8rem; line-height: 1.8;">
                     <a href="{{ url_for('admin_tiktok.post_stats', post_id=p.id) }}" style="color: var(--rouge);">
                         <i class="fas fa-chart-line"></i> Statistiques détaillées
+                    </a><br>
+                    <a href="{{ url_for('admin_tiktok.comments_page', post_id=p.id) }}" style="color: var(--rouge);">
+                        <i class="fas fa-comments"></i> Commentaires{% if commentaires_a_traiter %} — {{ commentaires_a_traiter }} à traiter{% endif %}
                     </a>
                 </p>
 
@@ -224,101 +227,5 @@
         </div>
     </div>
 
-    {# Commentaires TikTok : lus par le scrapeur, relus par le moteur, qui
-       propose une réponse quand il y a quelque chose à répondre — ni aux
-       compliments, ni aux insultes, ni aux polémiques. La coche retire la ligne
-       pour de bon : on ne relit pas deux fois le même commentaire. #}
-    <div id="commentaires" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.5rem; margin-top: 1.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.4rem;">
-            <h2 style="font-size: 1.05rem; margin: 0;">
-                <i class="fas fa-comments" style="color: var(--rouge);"></i> Commentaires
-                <span style="color: var(--gris); font-weight: 400; font-size: 0.9rem;">
-                    · {{ commentaires|length }} à traiter{% if commentaires_masques %} · {{ commentaires_masques }} traité{{ 's' if commentaires_masques > 1 }}{% endif %}
-                    {% if p.comments_count %} · {{ p.comments_count }} sur TikTok{% endif %}
-                </span>
-            </h2>
-            <form method="POST" action="{{ url_for('admin_tiktok.comments_refresh', post_id=p.id) }}" style="margin: 0;"
-                  onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture…';">
-                <button type="submit" class="btn btn-sm btn-primary" {% if not p.posted_url %}disabled title="Ce clip n'a pas d'adresse TikTok"{% endif %}>
-                    <i class="fas fa-rotate"></i> {{ 'Relire les commentaires' if commentaires_lus_le else 'Lire les commentaires' }}
-                </button>
-            </form>
-        </div>
-        <p style="font-size: 0.82rem; color: var(--gris); margin: 0 0 1rem; line-height: 1.6;">
-            {% if commentaires_lus_le %}Dernière lecture le {{ commentaires_lus_le.strftime('%d/%m/%Y à %H:%M') }}. {% endif %}
-            Le moteur propose une réponse quand il y a quelque chose à répondre — pas aux compliments,
-            ni aux insultes, ni aux polémiques. La réponse se copie puis se colle dans l'application
-            TikTok ; cochez pour ne plus voir le commentaire.
-        </p>
 
-        {% if not commentaires %}
-        <p style="font-size: 0.9rem; color: var(--gris); margin: 0;">
-            {% if commentaires_lus_le %}Rien à traiter — tout a été vu.{% else %}Aucun commentaire lu pour l'instant.{% endif %}
-        </p>
-        {% endif %}
-
-        {% for c in commentaires %}
-        <div class="commentaire" id="commentaire-{{ c.id }}"
-             style="display: grid; grid-template-columns: auto 1fr; gap: 0.7rem 0.9rem; padding: 0.9rem 0; border-top: 1px solid var(--gris-clair); transition: opacity .25s;">
-            <label title="Traité — ne plus montrer" style="cursor: pointer; padding-top: 2px;">
-                <input type="checkbox" onchange="masquerCommentaire({{ c.id }}, this)" style="width: 18px; height: 18px; accent-color: var(--vert);">
-            </label>
-            <div style="min-width: 0;">
-                <div style="font-size: 0.8rem; color: var(--gris); margin-bottom: 0.25rem;">
-                    <strong style="color: var(--noir);">@{{ c.author or 'inconnu' }}</strong>
-                    {% if c.posted_at %} · {{ c.posted_at.strftime('%d/%m/%Y') }}{% endif %}
-                    {% if c.likes %} · <i class="fas fa-heart" style="font-size: 0.7rem;"></i> {{ c.likes }}{% endif %}
-                    {% if c.replies_count %} · {{ c.replies_count }} réponse{{ 's' if c.replies_count > 1 }}{% endif %}
-                </div>
-                <p style="margin: 0 0 0.6rem; font-size: 0.92rem; line-height: 1.55; word-break: break-word;">{{ c.text }}</p>
-
-                {% if c.suggested_reply %}
-                <div style="display: flex; gap: 0.6rem; align-items: flex-start; flex-wrap: wrap;">
-                    <div id="reponse-{{ c.id }}" style="flex: 1; min-width: 220px; background: var(--gris-clair); border-left: 3px solid var(--vert); border-radius: 0 8px 8px 0; padding: 0.55rem 0.8rem; font-size: 0.9rem; line-height: 1.55;">{{ c.suggested_reply }}</div>
-                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                        <button type="button" class="btn btn-sm btn-primary"
-                                onclick="navigator.clipboard.writeText(document.getElementById('reponse-{{ c.id }}').textContent.trim()); this.innerHTML='<i class=\'fas fa-check\'></i> Copié';">
-                            <i class="far fa-copy"></i> Copier
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                                onclick="reproposer({{ c.id }}, this)" title="Une autre formulation">
-                            <i class="fas fa-rotate"></i>
-                        </button>
-                    </div>
-                </div>
-                {% if c.suggestion_note %}<div style="font-size: 0.75rem; color: var(--gris); margin-top: 0.3rem;">{{ c.suggestion_note }}</div>{% endif %}
-                {% else %}
-                <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: 0.8rem; color: var(--gris);">
-                    <span><i class="fas fa-minus" style="font-size: 0.7rem;"></i>
-                        {% if c.suggested_at %}Sans réponse{% if c.suggestion_note %} — {{ c.suggestion_note }}{% endif %}{% else %}Pas encore relu{% endif %}</span>
-                    <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                            onclick="reproposer({{ c.id }}, this)">Proposer quand même</button>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-
-    <script>
-    const URL_COMMENTAIRES = "{{ url_for('admin_tiktok.edit', post_id=p.id) }}".replace(/\/edit$/, '') + '/commentaires/';
-    // La coche part tout de suite : une ligne qui s'efface, pas une page qui recharge.
-    function masquerCommentaire(id, case_) {
-        const ligne = document.getElementById('commentaire-' + id);
-        ligne.style.opacity = '0.35';
-        fetch(URL_COMMENTAIRES + id + '/masquer', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
-            .then(r => r.json()).then(j => {
-                if (!j.ok) throw new Error();
-                setTimeout(() => ligne.remove(), 250);
-            }).catch(() => { ligne.style.opacity = '1'; case_.checked = false; alert('Impossible de masquer ce commentaire.'); });
-    }
-    function reproposer(id, bouton) {
-        bouton.disabled = true; bouton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        fetch(URL_COMMENTAIRES + id + '/proposer', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
-            .then(r => r.json()).then(j => {
-                if (!j.ok) throw new Error(j.erreur || '');
-                location.reload();   // la ligne change de forme selon la réponse : plus simple à redessiner
-            }).catch(e => { bouton.disabled = false; bouton.textContent = 'Réessayer'; if (e.message) alert(e.message); });
-    }
-    </script>
 {% endblock %}

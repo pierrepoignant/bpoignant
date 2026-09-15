@@ -227,11 +227,9 @@ def refresh(post):
 
 
 def visibles(post):
-    """Comments still on the table, those with a proposed reply first."""
-    lignes = (post.tiktok_comments.filter(TikTokComment.hidden.is_(False))
-              .order_by(TikTokComment.posted_at.desc()).all())
-    return sorted(lignes, key=lambda c: (c.suggested_reply is None,
-                                         -(c.posted_at or datetime.min).timestamp()))
+    """Comments still on the table, newest first."""
+    return (post.tiktok_comments.filter(TikTokComment.hidden.is_(False))
+            .order_by(TikTokComment.posted_at.desc(), TikTokComment.id.desc()).all())
 
 
 def compter(post_ids):
