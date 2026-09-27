@@ -67,6 +67,9 @@ def list_posts():
     return render_template('tiktok_admin_list.html', posts=posts,
                            compte=apify.profile(),
                            commentaires=commentaires.compter([p.id for p in posts]),
+                           commentaires_etat=commentaires.etat_global(),
+                           commentaires_estimation=sum(min(p.comments_count or 0, commentaires.COMMENTS_PAR_POST)
+                                                       for p in posts if p.posted_url),
                            nb_posts=totaux[0], total_vues=int(totaux[1] or 0),
                            total_likes=int(totaux[2] or 0), dernier_relevé=totaux[3],
                            minute_sent=envois, site_views=vues_site,
@@ -652,6 +655,25 @@ def edit(post_id):
 
 
 # ─── Commentaires ───────────────────────────────────────────
+
+@admin_tiktok_bp.route('/commentaires/tout', methods=['POST'])
+@admin_required
+def comments_refresh_all():
+    """Read and draft for every clip that has a TikTok address, in the background."""
+    from flask import current_app
+    from tiktok import comments as commentaires
+    ids = [p.id for p in TikTokPost.query.filter(TikTokPost.posted_url.isnot(None)).all()]
+    if not commentaires.refresh_all(current_app._get_current_object(), ids):
+        flash("Une lecture de tous les commentaires est déjà en cours.", 'danger')
+    return redirect(url_for('admin_tiktok.list_posts'))
+
+
+@admin_tiktok_bp.route('/commentaires/etat')
+@admin_required
+def comments_state():
+    from tiktok import comments as commentaires
+    return jsonify(commentaires.etat_global())
+
 
 @admin_tiktok_bp.route('/<int:post_id>/commentaires')
 @admin_required

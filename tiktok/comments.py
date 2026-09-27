@@ -80,24 +80,16 @@ def _quand(valeur):
     return _parse_time(valeur)
 
 
-def sync_comments(post, limit=COMMENTS_PAR_POST):
-    """Read the clip's comments and store the ones we had not seen.
+_VIDEO_ID = re.compile(r'/video/(\d+)')
 
-    Returns (nouveaux, revus). Comments already answered or dismissed keep
-    their state: a re-read is about what has been said since, not a reset.
-    """
-    import apify
-    if not post.posted_url:
-        raise CommentsError("Ce clip n'a pas d'adresse TikTok : impossible d'en lire les commentaires.")
-    if not apify.is_configured():
-        raise CommentsError("Apify n'est pas configuré — voir Réglages.")
 
-    try:
-        items = apify.scrape_comments([post.posted_url], limit=limit)
-    except apify.ApifyError as exc:
-        raise CommentsError(str(exc)) from exc
+def _video_id(url):
+    m = _VIDEO_ID.search(url or '')
+    return m.group(1) if m else None
 
-    maintenant = datetime.utcnow()
+
+def _upsert(post, items, maintenant):
+    """Store what the scraper returned for one clip. Returns (nouveaux, revus)."""
     existants = {c.comment_id: c for c in post.tiktok_comments.all()}
     nouveaux = revus = 0
     for item in items:
@@ -125,8 +117,66 @@ def sync_comments(post, limit=COMMENTS_PAR_POST):
                                if item.get('replyCommentTotal') is not None else ligne.replies_count)
         ligne.posted_at = _quand(item.get('createTimeISO') or item.get('createTime')) or ligne.posted_at
         ligne.scraped_at = maintenant
+    return nouveaux, revus
+
+
+def sync_comments(post, limit=COMMENTS_PAR_POST):
+    """Read the clip's comments and store the ones we had not seen.
+
+    Returns (nouveaux, revus). Comments already answered or dismissed keep
+    their state: a re-read is about what has been said since, not a reset.
+    """
+    import apify
+    if not post.posted_url:
+        raise CommentsError("Ce clip n'a pas d'adresse TikTok : impossible d'en lire les commentaires.")
+    if not apify.is_configured():
+        raise CommentsError("Apify n'est pas configuré — voir Réglages.")
+    try:
+        items = apify.scrape_comments([post.posted_url], limit=limit)
+    except apify.ApifyError as exc:
+        raise CommentsError(str(exc)) from exc
+    nouveaux, revus = _upsert(post, items, datetime.utcnow())
     db.session.commit()
     return nouveaux, revus
+
+
+# Combien d'adresses par exécution Apify : assez pour ne pas payer un démarrage
+# par clip, pas trop pour rester sous le délai de l'appel synchrone.
+LOT_APIFY = 8
+
+
+def sync_many(posts, limit=COMMENTS_PAR_POST, progression=None):
+    """Read the comments of many clips in a few actor runs instead of one each.
+
+    The actor takes a list of URLs and tags every comment with the video it
+    came from; we route them back by the video id in that URL. Returns
+    {post_id: (nouveaux, revus)}.
+    """
+    import apify
+    if not apify.is_configured():
+        raise CommentsError("Apify n'est pas configuré — voir Réglages.")
+    par_id = {_video_id(p.posted_url): p for p in posts if _video_id(p.posted_url)}
+    resultats = {}
+    cles = list(par_id)
+    for debut in range(0, len(cles), LOT_APIFY):
+        lot = cles[debut:debut + LOT_APIFY]
+        try:
+            items = apify.scrape_comments([par_id[k].posted_url for k in lot], limit=limit)
+        except apify.ApifyError as exc:
+            raise CommentsError(str(exc)) from exc
+        groupes = {}
+        for item in items:
+            vid = _video_id(item.get('videoWebUrl') or item.get('postUrl')
+                            or item.get('videoUrl') or item.get('webVideoUrl') or '')
+            if vid in par_id:
+                groupes.setdefault(vid, []).append(item)
+        maintenant = datetime.utcnow()
+        for k in lot:
+            resultats[par_id[k].id] = _upsert(par_id[k], groupes.get(k, []), maintenant)
+        db.session.commit()
+        if progression:
+            progression(min(len(cles), debut + LOT_APIFY), len(cles))
+    return resultats
 
 
 # ─── Propositions ───────────────────────────────────────────
@@ -245,3 +295,63 @@ def compter(post_ids):
                     TikTokComment.hidden.is_(False))
             .group_by(TikTokComment.post_id).all())
     return {pid: (int(n or 0), int(r or 0)) for pid, n, r in rows}
+
+
+# ─── Tous les clips d'un coup ───────────────────────────────
+
+import threading
+
+ETAT = {'en_cours': False}
+_VERROU = threading.Lock()
+
+
+def etat_global():
+    return dict(ETAT)
+
+
+def refresh_all(app, posts_ids):
+    """Read and draft for every clip, in the background, with a visible state.
+
+    One click on the list, then minutes of work: the page polls `ETAT` and
+    says where it has got to. A second click while it runs is refused.
+    """
+    with _VERROU:
+        if ETAT.get('en_cours'):
+            return False
+        ETAT.clear()
+        ETAT.update(en_cours=True, etape="Lecture des commentaires sur TikTok…",
+                    faits=0, total=len(posts_ids), nouveaux=0, revus=0, relus=0,
+                    erreurs=[], demarre=datetime.utcnow().isoformat(timespec='seconds'))
+
+    def _travail():
+        with app.app_context():
+            try:
+                posts = [p for p in TikTokPost.query.filter(TikTokPost.id.in_(posts_ids)).all()
+                         if p.posted_url]
+                def avance(faits, total):
+                    ETAT.update(faits=faits, total=total)
+                resultats = sync_many(posts, progression=avance)
+                ETAT.update(nouveaux=sum(n for n, _ in resultats.values()),
+                            revus=sum(r for _, r in resultats.values()),
+                            etape="Le moteur relit les commentaires…", faits=0, total=len(posts))
+                for i, p in enumerate(posts, 1):
+                    try:
+                        ETAT['relus'] += suggest_replies(p)
+                        if (p.comments_count or 0) < sum(resultats.get(p.id, (0, 0))):
+                            p.comments_count = sum(resultats[p.id])
+                        db.session.commit()
+                    except CommentsError as exc:
+                        db.session.rollback()
+                        ETAT['erreurs'].append(f"{p.title[:40]} : {exc}")
+                    ETAT.update(faits=i)
+                ETAT.update(etape="Terminé")
+            except Exception as exc:
+                db.session.rollback()
+                log.exception('lecture globale des commentaires')
+                ETAT['erreurs'].append(str(exc)[:200])
+                ETAT.update(etape="Interrompu")
+            finally:
+                ETAT.update(en_cours=False, fini=datetime.utcnow().isoformat(timespec='seconds'))
+
+    threading.Thread(target=_travail, name='tiktok-commentaires', daemon=True).start()
+    return True

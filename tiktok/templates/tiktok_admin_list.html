@@ -58,8 +58,46 @@
                 <i class="fas fa-rotate"></i> Actualiser les chiffres
             </button>
         </form>
+        {# Tous les commentaires d'un coup : quelques minutes en fond, l'état
+           ci-dessous. Le coût est dit avant, parce qu'il est facturé au commentaire. #}
+        <form method="POST" action="{{ url_for('admin_tiktok.comments_refresh_all') }}" style="margin: 0;"
+              onsubmit="if (!confirm('Lire les commentaires des {{ posts|length }} clips et préparer les réponses ? Environ {{ commentaires_estimation }} commentaires, soit {{ '%.2f'|format(commentaires_estimation / 1000 * 0.5) }} $ chez Apify, et quelques minutes.')) return false;
+                        const b = this.querySelector('button'); b.disabled = true;
+                        b.innerHTML = '<i class=\'fas fa-comments fa-fade\'></i> Lecture lancée…';">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    {% if commentaires_etat.en_cours %}disabled{% endif %}>
+                <i class="fas fa-comments"></i> Lire tous les commentaires
+            </button>
+        </form>
         {% endif %}
     </div>
+    <div id="commentaires-etat" role="status"
+         style="{% if not commentaires_etat.en_cours and not commentaires_etat.fini %}display: none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.2rem;"></div>
+    <script>
+    (function () {
+        const boite = document.getElementById('commentaires-etat');
+        const url = "{{ url_for('admin_tiktok.comments_state') }}";
+        let etaitEnCours = {{ 'true' if commentaires_etat.en_cours else 'false' }};
+        function dessiner(e) {
+            if (!e.etape) { boite.style.display = 'none'; return; }
+            boite.style.display = 'block';
+            let html = (e.en_cours ? '<i class="fas fa-spinner fa-spin"></i> ' : '<i class="fas fa-circle-check" style="color: var(--vert);"></i> ')
+                + '<strong>' + e.etape + '</strong>';
+            if (e.en_cours && e.total) html += ' — ' + e.faits + ' / ' + e.total + ' clips';
+            if (!e.en_cours) html += ' · ' + e.nouveaux + ' nouveau(x) commentaire(s), ' + e.revus + ' déjà connu(s), ' + e.relus + ' relu(s) par le moteur';
+            if (e.erreurs && e.erreurs.length) html += '<br><span style="color: var(--rouge);">' + e.erreurs.join(' · ') + '</span>';
+            boite.innerHTML = html;
+        }
+        function tick() {
+            fetch(url).then(r => r.json()).then(e => {
+                dessiner(e);
+                if (e.en_cours) { etaitEnCours = true; setTimeout(tick, 3000); }
+                else if (etaitEnCours) { setTimeout(() => location.reload(), 1500); }   // les compteurs des lignes ont changé
+            }).catch(() => setTimeout(tick, 5000));
+        }
+        {% if commentaires_etat.en_cours or commentaires_etat.fini %}tick();{% endif %}
+    })();
+    </script>
 
     {% if posts %}
     <h2 style="font-size: 1.1rem; margin: 0 0 1rem;">
