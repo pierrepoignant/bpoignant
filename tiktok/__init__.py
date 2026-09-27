@@ -743,7 +743,8 @@ def comment_suggest(post_id, comment_id):
     if ligne is None or ligne.post_id != post_id:
         abort(404)
     try:
-        commentaires.suggest_replies(post, [ligne])
+        commentaires.suggest_replies(post, [ligne],
+                                     consigne=(request.form.get('consigne') or '').strip() or None)
     except commentaires.CommentsError as exc:
         db.session.rollback()
         if request.headers.get('X-Requested-With') == 'fetch':

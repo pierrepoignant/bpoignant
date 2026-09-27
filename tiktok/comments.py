@@ -205,11 +205,16 @@ def _tableau_json(texte):
         raise CommentsError(f"Réponse du modèle illisible : {exc}") from exc
 
 
-def suggest_replies(post, comments=None):
+def suggest_replies(post, comments=None, consigne=None):
     """Draft an answer — or the decision not to — for each comment given.
 
     Defaults to the visible comments that have no proposal yet. Returns the
     number of comments the model looked at.
+
+    `consigne` is Bernard's steer for a redo — « cite l'exemple du vote sur… »,
+    « plus court », « sans ironie ». It is passed on as his instruction, with
+    one guard: a fact he asks for that the model cannot vouch for is named in
+    the note, not invented into the reply.
     """
     from articles.ai_summary import _api_key, MODEL
     key = _api_key()
@@ -235,12 +240,20 @@ def suggest_replies(post, comments=None):
             f"- id {c.comment_id} · @{c.author or 'inconnu'}"
             f"{f' · {c.likes} j’aime' if c.likes else ''} : {c.text.strip()[:600]}"
             for c in lot)
+        demande = f"{contexte}\n\nCommentaires :\n{liste}"
+        if consigne:
+            demande += (
+                f"\n\nConsigne de Bernard pour cette réponse : {consigne.strip()[:500]}\n"
+                "Suis-la, et réponds (`repondre` à true) même si le commentaire "
+                "aurait pu être laissé sans réponse. Si la consigne demande un fait "
+                "précis — un vote, une date, une citation — que tu ne peux pas "
+                "garantir exact, ne l'invente pas : rédige la réponse sans ce fait et "
+                "dis dans la note ce qu'il faudrait vérifier.")
         reponse = client.messages.create(
             model=MODEL, max_tokens=4000,
             system=[{'type': 'text', 'text': VOIX,
                      'cache_control': {'type': 'ephemeral'}}],
-            messages=[{'role': 'user', 'content':
-                       f"{contexte}\n\nCommentaires :\n{liste}"}],
+            messages=[{'role': 'user', 'content': demande}],
         )
         texte = ''.join(b.text for b in reponse.content if b.type == 'text')
         par_id = {str(o.get('id', '')).strip(): o for o in _tableau_json(texte)

@@ -24,6 +24,8 @@
         .cm-actions .btn { min-height: 40px; padding: 8px 16px; }
         .cm-fait { margin-left: auto; display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--gris); cursor: pointer; padding: 6px 4px; }
         .cm-fait input { width: 22px; height: 22px; accent-color: var(--vert); }
+        .cm-consigne { display: flex; }
+        @media (max-width: 480px) { .cm-consigne { flex-wrap: wrap; } .cm-consigne .btn { flex: 1 1 auto; } }
         @media (max-width: 480px) {
             .cm-actions .btn { flex: 1 1 auto; text-align: center; }
             .cm-fait { margin-left: 0; width: 100%; justify-content: flex-end; padding-top: 0.3rem; }
@@ -56,6 +58,17 @@
     </div>
     {% endif %}
 
+    {# La consigne : ce que Bernard veut dans la réponse — « cite le vote sur… »,
+       « plus court », « sans ironie ». Repliée jusqu'au clic sur Autre. #}
+    {% macro consigne(id) %}
+    <form class="cm-consigne" id="consigne-{{ id }}" style="display: none; gap: 0.5rem; margin-top: 0.6rem;"
+          onsubmit="event.preventDefault(); reproposer({{ id }}, this.querySelector('button'), this.querySelector('input').value);">
+        <input type="text" name="consigne" placeholder="Consigne : par exemple « cite un vote précis », « plus court »…"
+               style="flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+        <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;"><i class="fas fa-rotate"></i> Proposer</button>
+    </form>
+    {% endmacro %}
+
     {% for c in commentaires %}
     <div class="cm-carte" id="commentaire-{{ c.id }}">
         <div class="cm-meta">
@@ -75,11 +88,12 @@
                 <i class="far fa-copy"></i> Copier
             </button>
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                    onclick="reproposer({{ c.id }}, this)" title="Une autre formulation">
+                    onclick="ouvrirConsigne({{ c.id }})" title="Une autre formulation, avec ou sans consigne">
                 <i class="fas fa-rotate"></i> Autre
             </button>
             <label class="cm-fait"><input type="checkbox" onchange="masquerCommentaire({{ c.id }}, this)"> Traité</label>
         </div>
+        {{ consigne(c.id) }}
         {% else %}
         <div class="cm-sans">
             <i class="fas fa-minus" style="font-size: 0.7rem;"></i>
@@ -87,9 +101,10 @@
         </div>
         <div class="cm-actions">
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                    onclick="reproposer({{ c.id }}, this)">Proposer quand même</button>
+                    onclick="ouvrirConsigne({{ c.id }})">Proposer quand même</button>
             <label class="cm-fait"><input type="checkbox" onchange="masquerCommentaire({{ c.id }}, this)"> Traité</label>
         </div>
+        {{ consigne(c.id) }}
         {% endif %}
     </div>
     {% endfor %}
@@ -106,9 +121,15 @@
                 setTimeout(() => carte.remove(), 250);
             }).catch(() => { carte.style.opacity = '1'; carte.style.transform = ''; case_.checked = false; alert('Impossible de masquer ce commentaire.'); });
     }
-    function reproposer(id, bouton) {
+    function ouvrirConsigne(id) {
+        const f = document.getElementById('consigne-' + id);
+        f.style.display = f.style.display === 'flex' ? 'none' : 'flex';
+        if (f.style.display === 'flex') f.querySelector('input').focus();
+    }
+    function reproposer(id, bouton, consigne) {
         bouton.disabled = true; bouton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        fetch(URL_COMMENTAIRES + id + '/proposer', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
+        const corps = new FormData(); if (consigne) corps.append('consigne', consigne);
+        fetch(URL_COMMENTAIRES + id + '/proposer', {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
             .then(r => r.json()).then(j => {
                 if (!j.ok) throw new Error(j.erreur || '');
                 location.reload();   // la carte change de forme selon la réponse : plus simple à redessiner
