@@ -30,10 +30,13 @@ POLICES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 
 # 6 × 9 pouces en millimètres (l'unité de fpdf).
 PAGE_L, PAGE_H = 152.4, 228.6
-# Marges KDP : côté reliure généreux pour un livre de 300+ pages, côté
-# extérieur et haut/bas au-dessus du minimum de 6,35 mm.
-MARGE_RELIURE = 22.0
-MARGE_EXT = 14.0
+# Marge unique sur toutes les pages : le texte commence toujours au même
+# endroit. Des marges dissymétriques (reliure vs extérieur) seraient plus
+# justes pour un livre relié, mais fpdf garde la marge de la page précédente
+# quand un paragraphe déborde d'une page à l'autre — le bord gauche sautait
+# alors d'une page sur deux. 20 mm tiennent au-dessus du minimum de reliure de
+# KDP jusqu'à 700 pages.
+MARGE_COTE = 20.0
 MARGE_HAUT = 18.0
 MARGE_BAS = 18.0
 
@@ -90,6 +93,7 @@ class Livre(FPDF):
         self.auteur = auteur
         self.chapitre_courant = ''
         self.set_auto_page_break(True, margin=MARGE_BAS)
+        self.set_margins(MARGE_COTE, MARGE_HAUT, MARGE_COTE)
         self.set_title(titre)
         self.set_author(auteur)
         self.set_lang('fr')
@@ -98,15 +102,8 @@ class Livre(FPDF):
             self.add_font('garamond', style, os.path.join(POLICES, f'{fichier}.ttf'))
         self.set_font('garamond', '', 11)
 
-    # Marge intérieure selon la parité : page impaire = page de droite, reliure
-    # à gauche ; page paire = page de gauche, reliure à droite.
-    def _poser_marges(self):
-        droite = self.page_no() % 2 == 1
-        gauche = MARGE_RELIURE if droite else MARGE_EXT
-        self.set_margins(gauche, MARGE_HAUT, PAGE_L - gauche - (PAGE_L - MARGE_RELIURE - MARGE_EXT))
-
     def header(self):
-        self._poser_marges()
+        self.set_margins(MARGE_COTE, MARGE_HAUT, MARGE_COTE)
         # Pas d'en-tête sur les ouvertures de chapitre ni les pages liminaires.
         if getattr(self, 'sans_tete', False) or self.page_no() <= self.pages_liminaires:
             return
