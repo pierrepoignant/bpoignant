@@ -138,6 +138,9 @@ def casse_de_titre(texte, corps=''):
             continue
         if i == 0 or re.sub(r'[^\w]', '', bas) in propres:
             mots.append(bas.capitalize())
+        elif '-' in bas:
+            # « France-allemagne » : chaque partie d'un composé peut être un nom.
+            mots.append('-'.join(p.capitalize() if (re.sub(r'[^\w]','',p) in propres) else p for p in bas.split('-')))
         else:
             mots.append(bas)
     return ' '.join(mots)
