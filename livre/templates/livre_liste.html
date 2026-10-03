@@ -1,8 +1,8 @@
 {% extends 'admin_base.html' %}
-{% block title %}Le Livre — {{ 'classés' if mode == 'classes' else 'ignorés' }}{% endblock %}
+{% block title %}Le Livre — {{ {'classes': 'classés', 'ignores': 'ignorés', 'intros': 'intros faites'}[mode] }}{% endblock %}
 
 {% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
-{% block admin_subtitle %}<p>{% if mode == 'classes' %}Ce qui entrera dans le livre, chapitre par chapitre.{% else %}Ce qui a été écarté — rien n'est perdu, tout se reprend.{% endif %}</p>{% endblock %}
+{% block admin_subtitle %}<p>{% if mode == 'classes' %}Ce qui entrera dans le livre, chapitre par chapitre.{% elif mode == 'intros' %}Les textes dont l'intro est écrite — cliquez pour la relire ou la changer.{% else %}Ce qui a été écarté — rien n'est perdu, tout se reprend.{% endif %}</p>{% endblock %}
 
 {% block admin_content %}
     {% include '_livre_nav.html' %}
@@ -26,22 +26,31 @@
     {% for d in docs %}
         <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.8rem 1rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
             <div style="flex: 1 1 240px; min-width: 0;">
-                <a href="#" onclick="ouvrirLecture({{ d.id }}, {{ d.name | tojson }}, {{ (d.created_at.strftime('%d/%m/%Y') if d.created_at else '') | tojson }}); return false;"
-                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.35;">{{ d.name }}</a>
+                <a href="#" onclick="ouvrirLecture({{ d.id }}, {{ d.titre | tojson }}, {{ (d.date_livre.strftime('%d/%m/%Y') if d.date_livre else '') | tojson }}); return false;"
+                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.35;">{{ d.titre }}</a>
+                {% if mode == 'intros' and d.intro %}<div style="font-size: 0.85rem; color: var(--noir); margin: 0.2rem 0; line-height: 1.45;">{{ d.intro | truncate(160) }}</div>{% endif %}
                 <span style="font-size: 0.78rem; color: var(--gris);">
-                    {% if d.created_at %}{{ d.created_at.strftime('%d/%m/%Y') }}{% endif %}
+                    {% if d.date_livre %}{{ d.date_livre.strftime('%d/%m/%Y') }}{% endif %}
                     {% if d.word_count %} · {{ d.word_count }} mots{% endif %}
                     {% if d.article %} · <span style="color: var(--vert);"><i class="fas fa-globe"></i> publié</span>{% endif %}
-                    {% if mode == 'classes' and d.theme and not theme_id %} · <strong>{{ d.theme.name }}</strong>{% endif %}
+                    {% if mode in ('classes', 'intros') and d.theme and not theme_id %} · <strong>{{ d.theme.name }}</strong>{% endif %}
                 </span>
             </div>
             <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=d.id) }}" style="margin: 0; display: flex; gap: 0.4rem; align-items: center;">
                 {% if mode == 'classes' %}
-                <input type="hidden" name="action" value="theme">
-                <select name="theme_id" onchange="this.form.submit()" style="padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.85rem;">
+                {# Le menu change de chapitre ; sa dernière entrée renvoie le
+                   document dans la pile, sans chapitre. #}
+                <input type="hidden" name="action" value="theme" id="action-{{ d.id }}">
+                <select name="theme_id" onchange="if (this.value === 'reprendre') { document.getElementById('action-{{ d.id }}').value = 'reprendre'; } this.form.submit();"
+                        style="padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.85rem;">
                     {% for t in themes %}<option value="{{ t.id }}" {% if d.theme_id == t.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+                    <option disabled>──────</option>
+                    <option value="reprendre">Retirer la classification</option>
                 </select>
+                <a href="{{ url_for('admin_livre.intros', doc=d.id) }}" class="btn btn-sm btn-outline" title="{{ 'Relire l’intro' if d.intro else 'Écrire l’intro' }}" style="color: {{ 'var(--vert)' if d.intro else 'var(--noir)' }}; border-color: #e0e0e0;"><i class="fas fa-pen-nib"></i></a>
                 <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline" title="Écarter du livre" style="color: var(--rouge); border-color: #e0e0e0;"><i class="fas fa-ban"></i></button>
+                {% elif mode == 'intros' %}
+                <a href="{{ url_for('admin_livre.intros', doc=d.id) }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-pen-nib"></i> Modifier</a>
                 {% else %}
                 <button type="submit" name="action" value="reprendre" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-rotate-left"></i> Reprendre</button>
                 {% endif %}

@@ -6,9 +6,17 @@
        class="btn btn-sm {% if _p == url_for('admin_livre.classer') %}btn-vert{% else %}btn-outline{% endif %}">
         Classification{% if compte and compte.a_classer %} <span style="opacity: .75;">· {{ compte.a_classer }}</span>{% endif %}
     </a>
+    <a href="{{ url_for('admin_livre.intros') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/intros') and not _p.startswith('/admin/livre/intros/faites') %}btn-vert{% else %}btn-outline{% endif %}">
+        Intro à faire{% if compte and compte.intro_a_faire %} <span style="opacity: .75;">· {{ compte.intro_a_faire }}</span>{% endif %}
+    </a>
     <a href="{{ url_for('admin_livre.classes') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/classes') %}btn-vert{% else %}btn-outline{% endif %}">
         Classés{% if compte %} <span style="opacity: .75;">· {{ compte.classe }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.intros_faites') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/intros/faites') %}btn-vert{% else %}btn-outline{% endif %}">
+        Intro faite{% if compte and compte.intro_faite %} <span style="opacity: .75;">· {{ compte.intro_faite }}</span>{% endif %}
     </a>
     <a href="{{ url_for('admin_livre.ignores') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/ignores') %}btn-vert{% else %}btn-outline{% endif %}">

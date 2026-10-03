@@ -96,15 +96,13 @@ def _charger(doc):
     """Fetch one document's text from Drive, cleaned the way an article is."""
     import gdrive
     from articles import _clean_html
+    from livre.nettoyage import appliquer
     brut = gdrive.get_document(doc.drive_id)
-    # Même chaîne que l'import d'un article : nettoyer, puis retirer le titre et
-    # les lignes d'auteur et de date que Google met en tête du document.
-    html = _clean_html(brut['html'])
-    _titre, html = gdrive.strip_boilerplate(html, brut['name'])
-    doc.content_html = html
-    doc.content_text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html)).strip()
+    # L'export, passé au seul nettoyage de sécurité, est gardé tel quel : le
+    # reste — titre, date, signature, typographie — se rejoue dessus à volonté.
+    doc.source_html = _clean_html(brut['html'])
     doc.content_fetched_at = datetime.utcnow()
-    doc.word_count = len(doc.content_text.split())
+    appliquer(doc)
 
 
 # ─── Import complet, en fond ────────────────────────────────
@@ -138,7 +136,8 @@ def importer_tout(app):
             try:
                 n, r, d = sync_from_drive()
                 IMPORT.update(nouveaux=n, disparus=d)
-                restants = (BookDoc.query.filter(BookDoc.content_fetched_at.is_(None),
+                restants = (BookDoc.query.filter(db.or_(BookDoc.content_fetched_at.is_(None),
+                                                        BookDoc.source_html.is_(None)),
                                                  BookDoc.missing.is_(False))
                             .order_by(BookDoc.created_at.desc()).all())
                 IMPORT.update(etape="Lecture des textes…", total=len(restants))
@@ -168,8 +167,11 @@ def _compte():
     rows = dict(db.session.query(BookDoc.status, db.func.count(BookDoc.id))
                 .filter(BookDoc.missing.is_(False)).group_by(BookDoc.status).all())
     total = sum(rows.values())
+    classes = BookDoc.query.filter_by(status='classe', missing=False)
     return {'a_classer': rows.get('a_classer', 0), 'classe': rows.get('classe', 0),
-            'ignore': rows.get('ignore', 0), 'total': total}
+            'ignore': rows.get('ignore', 0), 'total': total,
+            'intro_a_faire': classes.filter(BookDoc.intro.is_(None)).count(),
+            'intro_faite': classes.filter(BookDoc.intro.isnot(None)).count()}
 
 
 def _suivant(apres_id=None):
@@ -184,7 +186,7 @@ def _suivant(apres_id=None):
         if pivot is not None:
             q = q.filter(db.or_(BookDoc.created_at < pivot.created_at,
                                 db.and_(BookDoc.created_at == pivot.created_at, BookDoc.id < pivot.id)))
-    doc = q.order_by(BookDoc.created_at.desc(), BookDoc.id.desc()).first()
+    doc = q.order_by(db.func.coalesce(BookDoc.written_at, db.func.date(BookDoc.created_at)).desc(), BookDoc.id.desc()).first()
     if doc is None and apres_id:
         # Fin de la pile : on repart du début, il reste ce qu'on a passé.
         doc = (BookDoc.query.filter_by(status='a_classer', missing=False)
@@ -195,10 +197,12 @@ def _suivant(apres_id=None):
 def _json_doc(doc):
     if doc is None:
         return None
+    quand = doc.date_livre
     return {
-        'id': doc.id, 'nom': doc.name,
-        'date': doc.created_at.strftime('%d/%m/%Y') if doc.created_at else '',
-        'annee': doc.created_at.year if doc.created_at else None,
+        'id': doc.id, 'nom': doc.titre, 'fichier': doc.name,
+        'date': quand.strftime('%d/%m/%Y') if quand else '',
+        'annee': quand.year if quand else None,
+        'intro': doc.intro or '', 'theme': doc.theme.name if doc.theme else None,
         'modifie': doc.modified_at.strftime('%d/%m/%Y') if doc.modified_at else '',
         'article': ({'id': doc.article.id, 'titre': doc.article.title,
                      'url': url_for('articles.public_show', slug=doc.article.slug, _external=False)}
@@ -247,7 +251,7 @@ def tous():
     statut = request.args.get('statut') or ''
     if recherche:
         motif = f'%{recherche}%'
-        q = q.filter(db.or_(BookDoc.name.ilike(motif), BookDoc.content_text.ilike(motif)))
+        q = q.filter(db.or_(BookDoc.name.ilike(motif), BookDoc.title.ilike(motif), BookDoc.content_text.ilike(motif)))
     if statut in STATUTS:
         q = q.filter_by(status=statut)
     pagination = (q.order_by(BookDoc.created_at.desc(), BookDoc.id.desc())
@@ -299,6 +303,61 @@ def decider(doc_id):
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': True, 'suivant': _json_doc(_suivant()), 'compte': _compte()})
     return redirect(request.referrer or url_for('admin_livre.classer'))
+
+
+# ─── Intros ─────────────────────────────────────────────────
+
+def _prochain_sans_intro(apres_id=None):
+    """The next classified document still without its few opening lines —
+    chapter by chapter, oldest first, so Bernard writes a chapter in the
+    order the reader will meet it."""
+    q = BookDoc.query.filter(BookDoc.status == 'classe', BookDoc.missing.is_(False),
+                             BookDoc.intro.is_(None))
+    if apres_id:
+        pivot = db.session.get(BookDoc, apres_id)
+        if pivot is not None:
+            q = q.filter(BookDoc.id != pivot.id)
+    return (q.join(BookTheme, BookTheme.id == BookDoc.theme_id)
+            .order_by(BookTheme.position, BookDoc.written_at.asc(), BookDoc.created_at.asc(), BookDoc.id.asc())
+            .first())
+
+
+@admin_livre_bp.route('/intros')
+@admin_required
+def intros():
+    """Write the intro of one classified document at a time; `?doc=` reopens
+    a given one, from the « Intro faite » list."""
+    seed_themes()
+    doc_id = request.args.get('doc', type=int)
+    doc = db.session.get(BookDoc, doc_id) if doc_id else _prochain_sans_intro()
+    return render_template('livre_intro.html', doc=_json_doc(doc), compte=_compte())
+
+
+@admin_livre_bp.route('/intros/faites')
+@admin_required
+def intros_faites():
+    docs = (BookDoc.query.filter(BookDoc.status == 'classe', BookDoc.intro.isnot(None))
+            .order_by(BookDoc.intro_at.desc()).all())
+    return render_template('livre_liste.html', mode='intros', docs=docs,
+                           themes=BookTheme.query.order_by(BookTheme.position).all(),
+                           theme_id=None, par_theme={}, compte=_compte())
+
+
+@admin_livre_bp.route('/doc/<int:doc_id>/intro', methods=['POST'])
+@admin_required
+def intro_save(doc_id):
+    """Save the intro — or skip to the next — and hand back the next document."""
+    doc = db.session.get(BookDoc, doc_id) or abort(404)
+    action = request.form.get('action') or 'enregistrer'
+    if action == 'enregistrer':
+        texte = (request.form.get('intro') or '').strip()
+        doc.intro = texte or None
+        doc.intro_at = datetime.utcnow() if texte else None
+        db.session.commit()
+    suivant = _prochain_sans_intro(apres_id=doc.id if action == 'passer' else None)
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True, 'suivant': _json_doc(suivant), 'compte': _compte()})
+    return redirect(request.referrer or url_for('admin_livre.intros'))
 
 
 @admin_livre_bp.route('/classes')

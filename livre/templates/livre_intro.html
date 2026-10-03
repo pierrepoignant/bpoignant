@@ -1,0 +1,90 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — intros{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Quelques lignes en tête de chaque texte : pourquoi il l'a écrit, ce qu'il en reste.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    {# Même carte que la classification, mais la décision est un texte : le
+       document, « Lire », la zone d'écriture, puis « Enregistrer et suivant ».
+       Chapitre par chapitre, dans l'ordre du livre. #}
+    <style>
+        .lv-carte { background: white; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.3rem; margin-top: 1rem; }
+        .lv-titre { font-size: 1.25rem; font-weight: 700; line-height: 1.3; margin: 0 0 0.3rem; text-wrap: balance; }
+        .lv-meta { font-size: 0.82rem; color: var(--gris); display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .lv-chapitre { display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; background: var(--vert); color: white; }
+        .lv-lire { width: 100%; min-height: 48px; font-size: 1rem; margin-bottom: 1rem; }
+        .lv-intro { width: 100%; min-height: 160px; padding: 12px 14px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1.02rem; line-height: 1.6; resize: vertical; }
+        .lv-bas { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem; }
+        .lv-bas .btn { min-height: 48px; flex: 1 1 160px; }
+        .lv-fin { text-align: center; padding: 2rem 1rem; color: var(--gris); }
+    </style>
+
+    <p style="margin: 0; font-size: 0.9rem; color: var(--gris);">
+        <span id="lv-compteur"><strong style="color: var(--noir);">{{ compte.intro_a_faire }}</strong> intro{{ 's' if compte.intro_a_faire != 1 }} à faire · {{ compte.intro_faite }} faite{{ 's' if compte.intro_faite != 1 }}</span>
+    </p>
+
+    <div class="lv-carte" id="lv-carte" {% if not doc %}hidden{% endif %}>
+        <div style="margin-bottom: 0.5rem;"><span class="lv-chapitre" id="lv-chapitre"></span></div>
+        <p class="lv-titre" id="lv-titre"></p>
+        <div class="lv-meta" id="lv-meta"></div>
+        <button type="button" class="btn btn-outline lv-lire" id="lv-lire" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-book-open"></i> Lire le document</button>
+
+        <label for="lv-texte" style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">Intro</label>
+        <textarea id="lv-texte" class="lv-intro" placeholder="Quelques lignes : le contexte du moment, pourquoi ce texte, ce qu'il en pense aujourd'hui…"></textarea>
+        <div style="font-size: 0.78rem; color: var(--gris); margin-top: 0.3rem;"><span id="lv-mots">0 mot</span></div>
+
+        <div class="lv-bas">
+            <button type="button" class="btn btn-primary" onclick="envoyer('enregistrer', this)"><i class="fas fa-check"></i> Enregistrer et suivant</button>
+            <button type="button" class="btn btn-outline" style="color: var(--noir); border-color: #e0e0e0;" onclick="envoyer('passer', this)"><i class="fas fa-forward"></i> Passer</button>
+        </div>
+    </div>
+
+    <div class="lv-carte lv-fin" id="lv-fin" {% if doc %}hidden{% endif %}>
+        <i class="fas fa-circle-check" style="color: var(--vert); font-size: 1.6rem;"></i>
+        <p style="margin: 0.6rem 0 0;">{% if compte.classe %}Toutes les intros sont écrites.{% else %}Classez d'abord des documents : les intros se font sur ce qui entre dans le livre.{% endif %}</p>
+    </div>
+
+    <script>
+    let courant = {{ doc | tojson }};
+    const INTRO_URL = "{{ url_for('admin_livre.intro_save', doc_id=0) }}".replace('/0/', '/{id}/');
+    const zone = document.getElementById('lv-texte');
+    function compterMots() { const n = zone.value.trim() ? zone.value.trim().split(/\s+/).length : 0; document.getElementById('lv-mots').textContent = n + (n > 1 ? ' mots' : ' mot'); }
+    zone.addEventListener('input', compterMots);
+
+    function dessiner() {
+        const carte = document.getElementById('lv-carte'), fin = document.getElementById('lv-fin');
+        if (!courant) { carte.hidden = true; fin.hidden = false; return; }
+        carte.hidden = false; fin.hidden = true;
+        document.getElementById('lv-chapitre').textContent = courant.theme || '';
+        document.getElementById('lv-titre').textContent = courant.nom;
+        const meta = [];
+        if (courant.date) meta.push('<span><i class="far fa-calendar"></i> ' + courant.date + '</span>');
+        if (courant.mots) meta.push('<span>' + courant.mots + ' mots</span>');
+        if (courant.fichier && courant.fichier !== courant.nom) meta.push('<span title="Nom du fichier Drive"><i class="fab fa-google-drive"></i> ' + courant.fichier + '</span>');
+        document.getElementById('lv-meta').innerHTML = meta.join(' · ');
+        document.getElementById('lv-lire').onclick = () => ouvrirLecture(courant.id, courant.nom, courant.date);
+        zone.value = courant.intro || ''; compterMots();
+        chargerTexte(courant.id).catch(() => {});
+    }
+
+    function envoyer(action, bouton) {
+        if (!courant) return;
+        if (action === 'enregistrer' && !zone.value.trim()) { zone.focus(); return; }
+        document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = true);
+        const corps = new FormData(); corps.append('action', action); corps.append('intro', zone.value);
+        fetch(INTRO_URL.replace('{id}', courant.id), {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error(j.erreur || '');
+                courant = j.suivant;
+                const c = j.compte;
+                document.getElementById('lv-compteur').innerHTML = '<strong style="color: var(--noir);">' + c.intro_a_faire + '</strong> intro' + (c.intro_a_faire !== 1 ? 's' : '') + ' à faire · ' + c.intro_faite + ' faite' + (c.intro_faite !== 1 ? 's' : '');
+                fermerLecture(); dessiner(); window.scrollTo({top: 0});
+            }).catch(e => alert('Impossible d\'enregistrer : ' + e.message))
+            .finally(() => document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = false));
+    }
+    dessiner();
+    </script>
+{% endblock %}
