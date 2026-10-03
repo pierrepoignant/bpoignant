@@ -86,11 +86,12 @@ def _paragraphes(html):
 
 
 class Livre(FPDF):
-    def __init__(self, titre, sous_titre, auteur):
+    def __init__(self, titre, sous_titre, auteur, meta=None):
         super().__init__(unit='mm', format=(PAGE_L, PAGE_H))
         self.titre_livre = titre
         self.sous_titre = sous_titre
         self.auteur = auteur
+        self.meta = meta or {}
         self.chapitre_courant = ''
         self.set_auto_page_break(True, margin=MARGE_BAS)
         self.set_margins(MARGE_COTE, MARGE_HAUT, MARGE_COTE)
@@ -160,13 +161,59 @@ class Livre(FPDF):
             _glyphes(self.titre_livre) + (f" — {_glyphes(self.sous_titre)}" if self.sous_titre else ""),
             "Chroniques parues sur bernardpoignant.fr.",
             "",
-            f"Première édition, {annee}.",
         ]
+        if self.meta.get('editeur'):
+            lignes.append(_glyphes(self.meta['editeur']))
+        if self.meta.get('isbn'):
+            lignes.append(f"ISBN : {self.meta['isbn']}")
+        if self.meta.get('depot_legal'):
+            lignes.append(f"Dépôt légal : {_glyphes(self.meta['depot_legal'])}")
+        lignes.append(f"Première édition, {annee}.")
         for l in lignes:
             self.cell(0, 5, l, align='C', new_x='LMARGIN', new_y='NEXT')
         self.set_text_color(*NOIR)
         self.set_auto_page_break(True, margin=MARGE_BAS)
         self.sans_tete = False
+
+    def _page_centree(self, texte, source=None, italique=True):
+        """Une page à part — dédicace, exergue — texte centré en hauteur."""
+        self.sans_tete = True
+        self.add_page()
+        if self.page_no() % 2 == 0:          # toujours sur une page de droite
+            self.add_page()
+        self.set_y(PAGE_H * 0.38)
+        self.set_font('garamond', 'I' if italique else '', 13)
+        self.set_text_color(*NOIR)
+        self.multi_cell(0, 8, _glyphes(texte), align='C')
+        if source:
+            self.ln(4)
+            self.set_font('garamond', '', 11)
+            self.set_text_color(*GRIS)
+            self.multi_cell(0, 6, _glyphes(source), align='C')
+        self.set_text_color(*NOIR)
+
+    def section_texte(self, titre, corps):
+        """Une section de texte courant — avant-propos, biographie, remerciements —
+        ouverte sur une page de droite, avec son titre."""
+        self.chapitre_courant = titre
+        self.sans_tete = True
+        self.add_page()
+        if self.page_no() % 2 == 0:
+            self.add_page()
+        self.set_y(58)
+        self.set_font('garamond', 'B', 24)
+        self.set_text_color(*BLEU)
+        self.multi_cell(0, 12, _glyphes(titre), align='C')
+        self.ln(10)
+        self.set_text_color(*NOIR)
+        self.sans_tete = False
+        for para in re.split(r'\n{2,}', corps.strip()):
+            para = para.strip()
+            if not para:
+                continue
+            self.set_font('garamond', '', 11.5)
+            self.multi_cell(0, 6.4, _glyphes(para), align='J')
+            self.ln(2.2)
 
     def ouvrir_chapitre(self, nom, n_chroniques, intro=None):
         self.chapitre_courant = nom
@@ -235,17 +282,23 @@ class Livre(FPDF):
 
 
 
-def construire(docs_par_theme, titre, sous_titre, auteur, portrait_png=None):
+def construire(docs_par_theme, meta):
     """Assemble le PDF et renvoie les octets.
 
-    `docs_par_theme` : liste de (nom_theme, [chroniques]) dans l'ordre du livre.
-    Chaque chronique a .titre, .date_livre, .intro, .content_html.
+    `docs_par_theme` : liste de (nom, [chroniques], intro_chapitre) dans l'ordre
+    du livre. `meta` : titre, sous_titre, auteur, et les champs liminaires
+    (dédicace, épigraphe, avant-propos, biographie, remerciements, mentions
+    légales) — chacun composé seulement s'il est rempli.
     """
-    pdf = Livre(titre, sous_titre, auteur)
+    pdf = Livre(meta['titre'], meta.get('sous_titre', ''), meta['auteur'], meta)
     pdf.sommaire = []
 
     pdf.page_de_titre()
     pdf.page_copyright(date.today().year)
+    if meta.get('dedicace'):
+        pdf._page_centree(meta['dedicace'])
+    if meta.get('epigraphe'):
+        pdf._page_centree(meta['epigraphe'], meta.get('epigraphe_src') or None)
 
     # On réserve la place du sommaire : une page (deux si long), remplie après.
     pages_sommaire = max(1, (sum(1 for _ in docs_par_theme) + 24) // 26)
@@ -255,6 +308,9 @@ def construire(docs_par_theme, titre, sous_titre, auteur, portrait_png=None):
     pdf.pages_liminaires = pdf.page_no()
     debut_sommaire = pdf.pages_liminaires - pages_sommaire + 1
 
+    if meta.get('avant_propos'):
+        pdf.section_texte('Avant-propos', meta['avant_propos'])
+
     for entree in docs_par_theme:
         nom, chroniques = entree[0], entree[1]
         intro_chap = entree[2] if len(entree) > 2 else None
@@ -263,6 +319,11 @@ def construire(docs_par_theme, titre, sous_titre, auteur, portrait_png=None):
         pdf.ouvrir_chapitre(nom, len(chroniques), intro_chap)
         for d in chroniques:
             pdf.chronique(d.titre, d.date_livre, d.intro, d.content_html)
+
+    if meta.get('biographie'):
+        pdf.section_texte("L'auteur", meta['biographie'])
+    if meta.get('remerciements'):
+        pdf.section_texte('Remerciements', meta['remerciements'])
 
     # Composer le sommaire sur les pages réservées.
     pdf.page = debut_sommaire
@@ -285,11 +346,11 @@ def construire(docs_par_theme, titre, sous_titre, auteur, portrait_png=None):
     return bytes(sortie)
 
 
-def apercu(docs_par_theme, titre, sous_titre, auteur, max_chroniques=6):
+def apercu(docs_par_theme, meta, max_chroniques=6):
     """Un PDF court — les premières chroniques de chaque chapitre — pour voir
     la mise en page sans composer quatre cents pages."""
-    court = [(nom, chroniques[:max_chroniques]) for nom, chroniques in docs_par_theme]
-    return construire(court, titre, sous_titre, auteur)
+    court = [(e[0], e[1][:max_chroniques], e[2] if len(e) > 2 else None) for e in docs_par_theme]
+    return construire(court, meta)
 
 
 # ─── Couverture ─────────────────────────────────────────────

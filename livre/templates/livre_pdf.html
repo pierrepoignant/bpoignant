@@ -7,7 +7,7 @@
 {% block admin_content %}
     {% include '_livre_nav.html' %}
 
-    {% set total = namespace(v=0) %}{% for _, ch in themes %}{% set total.v = total.v + ch|length %}{% endfor %}
+    {% set total = namespace(v=0) %}{% for _e in themes %}{% set total.v = total.v + _e[1]|length %}{% endfor %}
 
     <div style="display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; margin-top: 1rem; align-items: start;">
       <div>
@@ -20,7 +20,46 @@
             <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Sous-titre</label>
             <input type="text" name="sous_titre" value="{{ sous_titre }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
             <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Auteur</label>
-            <input type="text" name="auteur" value="{{ auteur }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 1rem;">
+            <input type="text" name="auteur" value="{{ auteur }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 1.2rem;">
+
+            {% set ch = 'display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin:0 0 0.25rem;' %}
+            {% set ci = 'width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 1rem;' %}
+            {% set ct = ci + ' line-height: 1.6; resize: vertical;' %}
+
+            <details open style="margin-bottom: 0.6rem;">
+                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.8rem;">Pages liminaires</summary>
+                <label style="{{ ch }}">Dédicace <span style="text-transform:none; color:#bbb;">— « À … », une ligne</span></label>
+                <input type="text" name="dedicace" value="{{ meta.dedicace }}" style="{{ ci }}">
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.6rem;">
+                    <div><label style="{{ ch }}">Épigraphe <span style="text-transform:none; color:#bbb;">— une citation</span></label>
+                         <input type="text" name="epigraphe" value="{{ meta.epigraphe }}" style="{{ ci }}"></div>
+                    <div><label style="{{ ch }}">Source</label>
+                         <input type="text" name="epigraphe_src" value="{{ meta.epigraphe_src }}" style="{{ ci }} width: 110px;"></div>
+                </div>
+                <label style="{{ ch }}">Avant-propos <span style="text-transform:none; color:#bbb;">— votre introduction au livre entier</span></label>
+                <textarea name="avant_propos" rows="5" style="{{ ct }}">{{ meta.avant_propos }}</textarea>
+            </details>
+
+            <details style="margin-bottom: 0.6rem;">
+                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.8rem;">Pages de fin</summary>
+                <label style="{{ ch }}">Biographie de l'auteur <span style="text-transform:none; color:#bbb;">— « L'auteur », en fin de livre et au dos</span></label>
+                <textarea name="biographie" rows="4" style="{{ ct }}">{{ meta.biographie }}</textarea>
+                <label style="{{ ch }}">Remerciements</label>
+                <textarea name="remerciements" rows="3" style="{{ ct }}">{{ meta.remerciements }}</textarea>
+            </details>
+
+            <details style="margin-bottom: 1rem;">
+                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.8rem;">Couverture & mentions légales</summary>
+                <label style="{{ ch }}">Quatrième de couverture <span style="text-transform:none; color:#bbb;">— le texte du dos, pour la couverture complète</span></label>
+                <textarea name="quatrieme" rows="4" style="{{ ct }}">{{ meta.quatrieme }}</textarea>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+                    <div><label style="{{ ch }}">Éditeur</label><input type="text" name="editeur" value="{{ meta.editeur }}" style="{{ ci }}"></div>
+                    <div><label style="{{ ch }}">Dépôt légal</label><input type="text" name="depot_legal" value="{{ meta.depot_legal }}" placeholder="octobre 2026" style="{{ ci }}"></div>
+                </div>
+                <label style="{{ ch }}">ISBN <span style="text-transform:none; color:#bbb;">— KDP en fournit un gratuit</span></label>
+                <input type="text" name="isbn" value="{{ meta.isbn }}" style="{{ ci }}">
+            </details>
+
             <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
         </form>
 
@@ -31,7 +70,7 @@
                 <strong style="color: var(--noir);">{{ total.v }}</strong> chroniques classées, dans {{ themes|length }} chapitres, de la plus ancienne à la plus récente.
             </p>
             <div style="display: grid; gap: 0.35rem;">
-                {% for nom, ch in themes %}
+                {% for nom, ch, _desc in themes %}
                 <div style="display: flex; justify-content: space-between; font-size: 0.88rem; padding: 0.2rem 0; border-bottom: 1px solid var(--gris-clair);">
                     <span>{{ loop.index }}. {{ nom }}</span>
                     <span style="color: var(--gris);">{{ ch|length }}</span>

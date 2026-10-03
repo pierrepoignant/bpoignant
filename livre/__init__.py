@@ -458,6 +458,20 @@ def theme_update(theme_id):
 KEY_TITRE = 'livre_titre'
 KEY_SOUS_TITRE = 'livre_sous_titre'
 KEY_AUTEUR = 'livre_auteur'
+# Les textes liminaires et de fin, et les mentions légales. Tous facultatifs :
+# une page n'est composée que si son champ est rempli.
+CHAMPS_LIVRE = {
+    'dedicace':     'livre_dedicace',       # « À … », une ligne, après la page de titre
+    'epigraphe':    'livre_epigraphe',      # une citation en exergue
+    'epigraphe_src': 'livre_epigraphe_src', # son auteur
+    'avant_propos': 'livre_avant_propos',   # l'introduction de Bernard au livre entier
+    'biographie':   'livre_biographie',     # « L'auteur », en fin de livre
+    'remerciements': 'livre_remerciements', # en fin de livre
+    'quatrieme':    'livre_quatrieme',      # la quatrième de couverture (pour le dos)
+    'editeur':      'livre_editeur',        # nom de l'éditeur, page de copyright
+    'isbn':         'livre_isbn',           # ISBN (KDP en fournit un gratuit)
+    'depot_legal':  'livre_depot_legal',    # « octobre 2026 », exigé en France
+}
 
 GEN = {'en_cours': False}
 _GEN_VERROU = threading.Lock()
@@ -468,6 +482,16 @@ def _reglages_livre():
     return (get_config(KEY_TITRE) or 'Une décennie de Chroniques',
             get_config(KEY_SOUS_TITRE) or 'Bernard Poignant · 2017–2026',
             get_config(KEY_AUTEUR) or 'Bernard Poignant')
+
+
+def _meta_livre():
+    """Tous les champs du livre, pour la composition et le formulaire."""
+    from settings.models import get_config
+    titre, sous, auteur = _reglages_livre()
+    meta = {'titre': titre, 'sous_titre': sous, 'auteur': auteur}
+    for cle, config in CHAMPS_LIVRE.items():
+        meta[cle] = (get_config(config) or '').strip()
+    return meta
 
 
 def _docs_par_theme():
@@ -509,13 +533,13 @@ def generer_livre(app):
         with app.app_context():
             try:
                 from livre import pdf as pdfmod
-                titre, sous, auteur = _reglages_livre()
+                meta = _meta_livre()
                 themes = _docs_par_theme()
-                data = pdfmod.construire(themes, titre, sous, auteur)
+                data = pdfmod.construire(themes, meta)
                 chemin = _os.path.join(_dossier_pdf(), 'livre.pdf')
                 with open(chemin, 'wb') as fh:
                     fh.write(data)
-                couv = pdfmod.couverture(titre, sous, auteur)
+                couv = pdfmod.couverture(meta['titre'], meta['sous_titre'], meta['auteur'])
                 with open(_os.path.join(_dossier_pdf(), 'couverture.pdf'), 'wb') as fh:
                     fh.write(couv)
                 n_chr = sum(len(c) for _, c in themes)
@@ -535,11 +559,11 @@ def generer_livre(app):
 @admin_required
 def livre_pdf():
     import os
-    titre, sous, auteur = _reglages_livre()
+    meta = _meta_livre()
     chemin = os.path.join(_dossier_pdf(), 'livre.pdf')
     genere = os.path.getmtime(chemin) if os.path.exists(chemin) else None
-    return render_template('livre_pdf.html', compte=_compte(),
-                           titre=titre, sous_titre=sous, auteur=auteur,
+    return render_template('livre_pdf.html', compte=_compte(), meta=meta,
+                           titre=meta['titre'], sous_titre=meta['sous_titre'], auteur=meta['auteur'],
                            themes=_docs_par_theme(), etat=etat_generation(),
                            genere_le=datetime.utcfromtimestamp(genere) if genere else None,
                            taille=(os.path.getsize(chemin) if genere else None))
@@ -552,6 +576,8 @@ def livre_pdf_reglages():
     set_config(KEY_TITRE, (request.form.get('titre') or '').strip())
     set_config(KEY_SOUS_TITRE, (request.form.get('sous_titre') or '').strip())
     set_config(KEY_AUTEUR, (request.form.get('auteur') or '').strip())
+    for cle, config in CHAMPS_LIVRE.items():
+        set_config(config, (request.form.get(cle) or '').strip())
     flash("Réglages du livre enregistrés.", 'success')
     return redirect(url_for('admin_livre.livre_pdf'))
 
@@ -566,8 +592,7 @@ def livre_pdf_apercu():
     except Exception as exc:
         flash(f"Génération PDF indisponible : {exc}", 'danger')
         return redirect(url_for('admin_livre.livre_pdf'))
-    titre, sous, auteur = _reglages_livre()
-    data = pdfmod.apercu(_docs_par_theme(), titre, sous, auteur, max_chroniques=3)
+    data = pdfmod.apercu(_docs_par_theme(), _meta_livre(), max_chroniques=3)
     return Response(data, mimetype='application/pdf',
                     headers={'Content-Disposition': 'inline; filename="apercu-livre.pdf"'})
 
