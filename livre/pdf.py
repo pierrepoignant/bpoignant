@@ -242,8 +242,9 @@ class Livre(FPDF):
             self.set_x(self.l_margin + marge)
             self.multi_cell(PAGE_L - self.l_margin - self.r_margin - 2 * marge, 7, _glyphes(intro.strip()), align='C')
         self.set_text_color(*NOIR)
-        # Enregistre l'entrée du sommaire, à la page du chapitre.
-        self.sommaire.append((nom, self.page_no()))
+        # Entrée de sommaire : le chapitre, sa page, et la liste de ses chroniques.
+        self._chap_courant = {'nom': nom, 'page': self.page_no(), 'chroniques': []}
+        self.sommaire.append(self._chap_courant)
         self.sans_tete = False
 
     def chronique(self, titre, quand, intro, html):
@@ -253,6 +254,9 @@ class Livre(FPDF):
             self.add_page()
         else:
             self.ln(10)
+        # Page où commence le titre : c'est ce que pointe le sommaire détaillé.
+        if getattr(self, '_chap_courant', None) is not None:
+            self._chap_courant['chroniques'].append((titre, self.page_no()))
         self.set_font('garamond', 'B', 15)
         self.set_text_color(*NOIR)
         self.multi_cell(0, 8, _glyphes(titre))
@@ -332,15 +336,32 @@ def construire(docs_par_theme, meta):
     pdf.set_font('garamond', 'B', 20)
     pdf.set_text_color(*BLEU)
     pdf.cell(0, 12, 'Sommaire', new_x='LMARGIN', new_y='NEXT')
-    pdf.ln(6)
-    for nom, page in pdf.sommaire:
-        pdf.set_font('garamond', '', 12)
-        pdf.set_text_color(*NOIR)
-        largeur = PAGE_L - pdf.l_margin - pdf.r_margin
-        pdf.cell(largeur - 16, 8, _glyphes(nom))
-        pdf.set_font('garamond', '', 11)
-        pdf.set_text_color(*GRIS)
-        pdf.cell(16, 8, str(page), align='R', new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(5)
+    largeur = PAGE_L - pdf.l_margin - pdf.r_margin
+    bas_sommaire = pdf.pages_liminaires
+    for i, chap in enumerate(pdf.sommaire):
+        if pdf.get_y() > PAGE_H - MARGE_BAS - 16 and pdf.page < bas_sommaire:
+            pdf.page += 1; pdf.set_xy(pdf.l_margin, MARGE_HAUT)
+        if i:
+            pdf.ln(3)
+        pdf.set_font('garamond', 'B', 12.5)
+        pdf.set_text_color(*BLEU)
+        pdf.cell(largeur - 14, 7.5, _glyphes(chap['nom']))
+        pdf.cell(14, 7.5, str(chap['page']), align='R', new_x='LMARGIN', new_y='NEXT')
+        for titre, page in chap['chroniques']:
+            if pdf.get_y() > PAGE_H - MARGE_BAS - 10 and pdf.page < bas_sommaire:
+                pdf.page += 1; pdf.set_xy(pdf.l_margin, MARGE_HAUT)
+            pdf.set_font('garamond', '', 10.5)
+            pdf.set_text_color(*NOIR)
+            t = _glyphes(titre)
+            while pdf.get_string_width(t) > largeur - 26 and len(t) > 8:
+                t = t[:-2]
+            if t != _glyphes(titre):
+                t = t.rstrip(' .,') + '…'
+            pdf.set_x(pdf.l_margin + 8)
+            pdf.cell(largeur - 8 - 14, 6, t)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(14, 6, str(page), align='R', new_x='LMARGIN', new_y='NEXT')
 
     sortie = pdf.output()
     return bytes(sortie)
