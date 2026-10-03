@@ -168,7 +168,7 @@ class Livre(FPDF):
         self.set_auto_page_break(True, margin=MARGE_BAS)
         self.sans_tete = False
 
-    def ouvrir_chapitre(self, nom, n_chroniques):
+    def ouvrir_chapitre(self, nom, n_chroniques, intro=None):
         self.chapitre_courant = nom
         # Un chapitre commence toujours sur une page de droite (impaire).
         self.sans_tete = True
@@ -186,7 +186,14 @@ class Livre(FPDF):
         self.ln(3)
         self.set_font('garamond', 'I', 11)
         self.set_text_color(*GRIS)
-        self.cell(0, 7, f"{n_chroniques} chronique{'s' if n_chroniques > 1 else ''}", align='C')
+        self.cell(0, 7, f"{n_chroniques} chronique{'s' if n_chroniques > 1 else ''}", align='C', new_x='LMARGIN', new_y='NEXT')
+        if intro:
+            self.ln(8)
+            self.set_font('garamond', 'I', 12)
+            self.set_text_color(*NOIR)
+            marge = (PAGE_L - self.l_margin - self.r_margin) * 0.12
+            self.set_x(self.l_margin + marge)
+            self.multi_cell(PAGE_L - self.l_margin - self.r_margin - 2 * marge, 7, _glyphes(intro.strip()), align='C')
         self.set_text_color(*NOIR)
         # Enregistre l'entrée du sommaire, à la page du chapitre.
         self.sommaire.append((nom, self.page_no()))
@@ -248,10 +255,12 @@ def construire(docs_par_theme, titre, sous_titre, auteur, portrait_png=None):
     pdf.pages_liminaires = pdf.page_no()
     debut_sommaire = pdf.pages_liminaires - pages_sommaire + 1
 
-    for nom, chroniques in docs_par_theme:
+    for entree in docs_par_theme:
+        nom, chroniques = entree[0], entree[1]
+        intro_chap = entree[2] if len(entree) > 2 else None
         if not chroniques:
             continue
-        pdf.ouvrir_chapitre(nom, len(chroniques))
+        pdf.ouvrir_chapitre(nom, len(chroniques), intro_chap)
         for d in chroniques:
             pdf.chronique(d.titre, d.date_livre, d.intro, d.content_html)
 

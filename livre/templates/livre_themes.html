@@ -2,36 +2,98 @@
 {% block title %}Le Livre — thèmes{% endblock %}
 
 {% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
-{% block admin_subtitle %}<p>Les chapitres du livre. L'ordre ici est l'ordre du livre.</p>{% endblock %}
+{% block admin_subtitle %}<p>Les chapitres du livre, dans l'ordre où ils y paraîtront.</p>{% endblock %}
 
 {% block admin_content %}
     {% include '_livre_nav.html' %}
 
     <div style="display: grid; gap: 0.6rem; margin-top: 1rem;">
     {% for t in themes %}
-        <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}"
-              style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: grid; grid-template-columns: 64px 1fr auto; gap: 0.6rem 0.8rem; align-items: center;">
-            <input type="number" name="position" value="{{ t.position }}" title="Ordre dans le livre"
-                   style="width: 64px; padding: 8px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; text-align: center;">
-            <div style="min-width: 0;">
-                <input type="text" name="name" value="{{ t.name }}" required
-                       style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 600;">
-                <input type="text" name="description" value="{{ t.description or '' }}" placeholder="Une ligne sur ce que rassemble ce chapitre (facultatif)"
-                       style="width: 100%; padding: 7px 10px; border: 1px solid #eee; border-radius: 8px; font-family: inherit; font-size: 0.85rem; margin-top: 0.4rem;">
+        <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: flex; gap: 0.9rem; align-items: flex-start;">
+            {# Monter / descendre : l'ordre des chapitres dans le livre. #}
+            <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 2px;">
+                <form method="POST" action="{{ url_for('admin_livre.theme_move', theme_id=t.id) }}" style="margin: 0;">
+                    <input type="hidden" name="sens" value="monter">
+                    <button type="submit" class="btn btn-sm btn-outline" title="Monter" {% if loop.first %}disabled{% endif %}
+                            style="color: var(--noir); border-color: #e0e0e0; padding: 4px 9px;"><i class="fas fa-chevron-up"></i></button>
+                </form>
+                <form method="POST" action="{{ url_for('admin_livre.theme_move', theme_id=t.id) }}" style="margin: 0;">
+                    <input type="hidden" name="sens" value="descendre">
+                    <button type="submit" class="btn btn-sm btn-outline" title="Descendre" {% if loop.last %}disabled{% endif %}
+                            style="color: var(--noir); border-color: #e0e0e0; padding: 4px 9px;"><i class="fas fa-chevron-down"></i></button>
+                </form>
             </div>
+
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 600; font-size: 1rem;">
+                    <span style="color: var(--gris); font-weight: 400;">{{ loop.index }}.</span> {{ t.name }}
+                    <a href="{{ url_for('admin_livre.classes', theme=t.id) }}" style="font-size: 0.8rem; color: var(--gris); font-weight: 400; margin-left: 0.4rem;">{{ comptes.get(t.id, 0) }} doc{{ 's' if comptes.get(t.id, 0) != 1 }}</a>
+                </div>
+                {# L'intro du chapitre, montrée telle quelle si elle existe. #}
+                {% if t.description %}
+                <p style="margin: 0.4rem 0 0; font-size: 0.88rem; line-height: 1.5; color: var(--noir);">{{ t.description }}</p>
+                {% else %}
+                <p style="margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--gris); font-style: italic;">Pas d'intro de chapitre.</p>
+                {% endif %}
+            </div>
+
             <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
-                <a href="{{ url_for('admin_livre.classes', theme=t.id) }}" style="font-size: 0.82rem; color: var(--gris); white-space: nowrap;">{{ comptes.get(t.id, 0) }} doc{{ 's' if comptes.get(t.id, 0) != 1 }}</a>
-                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i></button>
-                <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
-                        onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, 0) }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
+                {# Édition dans un panneau, comme l'intro d'une chronique : rien
+                   n'est modifiable en ligne, tout passe par le panneau. #}
+                <button type="button" class="btn btn-sm btn-outline" title="Modifier le chapitre"
+                        style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or '')|tojson }})"><i class="fas fa-pen-nib"></i></button>
+                <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}" style="margin: 0;">
+                    <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
+                            onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, 0) }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
+                </form>
             </div>
-        </form>
+        </div>
     {% endfor %}
     </div>
 
     <form method="POST" action="{{ url_for('admin_livre.theme_add') }}" style="display: flex; gap: 0.5rem; margin-top: 1.2rem; flex-wrap: wrap;">
-        <input type="text" name="name" placeholder="Nouveau thème" required maxlength="80"
+        <input type="text" name="name" placeholder="Nouveau chapitre" required maxlength="80"
                style="flex: 1 1 200px; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
         <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;"><i class="fas fa-plus"></i> Ajouter</button>
     </form>
+
+    {# Le panneau d'édition : nom du chapitre et son intro, posés par-dessus la
+       page, enregistrés d'un bouton. #}
+    <div id="panneau-theme" style="display: none; position: fixed; inset: 0; z-index: 400; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
+         onclick="if (event.target === this) fermerTheme()">
+        <form method="POST" id="form-theme" style="background: white; width: 100%; max-width: 620px; border-radius: 16px 16px 0 0; padding: 1.3rem 1.4rem 1.8rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="font-size: 1.1rem; margin: 0;">Chapitre</h2>
+                <button type="button" onclick="fermerTheme()" aria-label="Fermer"
+                        style="width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--gris-clair); font-size: 1.05rem; cursor: pointer;"><i class="fas fa-xmark"></i></button>
+            </div>
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Nom du chapitre</label>
+            <input type="text" name="name" id="theme-nom" required maxlength="80"
+                   style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 600; margin-bottom: 1rem;">
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Intro du chapitre</label>
+            <textarea name="description" id="theme-desc" rows="5" placeholder="Quelques lignes en tête du chapitre : ce qu'il rassemble, pourquoi ces textes vont ensemble…"
+                      style="width: 100%; padding: 11px 13px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1rem; line-height: 1.6; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 0.6rem; margin-top: 1rem;">
+                <button type="submit" class="btn btn-primary" style="min-height: 46px; flex: 1;"><i class="fas fa-check"></i> Enregistrer</button>
+                <button type="button" class="btn btn-outline" style="min-height: 46px; color: var(--noir); border-color: #e0e0e0;" onclick="fermerTheme()">Annuler</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+    const ACTION_THEME = "{{ url_for('admin_livre.theme_update', theme_id=0) }}".replace('/0', '/{id}');
+    function ouvrirTheme(id, nom, desc) {
+        document.getElementById('form-theme').action = ACTION_THEME.replace('{id}', id);
+        document.getElementById('theme-nom').value = nom;
+        document.getElementById('theme-desc').value = desc;
+        document.getElementById('panneau-theme').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    function fermerTheme() {
+        document.getElementById('panneau-theme').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerTheme(); });
+    </script>
 {% endblock %}

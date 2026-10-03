@@ -412,6 +412,27 @@ def theme_add():
     return redirect(request.referrer or url_for('admin_livre.themes'))
 
 
+@admin_livre_bp.route('/themes/<int:theme_id>/deplacer', methods=['POST'])
+@admin_required
+def theme_move(theme_id):
+    """Monter ou descendre un chapitre : on échange sa position avec le voisin.
+
+    Les positions peuvent être espacées ou égales selon l'historique ; on
+    renumérote d'abord proprement, puis on permute, pour que « monter » avance
+    toujours d'un cran exactement."""
+    t = db.session.get(BookTheme, theme_id) or abort(404)
+    sens = request.form.get('sens')
+    ordonnes = BookTheme.query.order_by(BookTheme.position, BookTheme.name).all()
+    for i, x in enumerate(ordonnes):
+        x.position = i
+    i = next(k for k, x in enumerate(ordonnes) if x.id == t.id)
+    j = i - 1 if sens == 'monter' else i + 1
+    if 0 <= j < len(ordonnes):
+        ordonnes[i].position, ordonnes[j].position = ordonnes[j].position, ordonnes[i].position
+    db.session.commit()
+    return redirect(url_for('admin_livre.themes'))
+
+
 @admin_livre_bp.route('/themes/<int:theme_id>', methods=['POST'])
 @admin_required
 def theme_update(theme_id):
@@ -456,7 +477,7 @@ def _docs_par_theme():
     for t in BookTheme.query.order_by(BookTheme.position, BookTheme.name).all():
         ch = (t.docs.filter_by(status='classe').order_by(ordre.asc(), BookDoc.id.asc()).all())
         if ch:
-            out.append((t.name, ch))
+            out.append((t.name, ch, t.description))
     return out
 
 
