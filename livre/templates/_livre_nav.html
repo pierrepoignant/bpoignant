@@ -26,7 +26,9 @@
 
 {# L'overlay de lecture, partagé par toutes les pages du Livre : le texte
    entier, en typographie de lecture, fermé d'un geste. #}
-<div id="lecture" hidden style="position: fixed; inset: 0; z-index: 400; background: rgba(20,22,34,0.55); display: flex; align-items: flex-end; justify-content: center;"
+{# `display` est posé en JS, pas via `hidden` : un `display: flex` en ligne
+   gagne sur l'attribut, et l'overlay restait ouvert, vide, par-dessus tout. #}
+<div id="lecture" style="display: none; position: fixed; inset: 0; z-index: 400; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
      onclick="if (event.target === this) fermerLecture()">
     <div style="background: white; width: 100%; max-width: 760px; max-height: 94vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--gris-clair);">
@@ -58,13 +60,13 @@
         document.getElementById('lecture-meta').textContent = meta || '';
         const corps = document.getElementById('lecture-corps');
         corps.innerHTML = '<p style="color: var(--gris);"><i class="fas fa-spinner fa-spin"></i> Lecture du document…</p>';
-        boite.hidden = false; document.body.style.overflow = 'hidden';
+        boite.style.display = 'flex'; document.body.style.overflow = 'hidden';
         chargerTexte(id).then(j => {
             corps.innerHTML = j.html || '<p style="color: var(--gris);">Document vide.</p>';
             corps.scrollTop = 0;
             if (j.mots) document.getElementById('lecture-meta').textContent = (meta ? meta + ' · ' : '') + j.mots + ' mots';
         }).catch(e => { corps.innerHTML = '<p style="color: var(--rouge);">' + e.message + '</p>'; });
     }
-    function fermerLecture() { document.getElementById('lecture').hidden = true; document.body.style.overflow = ''; }
+    function fermerLecture() { document.getElementById('lecture').style.display = 'none'; document.body.style.overflow = ''; }
     document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerLecture(); });
 </script>
