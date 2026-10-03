@@ -1,0 +1,108 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — PDF{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Composer le livre en PDF, au format d'impression d'Amazon KDP.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    {% set total = namespace(v=0) %}{% for _, ch in themes %}{% set total.v = total.v + ch|length %}{% endfor %}
+
+    <div style="display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; margin-top: 1rem; align-items: start;">
+      <div>
+        {# Réglages du livre : titre, sous-titre, auteur. #}
+        <form method="POST" action="{{ url_for('admin_livre.livre_pdf_reglages') }}"
+              style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.4rem; margin-bottom: 1.2rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 1rem;">Réglages</h2>
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Titre</label>
+            <input type="text" name="titre" value="{{ titre }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Sous-titre</label>
+            <input type="text" name="sous_titre" value="{{ sous_titre }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 0.8rem;">
+            <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Auteur</label>
+            <input type="text" name="auteur" value="{{ auteur }}" style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; margin-bottom: 1rem;">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
+        </form>
+
+        {# Ce que contient le livre, chapitre par chapitre. #}
+        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.3rem 1.4rem;">
+            <h2 style="font-size: 1.05rem; margin: 0 0 0.3rem;">Contenu</h2>
+            <p style="font-size: 0.85rem; color: var(--gris); margin: 0 0 1rem;">
+                <strong style="color: var(--noir);">{{ total.v }}</strong> chroniques classées, dans {{ themes|length }} chapitres, de la plus ancienne à la plus récente.
+            </p>
+            <div style="display: grid; gap: 0.35rem;">
+                {% for nom, ch in themes %}
+                <div style="display: flex; justify-content: space-between; font-size: 0.88rem; padding: 0.2rem 0; border-bottom: 1px solid var(--gris-clair);">
+                    <span>{{ loop.index }}. {{ nom }}</span>
+                    <span style="color: var(--gris);">{{ ch|length }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not themes %}<p style="color: var(--gris); font-size: 0.88rem; margin: 0;">Aucune chronique classée — le livre se remplit depuis la Classification.</p>{% endif %}
+        </div>
+      </div>
+
+      {# Couverture + actions, dans une colonne de droite qui passe dessous sur mobile. #}
+      <div>
+        <div style="background: var(--gris-clair); border-radius: 12px; padding: 1rem; text-align: center; margin-bottom: 1rem;">
+            <img src="{{ url_for('admin_livre.livre_pdf_couverture') }}" alt="Couverture"
+                 style="display: none;">
+            <div style="aspect-ratio: 2/3; background: #16213E; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; padding: 1.2rem; box-shadow: 0 8px 20px rgba(0,0,0,0.2);">
+                <div style="font-family: Georgia, serif; color: white; font-size: 1.1rem; font-weight: 700; line-height: 1.2; text-align: left;">{{ titre }}</div>
+                <div style="width: 30px; height: 2px; background: #C9A24D; margin: 8px 0;"></div>
+                <div style="font-family: Georgia, serif; color: #C9A24D; font-style: italic; font-size: 0.78rem; text-align: left;">{{ sous_titre }}</div>
+            </div>
+            <a href="{{ url_for('admin_livre.livre_pdf_couverture') }}" target="_blank" rel="noopener" style="display: inline-block; margin-top: 0.7rem; font-size: 0.82rem; color: var(--rouge);"><i class="far fa-file-pdf"></i> Voir la couverture</a>
+        </div>
+
+        <a href="{{ url_for('admin_livre.livre_pdf_apercu') }}" target="_blank" rel="noopener" class="btn btn-outline" style="width: 100%; margin-bottom: 0.6rem; color: var(--noir); border-color: #e0e0e0;">
+            <i class="far fa-eye"></i> Aperçu rapide
+        </a>
+        <p style="font-size: 0.76rem; color: var(--gris); margin: 0 0 1rem; line-height: 1.5;">Les trois premières chroniques de chaque chapitre, tout de suite — pour juger la mise en page.</p>
+
+        <form method="POST" action="{{ url_for('admin_livre.livre_pdf_generer') }}"
+              onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Composition…';">
+            <button type="submit" class="btn btn-primary" style="width: 100%;" {% if etat.en_cours %}disabled{% endif %}>
+                <i class="fas fa-book"></i> Générer le livre complet
+            </button>
+        </form>
+        <div id="gen-etat" role="status" style="{% if not etat.en_cours and not genere_le %}display: none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 12px; font-size: 0.82rem; line-height: 1.5; margin-top: 0.7rem;"></div>
+
+        {% if genere_le %}
+        <div id="gen-liens" style="margin-top: 0.8rem;">
+            <a href="{{ url_for('admin_livre.livre_pdf_telecharger', quoi='livre') }}" class="btn btn-sm btn-primary" style="width: 100%; margin-bottom: 0.4rem;"><i class="fas fa-download"></i> Télécharger le livre</a>
+            <a href="{{ url_for('admin_livre.livre_pdf_telecharger', quoi='couverture') }}" class="btn btn-sm btn-outline" style="width: 100%; color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-download"></i> Télécharger la couverture</a>
+            <p style="font-size: 0.75rem; color: var(--gris); margin: 0.5rem 0 0;">Dernière composition le {{ genere_le.strftime('%d/%m/%Y à %H:%M') }}{% if taille %} · {{ (taille / 1024 / 1024) | round(1) }} Mo{% endif %}.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="background: rgba(22,33,62,0.05); border-radius: 10px; padding: 14px 18px; font-size: 0.82rem; line-height: 1.7; margin-top: 1.5rem; color: var(--gris);">
+        <strong style="color: var(--noir);">Pour publier sur Amazon KDP</strong> — Le livre est au format <strong>6 × 9 pouces</strong>, polices intégrées, marges de reliure dissymétriques : le fichier <em>intérieur</em> part tel quel. La <em>couverture</em> fournie est la première de couverture seule ; KDP demande une couverture complète (4e + dos + 1re) dont la largeur du dos dépend du nombre de pages final — je la génère une fois le livre composé et le nombre de pages connu.
+    </div>
+
+    <script>
+    (function () {
+        const boite = document.getElementById('gen-etat');
+        const url = "{{ url_for('admin_livre.livre_pdf_etat') }}";
+        let etait = {{ 'true' if etat.en_cours else 'false' }};
+        function dessiner(e) {
+            if (!e.etape) { boite.style.display = 'none'; return; }
+            boite.style.display = 'block';
+            let html = (e.en_cours ? '<i class="fas fa-spinner fa-spin"></i> ' : (e.etape === 'Échec' ? '<i class="fas fa-circle-exclamation" style="color:var(--rouge)"></i> ' : '<i class="fas fa-circle-check" style="color: var(--vert);"></i> ')) + '<strong>' + e.etape + '</strong>';
+            if (e.chroniques) html += ' · ' + e.chroniques + ' chroniques';
+            if (e.erreur) html += '<br><span style="color:var(--rouge)">' + e.erreur + '</span>';
+            boite.innerHTML = html;
+        }
+        function tick() {
+            fetch(url).then(r => r.json()).then(e => {
+                dessiner(e);
+                if (e.en_cours) { etait = true; setTimeout(tick, 2500); }
+                else if (etait) { setTimeout(() => location.reload(), 1200); }
+            }).catch(() => setTimeout(tick, 5000));
+        }
+        {% if etat.en_cours %}tick();{% endif %}
+    })();
+    </script>
+{% endblock %}

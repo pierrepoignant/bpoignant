@@ -30,6 +30,10 @@
        class="btn btn-sm {% if _p.startswith('/admin/livre/themes') %}btn-vert{% else %}btn-outline{% endif %}">
         Thèmes
     </a>
+    <a href="{{ url_for('admin_livre.livre_pdf') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/pdf') %}btn-vert{% else %}btn-outline{% endif %}">
+        <i class="far fa-file-pdf"></i> Livre PDF
+    </a>
 </nav>
 
 {# L'overlay de lecture, partagé par toutes les pages du Livre : le texte

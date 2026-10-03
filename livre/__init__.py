@@ -430,3 +430,162 @@ def theme_update(theme_id):
     db.session.commit()
     flash("Thème enregistré.", 'success')
     return redirect(url_for('admin_livre.themes'))
+
+
+# ─── Le livre en PDF ────────────────────────────────────────
+
+KEY_TITRE = 'livre_titre'
+KEY_SOUS_TITRE = 'livre_sous_titre'
+KEY_AUTEUR = 'livre_auteur'
+
+GEN = {'en_cours': False}
+_GEN_VERROU = threading.Lock()
+
+
+def _reglages_livre():
+    from settings.models import get_config
+    return (get_config(KEY_TITRE) or 'Une décennie de Chroniques',
+            get_config(KEY_SOUS_TITRE) or 'Bernard Poignant · 2017–2026',
+            get_config(KEY_AUTEUR) or 'Bernard Poignant')
+
+
+def _docs_par_theme():
+    """(nom, [chroniques]) dans l'ordre du livre ; par thème, du plus ancien."""
+    ordre = db.func.coalesce(BookDoc.written_at, db.func.date(BookDoc.created_at))
+    out = []
+    for t in BookTheme.query.order_by(BookTheme.position, BookTheme.name).all():
+        ch = (t.docs.filter_by(status='classe').order_by(ordre.asc(), BookDoc.id.asc()).all())
+        if ch:
+            out.append((t.name, ch))
+    return out
+
+
+def _dossier_pdf():
+    import os
+    d = os.path.join(WORKDIR_LIVRE, 'pdf')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+import os as _os
+WORKDIR_LIVRE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'instance', 'livre')
+
+
+def etat_generation():
+    return dict(GEN)
+
+
+def generer_livre(app):
+    """Compose the whole book — several hundred pages — in the background."""
+    with _GEN_VERROU:
+        if GEN.get('en_cours'):
+            return False
+        GEN.clear()
+        GEN.update(en_cours=True, etape="Composition du livre…",
+                   demarre=datetime.utcnow().isoformat(timespec='seconds'))
+
+    def _travail():
+        with app.app_context():
+            try:
+                from livre import pdf as pdfmod
+                titre, sous, auteur = _reglages_livre()
+                themes = _docs_par_theme()
+                data = pdfmod.construire(themes, titre, sous, auteur)
+                chemin = _os.path.join(_dossier_pdf(), 'livre.pdf')
+                with open(chemin, 'wb') as fh:
+                    fh.write(data)
+                couv = pdfmod.couverture(titre, sous, auteur)
+                with open(_os.path.join(_dossier_pdf(), 'couverture.pdf'), 'wb') as fh:
+                    fh.write(couv)
+                n_chr = sum(len(c) for _, c in themes)
+                GEN.update(etape="Terminé", octets=len(data), chroniques=n_chr,
+                           genere_le=datetime.utcnow().isoformat(timespec='seconds'))
+            except Exception as exc:
+                log.exception('génération du livre')
+                GEN.update(etape="Échec", erreur=str(exc)[:200])
+            finally:
+                GEN.update(en_cours=False, fini=datetime.utcnow().isoformat(timespec='seconds'))
+
+    threading.Thread(target=_travail, name='livre-pdf', daemon=True).start()
+    return True
+
+
+@admin_livre_bp.route('/pdf')
+@admin_required
+def livre_pdf():
+    import os
+    titre, sous, auteur = _reglages_livre()
+    chemin = os.path.join(_dossier_pdf(), 'livre.pdf')
+    genere = os.path.getmtime(chemin) if os.path.exists(chemin) else None
+    return render_template('livre_pdf.html', compte=_compte(),
+                           titre=titre, sous_titre=sous, auteur=auteur,
+                           themes=_docs_par_theme(), etat=etat_generation(),
+                           genere_le=datetime.utcfromtimestamp(genere) if genere else None,
+                           taille=(os.path.getsize(chemin) if genere else None))
+
+
+@admin_livre_bp.route('/pdf/reglages', methods=['POST'])
+@admin_required
+def livre_pdf_reglages():
+    from settings.models import set_config
+    set_config(KEY_TITRE, (request.form.get('titre') or '').strip())
+    set_config(KEY_SOUS_TITRE, (request.form.get('sous_titre') or '').strip())
+    set_config(KEY_AUTEUR, (request.form.get('auteur') or '').strip())
+    flash("Réglages du livre enregistrés.", 'success')
+    return redirect(url_for('admin_livre.livre_pdf'))
+
+
+@admin_livre_bp.route('/pdf/apercu')
+@admin_required
+def livre_pdf_apercu():
+    """A short PDF — the first chroniques of each chapter — served inline, now."""
+    from flask import Response
+    try:
+        from livre import pdf as pdfmod
+    except Exception as exc:
+        flash(f"Génération PDF indisponible : {exc}", 'danger')
+        return redirect(url_for('admin_livre.livre_pdf'))
+    titre, sous, auteur = _reglages_livre()
+    data = pdfmod.apercu(_docs_par_theme(), titre, sous, auteur, max_chroniques=3)
+    return Response(data, mimetype='application/pdf',
+                    headers={'Content-Disposition': 'inline; filename="apercu-livre.pdf"'})
+
+
+@admin_livre_bp.route('/pdf/couverture')
+@admin_required
+def livre_pdf_couverture():
+    from flask import Response
+    from livre import pdf as pdfmod
+    titre, sous, auteur = _reglages_livre()
+    return Response(pdfmod.couverture(titre, sous, auteur), mimetype='application/pdf',
+                    headers={'Content-Disposition': 'inline; filename="couverture.pdf"'})
+
+
+@admin_livre_bp.route('/pdf/generer', methods=['POST'])
+@admin_required
+def livre_pdf_generer():
+    from flask import current_app
+    if not generer_livre(current_app._get_current_object()):
+        flash("Une génération est déjà en cours.", 'danger')
+    return redirect(url_for('admin_livre.livre_pdf'))
+
+
+@admin_livre_bp.route('/pdf/etat')
+@admin_required
+def livre_pdf_etat():
+    return jsonify(etat_generation())
+
+
+@admin_livre_bp.route('/pdf/telecharger/<quoi>')
+@admin_required
+def livre_pdf_telecharger(quoi):
+    import os
+    from flask import send_file
+    fichier = {'livre': 'livre.pdf', 'couverture': 'couverture.pdf'}.get(quoi)
+    if not fichier:
+        abort(404)
+    chemin = os.path.join(_dossier_pdf(), fichier)
+    if not os.path.exists(chemin):
+        abort(404)
+    nom = 'chroniques-bernard-poignant.pdf' if quoi == 'livre' else 'couverture.pdf'
+    return send_file(chemin, mimetype='application/pdf', as_attachment=True, download_name=nom)
