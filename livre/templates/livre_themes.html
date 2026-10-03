@@ -1,0 +1,37 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — thèmes{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Les chapitres du livre. L'ordre ici est l'ordre du livre.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    <div style="display: grid; gap: 0.6rem; margin-top: 1rem;">
+    {% for t in themes %}
+        <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}"
+              style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: grid; grid-template-columns: 64px 1fr auto; gap: 0.6rem 0.8rem; align-items: center;">
+            <input type="number" name="position" value="{{ t.position }}" title="Ordre dans le livre"
+                   style="width: 64px; padding: 8px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; text-align: center;">
+            <div style="min-width: 0;">
+                <input type="text" name="name" value="{{ t.name }}" required
+                       style="width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 600;">
+                <input type="text" name="description" value="{{ t.description or '' }}" placeholder="Une ligne sur ce que rassemble ce chapitre (facultatif)"
+                       style="width: 100%; padding: 7px 10px; border: 1px solid #eee; border-radius: 8px; font-family: inherit; font-size: 0.85rem; margin-top: 0.4rem;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
+                <a href="{{ url_for('admin_livre.classes', theme=t.id) }}" style="font-size: 0.82rem; color: var(--gris); white-space: nowrap;">{{ comptes.get(t.id, 0) }} doc{{ 's' if comptes.get(t.id, 0) != 1 }}</a>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i></button>
+                <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
+                        onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, 0) }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
+            </div>
+        </form>
+    {% endfor %}
+    </div>
+
+    <form method="POST" action="{{ url_for('admin_livre.theme_add') }}" style="display: flex; gap: 0.5rem; margin-top: 1.2rem; flex-wrap: wrap;">
+        <input type="text" name="name" placeholder="Nouveau thème" required maxlength="80"
+               style="flex: 1 1 200px; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+        <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;"><i class="fas fa-plus"></i> Ajouter</button>
+    </form>
+{% endblock %}

@@ -104,6 +104,13 @@
             <i class="fa-brands fa-linkedin-in"></i> LinkedIn
         </a>
 
+        {# Le Livre : trier les Google Docs en chapitres. Après la création,
+           avant la mesure — c'est de l'écriture, pas de la diffusion. #}
+        <a href="{{ url_for('admin_livre.classer') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/livre') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-book"></i> Le Livre
+        </a>
+
         {# 4. Mesurer #}
         <a href="{{ url_for('analytics.dashboard') }}"
            class="btn btn-sm {% if _p.startswith('/admin/analytics') or _p.startswith('/seo')

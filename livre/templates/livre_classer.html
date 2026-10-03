@@ -1,0 +1,129 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — classification{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Un document à la fois : lire, choisir un chapitre, ou écarter.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    {# Une seule carte, pensée pour le pouce : le titre, la date, « Lire »,
+       puis les chapitres en gros boutons et « Ignorer » à part. La décision
+       appelle la carte suivante sans recharger. #}
+    <style>
+        .lv-carte { background: white; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.2rem 1.3rem; margin-top: 1rem; }
+        .lv-progress { height: 6px; background: var(--gris-clair); border-radius: 3px; overflow: hidden; margin: 0.6rem 0 1rem; }
+        .lv-progress div { height: 100%; background: var(--vert); transition: width .3s; }
+        .lv-titre { font-size: 1.25rem; font-weight: 700; line-height: 1.3; margin: 0 0 0.3rem; text-wrap: balance; }
+        .lv-meta { font-size: 0.82rem; color: var(--gris); display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .lv-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; margin: 1.1rem 0 0.9rem; }
+        .lv-themes button { min-height: 52px; border-radius: 12px; border: 2px solid #e0e0e0; background: white; font: inherit; font-weight: 600; font-size: 0.95rem; cursor: pointer; padding: 8px 10px; color: var(--noir); }
+        .lv-themes button:active { background: var(--vert); color: white; border-color: var(--vert); }
+        .lv-themes button.lv-plus { border-style: dashed; color: var(--gris); font-weight: 500; }
+        .lv-bas { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+        .lv-bas .btn { min-height: 46px; flex: 1 1 140px; }
+        .lv-lire { width: 100%; min-height: 52px; font-size: 1rem; }
+        .lv-fin { text-align: center; padding: 2rem 1rem; color: var(--gris); }
+        @media (max-width: 420px) { .lv-themes { grid-template-columns: 1fr 1fr; } }
+    </style>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 0.9rem; color: var(--gris);">
+            <span id="lv-compteur"><strong style="color: var(--noir);">{{ compte.a_classer }}</strong> à classer · {{ compte.classe }} classés · {{ compte.ignore }} ignorés</span>
+        </p>
+        {% if not total_docs %}
+        <form method="POST" action="{{ url_for('admin_livre.importer') }}" style="margin: 0;">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fab fa-google-drive"></i> Importer depuis Google Drive</button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="lv-progress" aria-hidden="true"><div id="lv-barre" style="width: {{ (100 * (compte.total - compte.a_classer) / compte.total) if compte.total else 0 }}%;"></div></div>
+
+    <div class="lv-carte" id="lv-carte" {% if not doc %}hidden{% endif %}>
+        <p class="lv-titre" id="lv-titre"></p>
+        <div class="lv-meta" id="lv-meta"></div>
+        <button type="button" class="btn btn-primary lv-lire" id="lv-lire"><i class="fas fa-book-open"></i> Lire le document</button>
+
+        <div class="lv-themes" id="lv-themes">
+            {% for t in themes %}
+            <button type="button" data-theme="{{ t.id }}" onclick="decider('theme', {{ t.id }}, this)">{{ t.name }}</button>
+            {% endfor %}
+            <button type="button" class="lv-plus" onclick="nouveauTheme()"><i class="fas fa-plus"></i> Nouveau thème</button>
+        </div>
+
+        <div class="lv-bas">
+            <button type="button" class="btn btn-outline" style="color: var(--noir); border-color: #e0e0e0;" onclick="decider('passer', null, this)">
+                <i class="fas fa-forward"></i> Passer
+            </button>
+            <button type="button" class="btn btn-outline" style="color: var(--rouge); border-color: var(--rouge);" onclick="decider('ignorer', null, this)">
+                <i class="fas fa-ban"></i> Ignorer
+            </button>
+        </div>
+    </div>
+
+    <div class="lv-carte lv-fin" id="lv-fin" {% if doc %}hidden{% endif %}>
+        {% if total_docs %}
+        <i class="fas fa-circle-check" style="color: var(--vert); font-size: 1.6rem;"></i>
+        <p style="margin: 0.6rem 0 0;">Tout est classé. {{ compte.classe }} documents dans le livre, {{ compte.ignore }} écartés.</p>
+        {% else %}
+        <i class="fab fa-google-drive" style="font-size: 1.6rem;"></i>
+        <p style="margin: 0.6rem 0 0;">Aucun document pour l'instant — lancez l'import depuis Google Drive ci-dessus. Il lit la liste puis le texte de chaque document, en quelques minutes.</p>
+        {% endif %}
+    </div>
+
+    <script>
+    let courant = {{ doc | tojson }};
+    const DECIDER_URL = "{{ url_for('admin_livre.decider', doc_id=0) }}".replace('/0/', '/{id}/');
+    const THEME_ADD_URL = "{{ url_for('admin_livre.theme_add') }}";
+
+    function dessiner() {
+        const carte = document.getElementById('lv-carte'), fin = document.getElementById('lv-fin');
+        if (!courant) { carte.hidden = true; fin.hidden = false; return; }
+        carte.hidden = false; fin.hidden = true;
+        document.getElementById('lv-titre').textContent = courant.nom;
+        const meta = [];
+        if (courant.date) meta.push('<span><i class="far fa-calendar"></i> ' + courant.date + '</span>');
+        if (courant.mots) meta.push('<span>' + courant.mots + ' mots</span>');
+        if (courant.article) meta.push('<span style="color: var(--vert);"><i class="fas fa-globe"></i> publié sur le site</span>');
+        meta.push('<a href="' + courant.drive + '" target="_blank" rel="noopener" style="color: var(--gris);"><i class="fab fa-google-drive"></i> ouvrir dans Drive</a>');
+        document.getElementById('lv-meta').innerHTML = meta.join(' · ');
+        document.getElementById('lv-lire').onclick = () => ouvrirLecture(courant.id, courant.nom, courant.date);
+        // Le texte du document se charge en avance : « Lire » est alors instantané.
+        chargerTexte(courant.id).catch(() => {});
+    }
+
+    function decider(action, themeId, bouton) {
+        if (!courant) return;
+        const id = courant.id;
+        document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = true);
+        const corps = new FormData(); corps.append('action', action);
+        if (themeId) corps.append('theme_id', themeId);
+        fetch(DECIDER_URL.replace('{id}', id), {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error(j.erreur || '');
+                courant = j.suivant;
+                const c = j.compte;
+                document.getElementById('lv-compteur').innerHTML = '<strong style="color: var(--noir);">' + c.a_classer + '</strong> à classer · ' + c.classe + ' classés · ' + c.ignore + ' ignorés';
+                document.getElementById('lv-barre').style.width = (c.total ? 100 * (c.total - c.a_classer) / c.total : 0) + '%';
+                fermerLecture();
+                dessiner();
+            }).catch(e => alert('Impossible d\'enregistrer : ' + e.message))
+            .finally(() => document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = false));
+    }
+
+    function nouveauTheme() {
+        const nom = prompt('Nom du nouveau thème :');
+        if (!nom || !nom.trim()) return;
+        const corps = new FormData(); corps.append('name', nom.trim());
+        fetch(THEME_ADD_URL, {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error(j.erreur || '');
+                const b = document.createElement('button'); b.type = 'button'; b.textContent = j.nom;
+                b.onclick = () => decider('theme', j.id, b);
+                document.querySelector('#lv-themes .lv-plus').before(b);
+            }).catch(e => alert(e.message || 'Création impossible.'));
+    }
+
+    dessiner();
+    </script>
+{% endblock %}

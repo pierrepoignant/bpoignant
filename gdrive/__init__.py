@@ -351,6 +351,36 @@ def list_documents(query=None, limit=50):
     ]
 
 
+def list_all_documents():
+    """Every Google Doc Bernard has, page after page.
+
+    `list_documents` stops at Drive's page limit of a hundred, which was fine
+    for the import picker and wrong for the book: the book needs the whole
+    shelf, including what he wrote years ago.
+    """
+    q = f"mimeType='{DOC_MIME}' and trashed=false"
+    out, page = [], None
+    while True:
+        params = {'q': q, 'orderBy': 'modifiedTime desc', 'pageSize': 100,
+                  'fields': 'nextPageToken,files(id,name,modifiedTime,createdTime)',
+                  'spaces': 'drive'}
+        if page:
+            params['pageToken'] = page
+        try:
+            resp = requests.get(FILES_URL, headers=_auth_headers(), params=params, timeout=_TIMEOUT)
+        except requests.RequestException as exc:
+            raise GoogleDriveError(f"Connexion à Google Drive impossible : {exc}") from exc
+        if resp.status_code != 200:
+            raise GoogleDriveError(_error_detail(resp, "la liste des documents"))
+        corps = resp.json()
+        out.extend({'id': f['id'], 'name': f.get('name', 'Sans titre'),
+                    'modified': f.get('modifiedTime', ''), 'created': f.get('createdTime', '')}
+                   for f in corps.get('files', []))
+        page = corps.get('nextPageToken')
+        if not page:
+            return out
+
+
 def get_document(file_id):
     """Fetch one Google Doc, exported as HTML.
 

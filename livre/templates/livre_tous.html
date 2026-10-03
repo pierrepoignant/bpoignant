@@ -1,0 +1,95 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — tous les documents{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Tout ce que Bernard a écrit dans Google Docs, du plus récent au plus ancien.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    {# L'import : la liste de Drive puis le texte de chaque document, une fois.
+       Il tourne en fond et dit où il en est ; le relancer ne lit que le neuf. #}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem;">
+        <p style="margin: 0; font-size: 0.9rem; color: var(--gris);">
+            <strong style="color: var(--noir);">{{ compte.total }}</strong> documents
+            {% if sans_texte %} · <span style="color: var(--rouge);">{{ sans_texte }} sans texte importé</span>{% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('admin_livre.importer') }}" style="margin: 0;"
+              onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Import lancé…';">
+            <button type="submit" class="btn btn-sm btn-primary" {% if etat.en_cours %}disabled{% endif %}>
+                <i class="fab fa-google-drive"></i> {{ 'Importer depuis Google Drive' if not compte.total else 'Mettre à jour depuis Drive' }}
+            </button>
+        </form>
+    </div>
+    <div id="import-etat" role="status" style="{% if not etat.en_cours and not etat.fini %}display: none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; line-height: 1.6; margin-top: 0.8rem;"></div>
+
+    <form method="GET" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0 0.8rem;">
+        <input type="search" name="q" value="{{ recherche }}" placeholder="Chercher dans les titres et les textes…"
+               style="flex: 1 1 220px; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+        <select name="statut" style="padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+            <option value="">Tous</option>
+            <option value="a_classer" {% if statut == 'a_classer' %}selected{% endif %}>À classer</option>
+            <option value="classe" {% if statut == 'classe' %}selected{% endif %}>Classés</option>
+            <option value="ignore" {% if statut == 'ignore' %}selected{% endif %}>Ignorés</option>
+        </select>
+        <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0; min-height: 40px;"><i class="fas fa-search"></i></button>
+    </form>
+
+    <div style="display: grid; gap: 0.5rem;">
+    {% for d in docs %}
+        <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.8rem 1rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+            <div style="flex: 1 1 240px; min-width: 0;">
+                <a href="#" onclick="ouvrirLecture({{ d.id }}, {{ d.name | tojson }}, {{ (d.created_at.strftime('%d/%m/%Y') if d.created_at else '') | tojson }}); return false;"
+                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.35;">{{ d.name }}</a>
+                <span style="font-size: 0.78rem; color: var(--gris);">
+                    {% if d.created_at %}{{ d.created_at.strftime('%d/%m/%Y') }}{% endif %}
+                    {% if d.word_count %} · {{ d.word_count }} mots{% elif not d.content_fetched_at %} · <span style="color: var(--rouge);">texte non importé</span>{% endif %}
+                    {% if d.article %} · <span style="color: var(--vert);"><i class="fas fa-globe"></i> publié</span>{% endif %}
+                </span>
+            </div>
+            {% if d.status == 'classe' %}
+            <span style="font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--vert); color: white;">{{ d.theme.name if d.theme else 'classé' }}</span>
+            {% elif d.status == 'ignore' %}
+            <span style="font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; border: 1px solid #e0e0e0; color: var(--gris);">ignoré</span>
+            {% else %}
+            <span style="font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; border: 1px dashed #ccc; color: var(--gris);">à classer</span>
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+    {% if not docs %}<p style="color: var(--gris); margin-top: 1rem;">Aucun document{% if recherche %} pour « {{ recherche }} »{% endif %}.</p>{% endif %}
+
+    {# La pagination garde la recherche et le filtre. #}
+    {% if pagination.pages > 1 %}
+    <div class="admin-row" style="justify-content: center; gap: 1rem; margin-top: 1.2rem; flex-wrap: wrap;">
+        {% if pagination.has_prev %}<a class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;" href="{{ url_for('admin_livre.tous', page=pagination.prev_num, q=recherche, statut=statut) }}"><i class="fas fa-arrow-left"></i> Précédent</a>{% endif %}
+        <span style="color: var(--gris); font-size: 0.9rem;">Page {{ pagination.page }} / {{ pagination.pages }} · {{ pagination.total }} documents</span>
+        {% if pagination.has_next %}<a class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;" href="{{ url_for('admin_livre.tous', page=pagination.next_num, q=recherche, statut=statut) }}">Suivant <i class="fas fa-arrow-right"></i></a>{% endif %}
+    </div>
+    {% endif %}
+
+    <script>
+    (function () {
+        const boite = document.getElementById('import-etat');
+        const url = "{{ url_for('admin_livre.importer_etat') }}";
+        let etaitEnCours = {{ 'true' if etat.en_cours else 'false' }};
+        function dessiner(e) {
+            if (!e.etape) { boite.style.display = 'none'; return; }
+            boite.style.display = 'block';
+            let html = (e.en_cours ? '<i class="fas fa-spinner fa-spin"></i> ' : '<i class="fas fa-circle-check" style="color: var(--vert);"></i> ') + '<strong>' + e.etape + '</strong>';
+            if (e.en_cours && e.total) html += ' — ' + e.faits + ' / ' + e.total + ' textes';
+            if (!e.en_cours) html += ' · ' + (e.nouveaux || 0) + ' nouveau(x) document(s), ' + (e.textes || 0) + ' texte(s) importé(s)';
+            if (e.erreurs && e.erreurs.length) html += '<br><span style="color: var(--rouge);">' + e.erreurs.length + ' échec(s) : ' + e.erreurs.slice(0, 5).join(' · ') + '</span>';
+            boite.innerHTML = html;
+        }
+        function tick() {
+            fetch(url).then(r => r.json()).then(e => {
+                dessiner(e);
+                if (e.en_cours) { etaitEnCours = true; setTimeout(tick, 3000); }
+                else if (etaitEnCours) { setTimeout(() => location.reload(), 1500); }
+            }).catch(() => setTimeout(tick, 5000));
+        }
+        {% if etat.en_cours or etat.fini %}tick();{% endif %}
+    })();
+    </script>
+{% endblock %}

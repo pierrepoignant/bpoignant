@@ -1,0 +1,52 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — {{ 'classés' if mode == 'classes' else 'ignorés' }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>{% if mode == 'classes' %}Ce qui entrera dans le livre, chapitre par chapitre.{% else %}Ce qui a été écarté — rien n'est perdu, tout se reprend.{% endif %}</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    {% if mode == 'classes' %}
+    <div class="admin-tabs" style="margin-top: 1rem;">
+        <a href="{{ url_for('admin_livre.classes') }}" class="btn btn-sm {% if not theme_id %}btn-primary{% else %}btn-outline{% endif %}" style="{% if theme_id %}color: var(--noir); border-color: #e0e0e0;{% endif %}">Tous · {{ compte.classe }}</a>
+        {% for t in themes %}
+        <a href="{{ url_for('admin_livre.classes', theme=t.id) }}" class="btn btn-sm {% if theme_id == t.id %}btn-primary{% else %}btn-outline{% endif %}" style="{% if theme_id != t.id %}color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ t.name }} · {{ par_theme.get(t.id, 0) }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not docs %}
+    <p style="color: var(--gris); margin-top: 1.5rem;">Rien ici pour l'instant.</p>
+    {% endif %}
+
+    {# Une ligne par document : titre, date, chapitre ; « Lire » ouvre l'overlay,
+       le menu change de chapitre ou renvoie dans la pile. #}
+    <div style="margin-top: 1rem; display: grid; gap: 0.5rem;">
+    {% for d in docs %}
+        <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.8rem 1rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+            <div style="flex: 1 1 240px; min-width: 0;">
+                <a href="#" onclick="ouvrirLecture({{ d.id }}, {{ d.name | tojson }}, {{ (d.created_at.strftime('%d/%m/%Y') if d.created_at else '') | tojson }}); return false;"
+                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.35;">{{ d.name }}</a>
+                <span style="font-size: 0.78rem; color: var(--gris);">
+                    {% if d.created_at %}{{ d.created_at.strftime('%d/%m/%Y') }}{% endif %}
+                    {% if d.word_count %} · {{ d.word_count }} mots{% endif %}
+                    {% if d.article %} · <span style="color: var(--vert);"><i class="fas fa-globe"></i> publié</span>{% endif %}
+                    {% if mode == 'classes' and d.theme and not theme_id %} · <strong>{{ d.theme.name }}</strong>{% endif %}
+                </span>
+            </div>
+            <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=d.id) }}" style="margin: 0; display: flex; gap: 0.4rem; align-items: center;">
+                {% if mode == 'classes' %}
+                <input type="hidden" name="action" value="theme">
+                <select name="theme_id" onchange="this.form.submit()" style="padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.85rem;">
+                    {% for t in themes %}<option value="{{ t.id }}" {% if d.theme_id == t.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+                </select>
+                <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline" title="Écarter du livre" style="color: var(--rouge); border-color: #e0e0e0;"><i class="fas fa-ban"></i></button>
+                {% else %}
+                <button type="submit" name="action" value="reprendre" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-rotate-left"></i> Reprendre</button>
+                {% endif %}
+            </form>
+        </div>
+    {% endfor %}
+    </div>
+{% endblock %}

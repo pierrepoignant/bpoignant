@@ -1,0 +1,70 @@
+{# Sous-menu du Livre : classer, voir ce qui l'est, ce qui est écarté, tout
+   parcourir, et les chapitres. Les compteurs disent où en est le travail. #}
+{% set _p = request.path %}
+<nav class="admin-tabs" aria-label="Le Livre" style="margin-top: -0.4rem;">
+    <a href="{{ url_for('admin_livre.classer') }}"
+       class="btn btn-sm {% if _p == url_for('admin_livre.classer') %}btn-vert{% else %}btn-outline{% endif %}">
+        Classification{% if compte and compte.a_classer %} <span style="opacity: .75;">· {{ compte.a_classer }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.classes') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/classes') %}btn-vert{% else %}btn-outline{% endif %}">
+        Classés{% if compte %} <span style="opacity: .75;">· {{ compte.classe }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.ignores') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/ignores') %}btn-vert{% else %}btn-outline{% endif %}">
+        Ignorés{% if compte %} <span style="opacity: .75;">· {{ compte.ignore }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.tous') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/tous') %}btn-vert{% else %}btn-outline{% endif %}">
+        Tous les documents
+    </a>
+    <a href="{{ url_for('admin_livre.themes') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/themes') %}btn-vert{% else %}btn-outline{% endif %}">
+        Thèmes
+    </a>
+</nav>
+
+{# L'overlay de lecture, partagé par toutes les pages du Livre : le texte
+   entier, en typographie de lecture, fermé d'un geste. #}
+<div id="lecture" hidden style="position: fixed; inset: 0; z-index: 400; background: rgba(20,22,34,0.55); display: flex; align-items: flex-end; justify-content: center;"
+     onclick="if (event.target === this) fermerLecture()">
+    <div style="background: white; width: 100%; max-width: 760px; max-height: 94vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--gris-clair);">
+            <div style="min-width: 0;">
+                <strong id="lecture-titre" style="display: block; font-size: 1rem; line-height: 1.3;"></strong>
+                <span id="lecture-meta" style="font-size: 0.78rem; color: var(--gris);"></span>
+            </div>
+            <button type="button" onclick="fermerLecture()" aria-label="Fermer"
+                    style="flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--gris-clair); font-size: 1.1rem; cursor: pointer;">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div id="lecture-corps" class="article-body" style="overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 1.1rem 1.3rem 2.5rem; font-size: 1.02rem; line-height: 1.7;"></div>
+    </div>
+</div>
+<script>
+    const TEXTE_URL = "{{ url_for('admin_livre.texte', doc_id=0) }}".replace('/0/', '/{id}/');
+    const cacheTextes = {};
+    function chargerTexte(id) {
+        if (cacheTextes[id]) return Promise.resolve(cacheTextes[id]);
+        return fetch(TEXTE_URL.replace('{id}', id)).then(r => r.json()).then(j => {
+            if (!j.ok) throw new Error(j.erreur || 'Texte illisible');
+            cacheTextes[id] = j; return j;
+        });
+    }
+    function ouvrirLecture(id, titre, meta) {
+        const boite = document.getElementById('lecture');
+        document.getElementById('lecture-titre').textContent = titre || '';
+        document.getElementById('lecture-meta').textContent = meta || '';
+        const corps = document.getElementById('lecture-corps');
+        corps.innerHTML = '<p style="color: var(--gris);"><i class="fas fa-spinner fa-spin"></i> Lecture du document…</p>';
+        boite.hidden = false; document.body.style.overflow = 'hidden';
+        chargerTexte(id).then(j => {
+            corps.innerHTML = j.html || '<p style="color: var(--gris);">Document vide.</p>';
+            corps.scrollTop = 0;
+            if (j.mots) document.getElementById('lecture-meta').textContent = (meta ? meta + ' · ' : '') + j.mots + ' mots';
+        }).catch(e => { corps.innerHTML = '<p style="color: var(--rouge);">' + e.message + '</p>'; });
+    }
+    function fermerLecture() { document.getElementById('lecture').hidden = true; document.body.style.overflow = ''; }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerLecture(); });
+</script>
