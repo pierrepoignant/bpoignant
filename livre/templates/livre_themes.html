@@ -51,9 +51,9 @@
                    n'est modifiable en ligne, tout passe par le panneau. #}
                 <a href="{{ url_for('admin_livre.chapitre', theme_id=t.id) }}" class="btn btn-sm btn-outline" title="Voir les chroniques du chapitre"
                    style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-list-ul"></i></a>
-                <button type="button" class="btn btn-sm btn-outline" title="Modifier le chapitre"
-                        style="color: var(--noir); border-color: #e0e0e0;"
-                        onclick='ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or "")|tojson }})'><i class="fas fa-pen-nib"></i></button>
+                <button type="button" class="btn btn-sm btn-outline" title="Écrire l'intro du chapitre et renommer"
+                        style="color: {{ 'var(--vert)' if t.description else 'var(--noir)' }}; border-color: #e0e0e0; white-space: nowrap;"
+                        onclick='ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or "")|tojson }})'><i class="fas fa-pen-nib"></i> Intro</button>
                 <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}" style="margin: 0;">
                     <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
                             onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, (0,0))[1] }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
@@ -71,9 +71,9 @@
 
     {# Le panneau d'édition : nom du chapitre et son intro, posés par-dessus la
        page, enregistrés d'un bouton. #}
-    <div id="panneau-theme" style="display: none; position: fixed; inset: 0; z-index: 400; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
+    <div id="panneau-theme" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
          onclick="if (event.target === this) fermerTheme()">
-        <form method="POST" id="form-theme" style="background: white; width: 100%; max-width: 620px; border-radius: 16px 16px 0 0; padding: 1.3rem 1.4rem 1.8rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
+        <form method="POST" id="form-theme" style="background: white; width: 100%; max-width: 620px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 1.3rem 1.4rem 1.8rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h2 style="font-size: 1.1rem; margin: 0;">Chapitre</h2>
                 <button type="button" onclick="fermerTheme()" aria-label="Fermer"
