@@ -24,7 +24,7 @@
     <div id="chroniques" style="display: grid; gap: 0.5rem;">
     {% for c in chroniques %}
         <div class="chro" data-id="{{ c.id }}"
-             style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.7rem 0.9rem; display: flex; gap: 0.6rem; align-items: center; {% if not c.in_book %}opacity: 0.5;{% endif %}">
+             style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.7rem 0.9rem; display: flex; gap: 0.6rem 0.5rem; align-items: center; flex-wrap: wrap; {% if not c.in_book %}opacity: 0.5;{% endif %}">
             <div class="poignee" style="cursor: grab; color: var(--gris); padding: 4px; touch-action: none;" title="Glisser"><i class="fas fa-grip-vertical"></i></div>
             <div style="display: flex; flex-direction: column; gap: 2px;">
                 <form method="POST" action="{{ url_for('admin_livre.chapitre_move', theme_id=theme.id, doc_id=c.id) }}" style="margin: 0;">
@@ -36,9 +36,9 @@
                     <button type="submit" class="btn btn-sm btn-outline" title="Descendre" {% if loop.last %}disabled{% endif %} style="color: var(--noir); border-color: #e0e0e0; padding: 3px 7px;"><i class="fas fa-chevron-down"></i></button>
                 </form>
             </div>
-            <div style="flex: 1; min-width: 0;">
+            <div style="flex: 1 1 120px; min-width: 0;">
                 <a href="#" onclick='ouvrirLecture({{ c.id }}, {{ c.titre|tojson }}, {{ (c.date_livre.strftime("%d/%m/%Y") if c.date_livre else "")|tojson }}); return false;'
-                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.3;">{{ c.titre }}</a>
+                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.3; word-break: break-word;">{{ c.titre }}</a>
                 <span style="font-size: 0.76rem; color: var(--gris);">
                     {% if c.date_livre %}{{ c.date_livre.strftime('%d/%m/%Y') }}{% endif %}
                     {% if c.word_count %} · {{ c.word_count }} mots{% endif %}
@@ -46,14 +46,10 @@
                     {% if not c.in_book %} · <span style="color: var(--rouge);">retirée</span>{% endif %}
                 </span>
             </div>
-            {# Changer de chapitre : la chronique quitte celui-ci. #}
-            <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=c.id) }}" style="margin: 0;">
-                <input type="hidden" name="action" value="theme">
-                <select name="theme_id" onchange="this.form.submit()" title="Changer de chapitre"
-                        style="padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.82rem; max-width: 130px;">
-                    {% for th in themes %}<option value="{{ th.id }}" {% if th.id == theme.id %}selected{% endif %}>{{ th.name }}</option>{% endfor %}
-                </select>
-            </form>
+            {# Changer de chapitre : un bouton compact ouvre le choix dans un panneau. #}
+            <button type="button" class="btn btn-sm btn-outline" title="Changer de chapitre"
+                    style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;"
+                    onclick='choisirChapitre({{ c.id }}, {{ c.titre|tojson }})'><i class="fas fa-folder-open"></i> Chapitre</button>
             {# Intro : écrire ou relire l'intro de cette chronique. Vert si faite. #}
             <a href="{{ url_for('admin_livre.intros', doc=c.id) }}" class="btn btn-sm btn-outline"
                title="{{ 'Relire l’intro' if c.intro else 'Écrire l’intro' }}"
@@ -68,6 +64,43 @@
     </div>
     {% if not chroniques %}<p style="color: var(--gris); margin-top: 1rem;">Aucune chronique dans ce chapitre.</p>{% endif %}
 
+
+    {# Panneau de choix du chapitre : la liste des chapitres en gros boutons. #}
+    <div id="panneau-chapitre" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
+         onclick="if (event.target === this) fermerChapitre()">
+        <div style="background: white; width: 100%; max-width: 620px; max-height: 85vh; max-height: 85dvh; overflow-y: auto; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
+            <div style="position: sticky; top: 0; background: white; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.2rem; border-bottom: 1px solid var(--gris-clair);">
+                <div style="min-width: 0;"><strong>Déplacer vers…</strong><br><span id="chap-titre" style="font-size: 0.8rem; color: var(--gris);"></span></div>
+                <button type="button" onclick="fermerChapitre()" aria-label="Fermer" style="flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; border: none; background: var(--gris-clair); color: var(--noir); font-size: 1.15rem; cursor: pointer;"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div style="padding: 1rem 1.2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                {% for th in themes %}
+                <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=0) }}" class="form-chap" data-base="{{ url_for('admin_livre.decider', doc_id=0) }}" style="margin: 0;">
+                    <input type="hidden" name="action" value="theme">
+                    <input type="hidden" name="theme_id" value="{{ th.id }}">
+                    <button type="submit" class="btn btn-outline" style="width: 100%; min-height: 46px; color: {{ 'var(--vert)' if th.id == theme.id else 'var(--noir)' }}; border-color: {{ 'var(--vert)' if th.id == theme.id else '#e0e0e0' }};">{{ th.name }}{% if th.id == theme.id %} ✓{% endif %}</button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let chapDocId = null;
+    function choisirChapitre(id, titre) {
+        chapDocId = id;
+        document.getElementById('chap-titre').textContent = titre || '';
+        // Chaque formulaire cible le document courant.
+        document.querySelectorAll('.form-chap').forEach(f => f.action = f.dataset.base.replace(/\/0\//, '/' + id + '/'));
+        document.getElementById('panneau-chapitre').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    function fermerChapitre() {
+        document.getElementById('panneau-chapitre').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerChapitre(); });
+    </script>
 
     <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
     <script>

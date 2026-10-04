@@ -36,7 +36,7 @@
                     {% if mode in ('classes', 'intros') and d.theme and not theme_id %} · <strong>{{ d.theme.name }}</strong>{% endif %}
                 </span>
             </div>
-            <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=d.id) }}" style="margin: 0; display: flex; gap: 0.4rem; align-items: center;">
+            <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=d.id) }}" style="margin: 0; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
                 {# Lire la chronique dans l'overlay, sur toutes les vues. #}
                 <button type="button" class="btn btn-sm btn-outline" title="Lire la chronique"
                         style="color: var(--noir); border-color: #e0e0e0;"
@@ -46,7 +46,7 @@
                    document dans la pile, sans chapitre. #}
                 <input type="hidden" name="action" value="theme" id="action-{{ d.id }}">
                 <select name="theme_id" onchange="if (this.value === 'reprendre') { document.getElementById('action-{{ d.id }}').value = 'reprendre'; } this.form.submit();"
-                        style="padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.85rem;">
+                        style="padding: 7px 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.85rem; max-width: 130px;">
                     {% for t in themes %}<option value="{{ t.id }}" {% if d.theme_id == t.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
                     <option disabled>──────</option>
                     <option value="reprendre">Retirer la classification</option>

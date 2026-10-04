@@ -9,7 +9,11 @@
 
     {% set total = namespace(v=0) %}{% for _e in themes %}{% set total.v = total.v + _e[1]|length %}{% endfor %}
 
-    <div style="display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; margin-top: 1rem; align-items: start;">
+    <style>
+      .livre-pdf-grille { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; margin-top: 1rem; align-items: start; }
+      @media (max-width: 640px) { .livre-pdf-grille { grid-template-columns: 1fr; } }
+    </style>
+    <div class="livre-pdf-grille">
       <div>
         {# Réglages du livre : titre, sous-titre, auteur. #}
         <form method="POST" action="{{ url_for('admin_livre.livre_pdf_reglages') }}"

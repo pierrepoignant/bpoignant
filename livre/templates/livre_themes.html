@@ -12,7 +12,7 @@
     </p>
     <div id="chapitres" style="display: grid; gap: 0.6rem;">
     {% for t in themes %}
-        <div class="chapitre" data-id="{{ t.id }}" style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: flex; gap: 0.7rem; align-items: flex-start;">
+        <div class="chapitre" data-id="{{ t.id }}" style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: flex; gap: 0.6rem; align-items: flex-start; flex-wrap: wrap;">
             {# Poignée de glisse : la seule zone qui déclenche le déplacement,
                pour ne pas gêner le défilement de la page au doigt. #}
             <div class="poignee" style="cursor: grab; color: var(--gris); padding: 4px 4px 0; touch-action: none; align-self: center;" title="Glisser pour déplacer">
@@ -32,8 +32,8 @@
                 </form>
             </div>
 
-            <div style="flex: 1; min-width: 0;">
-                <div style="font-weight: 600; font-size: 1rem;">
+            <div style="flex: 1 1 140px; min-width: 0;">
+                <div style="font-weight: 600; font-size: 1rem; word-break: break-word;">
                     <span class="rang" style="color: var(--gris); font-weight: 400;">{{ loop.index }}.</span> {{ t.name }}
                     {% set cc = comptes.get(t.id, (0, 0)) %}
                     <span style="font-size: 0.8rem; color: var(--gris); font-weight: 400; margin-left: 0.4rem;">{{ cc[0] }}{% if cc[0] != cc[1] %} / {{ cc[1] }}{% endif %} chronique{{ 's' if cc[1] != 1 }}</span>
@@ -46,7 +46,7 @@
                 {% endif %}
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
+            <div style="display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-left: auto;">
                 {# Édition dans un panneau, comme l'intro d'une chronique : rien
                    n'est modifiable en ligne, tout passe par le panneau. #}
                 <a href="{{ url_for('admin_livre.chapitre', theme_id=t.id) }}" class="btn btn-sm btn-outline" title="Voir les chroniques du chapitre"
