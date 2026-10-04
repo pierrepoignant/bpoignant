@@ -159,3 +159,47 @@ def public_url(key):
     c = _config()
     host = re.sub(r'^https?://', '', c['endpoint']).strip('/')
     return f"https://{c['bucket']}.{host}/{key}"
+
+
+# ─── Fichiers à clé fixe (le livre PDF) ──────────────────────
+#
+# À la différence des images, le livre se réécrit au même endroit à chaque
+# génération : une clé fixe, pas de suffixe aléatoire. Il n'est pas public —
+# on le relit à travers l'application, derrière l'authentification admin —
+# car un livre entier n'a pas à être devinable par URL.
+
+def put_file(key, data, content_type='application/octet-stream'):
+    """Write bytes at an exact key, replacing what was there. Returns the key."""
+    if not is_configured():
+        raise StorageError("Le stockage n'est pas configuré (OVH__…).")
+    c = _config()
+    try:
+        _client().put_object(Bucket=c['bucket'], Key=key, Body=data,
+                             ContentType=content_type)
+    except Exception as exc:
+        raise StorageError(f"Envoi vers le stockage impossible : {exc}") from exc
+    return key
+
+
+def get_file(key):
+    """Return the object's bytes, or None when it isn't there."""
+    if not is_configured():
+        return None
+    c = _config()
+    try:
+        resp = _client().get_object(Bucket=c['bucket'], Key=key)
+        return resp['Body'].read()
+    except Exception:
+        return None
+
+
+def stat_file(key):
+    """Return {'size', 'modified'} for an object, or None when absent."""
+    if not is_configured():
+        return None
+    c = _config()
+    try:
+        head = _client().head_object(Bucket=c['bucket'], Key=key)
+        return {'size': head.get('ContentLength'), 'modified': head.get('LastModified')}
+    except Exception:
+        return None

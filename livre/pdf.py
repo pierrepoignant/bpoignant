@@ -363,15 +363,15 @@ def construire(docs_par_theme, meta):
             pdf.set_text_color(*GRIS)
             pdf.cell(14, 6, str(page), align='R', new_x='LMARGIN', new_y='NEXT')
 
-    sortie = pdf.output()
-    return bytes(sortie)
+    data = bytes(pdf.output())
+    return data, pdf.pages_count
 
 
 def apercu(docs_par_theme, meta, max_chroniques=6):
     """Un PDF court — les premières chroniques de chaque chapitre — pour voir
     la mise en page sans composer quatre cents pages."""
     court = [(e[0], e[1][:max_chroniques], e[2] if len(e) > 2 else None) for e in docs_par_theme]
-    return construire(court, meta)
+    return construire(court, meta)  # (data, nb_pages)
 
 
 # ─── Couverture ─────────────────────────────────────────────

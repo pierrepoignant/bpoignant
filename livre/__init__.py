@@ -538,6 +538,14 @@ def theme_update(theme_id):
 KEY_TITRE = 'livre_titre'
 KEY_SOUS_TITRE = 'livre_sous_titre'
 KEY_AUTEUR = 'livre_auteur'
+# Le livre et la couverture sont stockés dans S3, à clé fixe (réécrite à chaque
+# génération) : le disque du pod est éphémère et recréé à chaque déploiement,
+# donc un fichier écrit là est oublié dès le redémarrage suivant.
+S3_LIVRE = 'livre/livre.pdf'
+S3_COUVERTURE = 'livre/couverture.pdf'
+# Ce qu'on sait de la dernière génération, gardé en base pour que la page le
+# retrouve quel que soit le pod qui la sert.
+KEY_PDF_META = 'livre_pdf_meta'
 # Les textes liminaires et de fin, et les mentions légales. Tous facultatifs :
 # une page n'est composée que si son champ est rempli.
 CHAMPS_LIVRE = {
@@ -627,19 +635,26 @@ def generer_livre(app):
     def _travail():
         with app.app_context():
             try:
+                import json
+                import storage
+                from settings.models import set_config
                 from livre import pdf as pdfmod
+                if not storage.is_configured():
+                    raise RuntimeError("Le stockage S3 n'est pas configuré — impossible d'enregistrer le livre.")
                 meta = _meta_livre()
                 themes = _docs_par_theme()
-                data = pdfmod.construire(themes, meta)
-                chemin = _os.path.join(_dossier_pdf(), 'livre.pdf')
-                with open(chemin, 'wb') as fh:
-                    fh.write(data)
+                n_chr = sum(len(c) for _, c, *_ in themes)
+                GEN.update(etape="Composition du livre…", chroniques=n_chr)
+                data, n_pages = pdfmod.construire(themes, meta)
+                GEN.update(etape="Enregistrement…", octets=len(data), pages=n_pages)
+                storage.put_file(S3_LIVRE, data, 'application/pdf')
                 couv = pdfmod.couverture(meta['titre'], meta['sous_titre'], meta['auteur'])
-                with open(_os.path.join(_dossier_pdf(), 'couverture.pdf'), 'wb') as fh:
-                    fh.write(couv)
-                n_chr = sum(len(c) for _, c in themes)
-                GEN.update(etape="Terminé", octets=len(data), chroniques=n_chr,
-                           genere_le=datetime.utcnow().isoformat(timespec='seconds'))
+                storage.put_file(S3_COUVERTURE, couv, 'application/pdf')
+                infos = {'genere_le': datetime.utcnow().isoformat(timespec='seconds'),
+                         'pages': n_pages, 'chroniques': n_chr, 'octets': len(data),
+                         'couverture_octets': len(couv)}
+                set_config(KEY_PDF_META, json.dumps(infos))
+                GEN.update(etape="Terminé", **infos)
             except Exception as exc:
                 log.exception('génération du livre')
                 GEN.update(etape="Échec", erreur=str(exc)[:200])
@@ -654,14 +669,25 @@ def generer_livre(app):
 @admin_required
 def livre_pdf():
     import os
+    import json
+    from settings.models import get_config
     meta = _meta_livre()
-    chemin = os.path.join(_dossier_pdf(), 'livre.pdf')
-    genere = os.path.getmtime(chemin) if os.path.exists(chemin) else None
+    infos = {}
+    try:
+        infos = json.loads(get_config(KEY_PDF_META) or '{}')
+    except ValueError:
+        infos = {}
+    genere_le = None
+    if infos.get('genere_le'):
+        try:
+            genere_le = datetime.fromisoformat(infos['genere_le'])
+        except ValueError:
+            genere_le = None
     return render_template('livre_pdf.html', compte=_compte(), meta=meta,
                            titre=meta['titre'], sous_titre=meta['sous_titre'], auteur=meta['auteur'],
                            themes=_docs_par_theme(), etat=etat_generation(),
-                           genere_le=datetime.utcfromtimestamp(genere) if genere else None,
-                           taille=(os.path.getsize(chemin) if genere else None))
+                           genere_le=genere_le, infos=infos,
+                           taille=infos.get('octets'))
 
 
 @admin_livre_bp.route('/pdf/reglages', methods=['POST'])
@@ -687,7 +713,7 @@ def livre_pdf_apercu():
     except Exception as exc:
         flash(f"Génération PDF indisponible : {exc}", 'danger')
         return redirect(url_for('admin_livre.livre_pdf'))
-    data = pdfmod.apercu(_docs_par_theme(), _meta_livre(), max_chroniques=3)
+    data, _ = pdfmod.apercu(_docs_par_theme(), _meta_livre(), max_chroniques=3)
     return Response(data, mimetype='application/pdf',
                     headers={'Content-Disposition': 'inline; filename="apercu-livre.pdf"'})
 
@@ -720,13 +746,14 @@ def livre_pdf_etat():
 @admin_livre_bp.route('/pdf/telecharger/<quoi>')
 @admin_required
 def livre_pdf_telecharger(quoi):
-    import os
-    from flask import send_file
-    fichier = {'livre': 'livre.pdf', 'couverture': 'couverture.pdf'}.get(quoi)
-    if not fichier:
+    import storage
+    from flask import Response
+    cle = {'livre': S3_LIVRE, 'couverture': S3_COUVERTURE}.get(quoi)
+    if not cle:
         abort(404)
-    chemin = os.path.join(_dossier_pdf(), fichier)
-    if not os.path.exists(chemin):
+    data = storage.get_file(cle)
+    if not data:
         abort(404)
-    nom = 'chroniques-bernard-poignant.pdf' if quoi == 'livre' else 'couverture.pdf'
-    return send_file(chemin, mimetype='application/pdf', as_attachment=True, download_name=nom)
+    nom = 'chroniques-bernard-poignant.pdf' if quoi == 'livre' else 'couverture-chroniques.pdf'
+    return Response(data, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{nom}"'})
