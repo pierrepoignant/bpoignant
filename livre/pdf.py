@@ -286,6 +286,29 @@ class Livre(FPDF):
 
 
 
+def _pages_sommaire(docs_par_theme):
+    """Exact number of TOC pages, by replaying the composition's page-break
+    rules numerically — so the reservation matches the fill, no truncation and
+    no blank page left over (which couldn't be trimmed without shifting every
+    page number the TOC points to)."""
+    bas_chap = PAGE_H - MARGE_BAS - 16
+    bas_chr = PAGE_H - MARGE_BAS - 10
+    y = MARGE_HAUT + 12 + 5          # après le titre « Sommaire »
+    pages = 1
+    chapitres = [e for e in docs_par_theme if e[1]]
+    for i, e in enumerate(chapitres):
+        if y > bas_chap:
+            pages += 1; y = MARGE_HAUT
+        if i:
+            y += 3
+        y += 7.5                     # ligne de chapitre
+        for _ in e[1]:
+            if y > bas_chr:
+                pages += 1; y = MARGE_HAUT
+            y += 6                   # ligne de chronique
+    return pages
+
+
 def construire(docs_par_theme, meta):
     """Assemble le PDF et renvoie les octets.
 
@@ -304,8 +327,9 @@ def construire(docs_par_theme, meta):
     if meta.get('epigraphe'):
         pdf._page_centree(meta['epigraphe'], meta.get('epigraphe_src') or None)
 
-    # On réserve la place du sommaire : une page (deux si long), remplie après.
-    pages_sommaire = max(1, (sum(1 for _ in docs_par_theme) + 24) // 26)
+    # Place exacte du sommaire détaillé, calculée par simulation de la mise en
+    # page : ni sommaire tronqué, ni page blanche résiduelle.
+    pages_sommaire = _pages_sommaire(docs_par_theme)
     for _ in range(pages_sommaire):
         pdf.sans_tete = True
         pdf.add_page()
