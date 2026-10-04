@@ -37,6 +37,10 @@
                 </span>
             </div>
             <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=d.id) }}" style="margin: 0; display: flex; gap: 0.4rem; align-items: center;">
+                {# Lire la chronique dans l'overlay, sur toutes les vues. #}
+                <button type="button" class="btn btn-sm btn-outline" title="Lire la chronique"
+                        style="color: var(--noir); border-color: #e0e0e0;"
+                        onclick="ouvrirLecture({{ d.id }}, {{ d.titre|tojson }}, {{ (d.date_livre.strftime('%d/%m/%Y') if d.date_livre else '')|tojson }})"><i class="fas fa-book-open"></i></button>
                 {% if mode == 'classes' %}
                 {# Le menu change de chapitre ; sa dernière entrée renvoie le
                    document dans la pile, sans chapitre. #}
