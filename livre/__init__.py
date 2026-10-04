@@ -171,7 +171,7 @@ def _compte():
     return {'a_classer': rows.get('a_classer', 0), 'classe': rows.get('classe', 0),
             'ignore': rows.get('ignore', 0), 'total': total,
             'au_livre': classes.filter_by(in_book=True).count(),
-            'intro_a_faire': classes.filter(BookDoc.in_book.is_(True), BookDoc.intro.is_(None)).count(),
+            'intro_a_faire': classes.filter(BookDoc.in_book.is_(True), BookDoc.intro.is_(None), BookDoc.no_intro.is_(False)).count(),
             'intro_faite': classes.filter(BookDoc.in_book.is_(True), BookDoc.intro.isnot(None)).count()}
 
 
@@ -313,7 +313,7 @@ def _prochain_sans_intro(apres_id=None):
     chapter by chapter, oldest first, so Bernard writes a chapter in the
     order the reader will meet it."""
     q = BookDoc.query.filter(BookDoc.status == 'classe', BookDoc.missing.is_(False),
-                             BookDoc.in_book.is_(True), BookDoc.intro.is_(None))
+                             BookDoc.in_book.is_(True), BookDoc.intro.is_(None), BookDoc.no_intro.is_(False))
     if apres_id:
         pivot = db.session.get(BookDoc, apres_id)
         if pivot is not None:
@@ -354,6 +354,12 @@ def intro_save(doc_id):
         texte = (request.form.get('intro') or '').strip()
         doc.intro = texte or None
         doc.intro_at = datetime.utcnow() if texte else None
+        doc.no_intro = False
+        db.session.commit()
+    elif action == 'sans_intro':
+        # Pas d'intro pour celle-ci : on ne la repropose plus.
+        doc.no_intro = True
+        doc.intro = None
         db.session.commit()
     suivant = _prochain_sans_intro(apres_id=doc.id if action == 'passer' else None)
     if request.headers.get('X-Requested-With') == 'fetch':

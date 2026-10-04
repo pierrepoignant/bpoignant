@@ -64,6 +64,9 @@ class BookDoc(db.Model):
     # Le petit mot de Bernard en tête de chaque texte du livre.
     intro = db.Column(db.Text, nullable=True)
     intro_at = db.Column(db.DateTime, nullable=True)
+    # Bernard a jugé que cette chronique n'a pas besoin d'intro : on ne la
+    # repropose plus, mais elle entre quand même dans le livre.
+    no_intro = db.Column(db.Boolean, default=False, nullable=False)
 
     # Dans le livre ou mis de côté sans être déclassé : la curation de l'édition
     # imprimée (trop longue pour un seul volume) se fait ici, pas en retirant
