@@ -54,6 +54,10 @@
                     {% for th in themes %}<option value="{{ th.id }}" {% if th.id == theme.id %}selected{% endif %}>{{ th.name }}</option>{% endfor %}
                 </select>
             </form>
+            {# Intro : écrire ou relire l'intro de cette chronique. Vert si faite. #}
+            <a href="{{ url_for('admin_livre.intros', doc=c.id) }}" class="btn btn-sm btn-outline"
+               title="{{ 'Relire l’intro' if c.intro else 'Écrire l’intro' }}"
+               style="color: {{ 'var(--vert)' if c.intro else 'var(--noir)' }}; border-color: #e0e0e0; white-space: nowrap;"><i class="fas fa-pen-nib"></i> Intro</a>
             {# L'œil : dans le livre / retiré. #}
             <button type="button" class="oeil btn btn-sm btn-outline" title="{{ 'Retirer du livre' if c.in_book else 'Remettre dans le livre' }}"
                     data-id="{{ c.id }}" data-in="{{ 1 if c.in_book else 0 }}"
