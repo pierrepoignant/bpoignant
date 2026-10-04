@@ -1,0 +1,94 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — {{ theme.name }}{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}
+<p style="margin: 0;">
+    <a href="{{ url_for('admin_livre.themes') }}" style="color: var(--gris);"><i class="fas fa-arrow-left"></i> Chapitres</a>
+    · <strong>{{ theme.name }}</strong>
+</p>
+{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    <p style="font-size: 0.9rem; color: var(--gris); margin: 1rem 0 0.2rem;">
+        <strong style="color: var(--noir);">{{ retenus }}</strong> chronique{{ 's' if retenus != 1 }} dans ce chapitre
+        {% if retenus != chroniques|length %}· {{ chroniques|length - retenus }} retirée{{ 's' if (chroniques|length - retenus) != 1 }}{% endif %}
+    </p>
+    <p style="font-size: 0.82rem; color: var(--gris); margin: 0 0 0.9rem; line-height: 1.5;">
+        <i class="fas fa-grip-vertical"></i> Glissez par la poignée pour changer l'ordre dans le livre.
+        L'œil <i class="far fa-eye"></i> retire une chronique du livre sans la déclasser.
+    </p>
+
+    <div id="chroniques" style="display: grid; gap: 0.5rem;">
+    {% for c in chroniques %}
+        <div class="chro" data-id="{{ c.id }}"
+             style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.7rem 0.9rem; display: flex; gap: 0.6rem; align-items: center; {% if not c.in_book %}opacity: 0.5;{% endif %}">
+            <div class="poignee" style="cursor: grab; color: var(--gris); padding: 4px; touch-action: none;" title="Glisser"><i class="fas fa-grip-vertical"></i></div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+                <form method="POST" action="{{ url_for('admin_livre.chapitre_move', theme_id=theme.id, doc_id=c.id) }}" style="margin: 0;">
+                    <input type="hidden" name="sens" value="monter">
+                    <button type="submit" class="btn btn-sm btn-outline" title="Monter" {% if loop.first %}disabled{% endif %} style="color: var(--noir); border-color: #e0e0e0; padding: 3px 7px;"><i class="fas fa-chevron-up"></i></button>
+                </form>
+                <form method="POST" action="{{ url_for('admin_livre.chapitre_move', theme_id=theme.id, doc_id=c.id) }}" style="margin: 0;">
+                    <input type="hidden" name="sens" value="descendre">
+                    <button type="submit" class="btn btn-sm btn-outline" title="Descendre" {% if loop.last %}disabled{% endif %} style="color: var(--noir); border-color: #e0e0e0; padding: 3px 7px;"><i class="fas fa-chevron-down"></i></button>
+                </form>
+            </div>
+            <div style="flex: 1; min-width: 0;">
+                <a href="#" onclick="ouvrirLecture({{ c.id }}, {{ c.titre|tojson }}, {{ (c.date_livre.strftime('%d/%m/%Y') if c.date_livre else '')|tojson }}); return false;"
+                   style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.3;">{{ c.titre }}</a>
+                <span style="font-size: 0.76rem; color: var(--gris);">
+                    {% if c.date_livre %}{{ c.date_livre.strftime('%d/%m/%Y') }}{% endif %}
+                    {% if c.word_count %} · {{ c.word_count }} mots{% endif %}
+                    {% if c.intro %} · <span style="color: var(--vert);">intro</span>{% endif %}
+                    {% if not c.in_book %} · <span style="color: var(--rouge);">retirée</span>{% endif %}
+                </span>
+            </div>
+            {# L'œil : dans le livre / retiré. #}
+            <button type="button" class="oeil btn btn-sm btn-outline" title="{{ 'Retirer du livre' if c.in_book else 'Remettre dans le livre' }}"
+                    data-id="{{ c.id }}" data-in="{{ 1 if c.in_book else 0 }}"
+                    style="color: {{ 'var(--noir)' if c.in_book else 'var(--rouge)' }}; border-color: #e0e0e0;"
+                    onclick="basculer(this)"><i class="{{ 'far fa-eye' if c.in_book else 'far fa-eye-slash' }}"></i></button>
+        </div>
+    {% endfor %}
+    </div>
+    {% if not chroniques %}<p style="color: var(--gris); margin-top: 1rem;">Aucune chronique dans ce chapitre.</p>{% endif %}
+
+
+    <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
+    <script>
+    const URL_IN_BOOK = "{{ url_for('admin_livre.doc_in_book', doc_id=0) }}".replace('/0/', '/{id}/');
+    function basculer(btn) {
+        const id = btn.dataset.id, inclure = btn.dataset.in === '1' ? '0' : '1';
+        const corps = new FormData(); corps.append('inclure', inclure);
+        btn.disabled = true;
+        fetch(URL_IN_BOOK.replace('{id}', id), {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error();
+                const carte = btn.closest('.chro');
+                btn.dataset.in = j.in_book ? '1' : '0';
+                btn.querySelector('i').className = j.in_book ? 'far fa-eye' : 'far fa-eye-slash';
+                btn.style.color = j.in_book ? 'var(--noir)' : 'var(--rouge)';
+                btn.title = j.in_book ? 'Retirer du livre' : 'Remettre dans le livre';
+                carte.style.opacity = j.in_book ? '1' : '0.5';
+            }).catch(() => alert('Impossible de modifier.'))
+            .finally(() => btn.disabled = false);
+    }
+    (function () {
+        const liste = document.getElementById('chroniques');
+        if (!liste || !window.Sortable) return;
+        Sortable.create(liste, {
+            handle: '.poignee', animation: 150, delay: 120, delayOnTouchOnly: true, ghostClass: 'glisse-fantome',
+            onEnd: function () {
+                const corps = new FormData();
+                [...liste.querySelectorAll('.chro')].forEach(el => corps.append('ordre[]', el.dataset.id));
+                fetch("{{ url_for('admin_livre.chapitre_ordre', theme_id=theme.id) }}", {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+                    .then(r => r.json()).then(j => { if (!j.ok) location.reload(); }).catch(() => location.reload());
+            }
+        });
+    })();
+    </script>
+    <style>.glisse-fantome { opacity: 0.4; } .chro.sortable-chosen { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }</style>
+{% endblock %}

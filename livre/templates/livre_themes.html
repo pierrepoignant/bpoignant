@@ -7,10 +7,18 @@
 {% block admin_content %}
     {% include '_livre_nav.html' %}
 
-    <div style="display: grid; gap: 0.6rem; margin-top: 1rem;">
+    <p style="font-size: 0.85rem; color: var(--gris); margin: 1rem 0 0.6rem;">
+        <i class="fas fa-up-down-left-right"></i> Glissez un chapitre par la poignée pour le déplacer — ou les flèches. L'ordre ici est l'ordre du livre.
+    </p>
+    <div id="chapitres" style="display: grid; gap: 0.6rem;">
     {% for t in themes %}
-        <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: flex; gap: 0.9rem; align-items: flex-start;">
-            {# Monter / descendre : l'ordre des chapitres dans le livre. #}
+        <div class="chapitre" data-id="{{ t.id }}" style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.9rem 1rem; display: flex; gap: 0.7rem; align-items: flex-start;">
+            {# Poignée de glisse : la seule zone qui déclenche le déplacement,
+               pour ne pas gêner le défilement de la page au doigt. #}
+            <div class="poignee" style="cursor: grab; color: var(--gris); padding: 4px 4px 0; touch-action: none; align-self: center;" title="Glisser pour déplacer">
+                <i class="fas fa-grip-vertical"></i>
+            </div>
+            {# Monter / descendre : repli si la glisse n'est pas pratique. #}
             <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 2px;">
                 <form method="POST" action="{{ url_for('admin_livre.theme_move', theme_id=t.id) }}" style="margin: 0;">
                     <input type="hidden" name="sens" value="monter">
@@ -26,8 +34,9 @@
 
             <div style="flex: 1; min-width: 0;">
                 <div style="font-weight: 600; font-size: 1rem;">
-                    <span style="color: var(--gris); font-weight: 400;">{{ loop.index }}.</span> {{ t.name }}
-                    <a href="{{ url_for('admin_livre.classes', theme=t.id) }}" style="font-size: 0.8rem; color: var(--gris); font-weight: 400; margin-left: 0.4rem;">{{ comptes.get(t.id, 0) }} doc{{ 's' if comptes.get(t.id, 0) != 1 }}</a>
+                    <span class="rang" style="color: var(--gris); font-weight: 400;">{{ loop.index }}.</span> {{ t.name }}
+                    {% set cc = comptes.get(t.id, (0, 0)) %}
+                    <span style="font-size: 0.8rem; color: var(--gris); font-weight: 400; margin-left: 0.4rem;">{{ cc[0] }}{% if cc[0] != cc[1] %} / {{ cc[1] }}{% endif %} chronique{{ 's' if cc[1] != 1 }}</span>
                 </div>
                 {# L'intro du chapitre, montrée telle quelle si elle existe. #}
                 {% if t.description %}
@@ -40,12 +49,14 @@
             <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
                 {# Édition dans un panneau, comme l'intro d'une chronique : rien
                    n'est modifiable en ligne, tout passe par le panneau. #}
+                <a href="{{ url_for('admin_livre.chapitre', theme_id=t.id) }}" class="btn btn-sm btn-outline" title="Voir les chroniques du chapitre"
+                   style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-list-ul"></i></a>
                 <button type="button" class="btn btn-sm btn-outline" title="Modifier le chapitre"
                         style="color: var(--noir); border-color: #e0e0e0;"
                         onclick="ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or '')|tojson }})"><i class="fas fa-pen-nib"></i></button>
                 <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}" style="margin: 0;">
                     <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
-                            onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, 0) }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
+                            onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, (0,0))[1] }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>
                 </form>
             </div>
         </div>
@@ -96,4 +107,36 @@
     }
     document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerTheme(); });
     </script>
+
+    <script src="{{ url_for('static', filename='js/sortable.min.js') }}"></script>
+    <script>
+    (function () {
+        const liste = document.getElementById('chapitres');
+        if (!liste || !window.Sortable) return;
+        function renumeroter() {
+            liste.querySelectorAll('.chapitre .rang').forEach((el, i) => el.textContent = (i + 1) + '.');
+            // Première/dernière : désactiver les flèches qui ne mènent nulle part.
+            const lignes = liste.querySelectorAll('.chapitre');
+            lignes.forEach((ligne, i) => {
+                const [haut, bas] = ligne.querySelectorAll('button[type=submit] .fa-chevron-up, button[type=submit] .fa-chevron-down');
+                if (haut) haut.closest('button').disabled = (i === 0);
+                if (bas) bas.closest('button').disabled = (i === lignes.length - 1);
+            });
+        }
+        Sortable.create(liste, {
+            handle: '.poignee', animation: 150, delay: 120, delayOnTouchOnly: true,
+            ghostClass: 'glisse-fantome',
+            onEnd: function () {
+                renumeroter();
+                const ordre = [...liste.querySelectorAll('.chapitre')].map(el => el.dataset.id);
+                const corps = new FormData();
+                ordre.forEach(id => corps.append('ordre[]', id));
+                fetch("{{ url_for('admin_livre.themes_ordre') }}", {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+                    .then(r => r.json()).then(j => { if (!j.ok) location.reload(); })
+                    .catch(() => location.reload());
+            }
+        });
+    })();
+    </script>
+    <style>.glisse-fantome { opacity: 0.4; } .chapitre.sortable-chosen { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }</style>
 {% endblock %}

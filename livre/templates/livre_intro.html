@@ -39,6 +39,7 @@
         <div class="lv-bas">
             <button type="button" class="btn btn-primary" onclick="envoyer('enregistrer', this)"><i class="fas fa-check"></i> Enregistrer et suivant</button>
             <button type="button" class="btn btn-outline" style="color: var(--noir); border-color: #e0e0e0;" onclick="envoyer('passer', this)"><i class="fas fa-forward"></i> Passer</button>
+            <button type="button" class="btn btn-outline" style="color: var(--rouge); border-color: #e0e0e0;" onclick="retirer(this)" title="Retirer cette chronique du livre"><i class="far fa-eye-slash"></i> Retirer du livre</button>
         </div>
     </div>
 
@@ -84,6 +85,20 @@
                 fermerLecture(); dessiner(); window.scrollTo({top: 0});
             }).catch(e => alert('Impossible d\'enregistrer : ' + e.message))
             .finally(() => document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = false));
+    }
+    function retirer(bouton) {
+        if (!courant) return;
+        document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = true);
+        const corps = new FormData(); corps.append('inclure', '0');
+        fetch("{{ url_for('admin_livre.doc_in_book', doc_id=0) }}".replace('/0/', '/' + courant.id + '/'),
+              {method: 'POST', body: corps, headers: {'X-Requested-With': 'fetch'}})
+            .then(r => r.json()).then(j => {
+                if (!j.ok) throw new Error();
+                const c = j.compte;
+                document.getElementById('lv-compteur').innerHTML = '<strong style="color: var(--noir);">' + c.intro_a_faire + '</strong> intro' + (c.intro_a_faire !== 1 ? 's' : '') + ' à faire · ' + c.intro_faite + ' faite' + (c.intro_faite !== 1 ? 's' : '');
+                // Passer au suivant sans compter celui qu'on vient de retirer.
+                envoyer('passer', bouton);
+            }).catch(() => { alert('Impossible de retirer.'); document.querySelectorAll('#lv-carte button').forEach(b => b.disabled = false); });
     }
     dessiner();
     </script>

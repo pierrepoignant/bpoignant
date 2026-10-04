@@ -170,8 +170,9 @@ def _compte():
     classes = BookDoc.query.filter_by(status='classe', missing=False)
     return {'a_classer': rows.get('a_classer', 0), 'classe': rows.get('classe', 0),
             'ignore': rows.get('ignore', 0), 'total': total,
-            'intro_a_faire': classes.filter(BookDoc.intro.is_(None)).count(),
-            'intro_faite': classes.filter(BookDoc.intro.isnot(None)).count()}
+            'au_livre': classes.filter_by(in_book=True).count(),
+            'intro_a_faire': classes.filter(BookDoc.in_book.is_(True), BookDoc.intro.is_(None)).count(),
+            'intro_faite': classes.filter(BookDoc.in_book.is_(True), BookDoc.intro.isnot(None)).count()}
 
 
 def _suivant(apres_id=None):
@@ -312,13 +313,13 @@ def _prochain_sans_intro(apres_id=None):
     chapter by chapter, oldest first, so Bernard writes a chapter in the
     order the reader will meet it."""
     q = BookDoc.query.filter(BookDoc.status == 'classe', BookDoc.missing.is_(False),
-                             BookDoc.intro.is_(None))
+                             BookDoc.in_book.is_(True), BookDoc.intro.is_(None))
     if apres_id:
         pivot = db.session.get(BookDoc, apres_id)
         if pivot is not None:
             q = q.filter(BookDoc.id != pivot.id)
     return (q.join(BookTheme, BookTheme.id == BookDoc.theme_id)
-            .order_by(BookTheme.position, BookDoc.written_at.asc(), BookDoc.created_at.asc(), BookDoc.id.asc())
+            .order_by(BookTheme.position, *_ordre_chapitre())
             .first())
 
 
@@ -360,6 +361,61 @@ def intro_save(doc_id):
     return redirect(request.referrer or url_for('admin_livre.intros'))
 
 
+@admin_livre_bp.route('/chapitre/<int:theme_id>')
+@admin_required
+def chapitre(theme_id):
+    """Les chroniques d'un chapitre : lire, retirer du livre, réordonner."""
+    t = db.session.get(BookTheme, theme_id) or abort(404)
+    chroniques = _chroniques_du_chapitre(t, inclus_seulement=False)
+    return render_template('livre_chapitre.html', theme=t, chroniques=chroniques,
+                           retenus=sum(1 for c in chroniques if c.in_book), compte=_compte())
+
+
+@admin_livre_bp.route('/doc/<int:doc_id>/livre', methods=['POST'])
+@admin_required
+def doc_in_book(doc_id):
+    """Retirer une chronique du livre, ou l'y remettre — sans la déclasser."""
+    d = db.session.get(BookDoc, doc_id) or abort(404)
+    d.in_book = request.form.get('inclure') == '1'
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True, 'in_book': d.in_book, 'compte': _compte()})
+    return redirect(request.referrer or url_for('admin_livre.chapitre', theme_id=d.theme_id))
+
+
+@admin_livre_bp.route('/chapitre/<int:theme_id>/ordre', methods=['POST'])
+@admin_required
+def chapitre_ordre(theme_id):
+    """Fixer l'ordre des chroniques du chapitre depuis la liste complète d'ids."""
+    t = db.session.get(BookTheme, theme_id) or abort(404)
+    ids = request.form.getlist('ordre[]') or (request.form.get('ordre') or '').split(',')
+    ids = [int(x) for x in ids if str(x).strip().isdigit()]
+    par_id = {d.id: d for d in t.docs.filter_by(status='classe').all()}
+    for i, did in enumerate(ids):
+        if did in par_id:
+            par_id[did].book_position = i
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
+    return redirect(url_for('admin_livre.chapitre', theme_id=theme_id))
+
+
+@admin_livre_bp.route('/chapitre/<int:theme_id>/doc/<int:doc_id>/deplacer', methods=['POST'])
+@admin_required
+def chapitre_move(theme_id, doc_id):
+    """Monter/descendre une chronique d'un cran dans le chapitre."""
+    t = db.session.get(BookTheme, theme_id) or abort(404)
+    ordonnes = _chroniques_du_chapitre(t, inclus_seulement=False)
+    for i, d in enumerate(ordonnes):
+        d.book_position = i
+    i = next(k for k, d in enumerate(ordonnes) if d.id == doc_id)
+    j = i - 1 if request.form.get('sens') == 'monter' else i + 1
+    if 0 <= j < len(ordonnes):
+        ordonnes[i].book_position, ordonnes[j].book_position = ordonnes[j].book_position, ordonnes[i].book_position
+    db.session.commit()
+    return redirect(url_for('admin_livre.chapitre', theme_id=theme_id))
+
+
 @admin_livre_bp.route('/classes')
 @admin_required
 def classes():
@@ -392,7 +448,8 @@ def ignores():
 def themes():
     seed_themes()
     liste = BookTheme.query.order_by(BookTheme.position, BookTheme.name).all()
-    comptes = {t.id: t.docs.filter_by(status='classe').count() for t in liste}
+    comptes = {t.id: (t.docs.filter_by(status='classe', in_book=True).count(),
+                      t.docs.filter_by(status='classe').count()) for t in liste}
     return render_template('livre_themes.html', themes=liste, comptes=comptes, compte=_compte())
 
 
@@ -410,6 +467,23 @@ def theme_add():
     elif request.headers.get('X-Requested-With') == 'fetch':
         return jsonify({'ok': False, 'erreur': 'Nom vide ou déjà pris.'}), 400
     return redirect(request.referrer or url_for('admin_livre.themes'))
+
+
+@admin_livre_bp.route('/themes/ordre', methods=['POST'])
+@admin_required
+def themes_ordre():
+    """Set every chapter's position from a full ordered list of ids — the
+    drag-and-drop sends the whole new order at once."""
+    ids = request.form.getlist('ordre[]') or (request.form.get('ordre') or '').split(',')
+    ids = [int(x) for x in ids if str(x).strip().isdigit()]
+    par_id = {t.id: t for t in BookTheme.query.all()}
+    for i, tid in enumerate(ids):
+        if tid in par_id:
+            par_id[tid].position = i
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'ok': True})
+    return redirect(url_for('admin_livre.themes'))
 
 
 @admin_livre_bp.route('/themes/<int:theme_id>/deplacer', methods=['POST'])
@@ -494,12 +568,27 @@ def _meta_livre():
     return meta
 
 
+def _ordre_chapitre():
+    """Clé d'ordre d'une chronique dans son chapitre : la position manuelle
+    quand elle existe, sinon la date d'écriture."""
+    return (db.func.coalesce(BookDoc.book_position, 1000000),
+            db.func.coalesce(BookDoc.written_at, db.func.date(BookDoc.created_at)),
+            BookDoc.id)
+
+
+def _chroniques_du_chapitre(theme, inclus_seulement=True):
+    q = theme.docs.filter_by(status='classe')
+    if inclus_seulement:
+        q = q.filter_by(in_book=True)
+    return q.order_by(*_ordre_chapitre()).all()
+
+
 def _docs_par_theme():
-    """(nom, [chroniques]) dans l'ordre du livre ; par thème, du plus ancien."""
-    ordre = db.func.coalesce(BookDoc.written_at, db.func.date(BookDoc.created_at))
+    """(nom, [chroniques], intro) dans l'ordre du livre ; seules les chroniques
+    retenues (in_book), dans l'ordre du chapitre."""
     out = []
     for t in BookTheme.query.order_by(BookTheme.position, BookTheme.name).all():
-        ch = (t.docs.filter_by(status='classe').order_by(ordre.asc(), BookDoc.id.asc()).all())
+        ch = _chroniques_du_chapitre(t)
         if ch:
             out.append((t.name, ch, t.description))
     return out

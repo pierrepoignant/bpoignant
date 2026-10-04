@@ -65,6 +65,13 @@ class BookDoc(db.Model):
     intro = db.Column(db.Text, nullable=True)
     intro_at = db.Column(db.DateTime, nullable=True)
 
+    # Dans le livre ou mis de côté sans être déclassé : la curation de l'édition
+    # imprimée (trop longue pour un seul volume) se fait ici, pas en retirant
+    # le document du chapitre.
+    in_book = db.Column(db.Boolean, default=True, nullable=False)
+    # Ordre manuel dans le chapitre ; à vide, c'est l'ordre chronologique.
+    book_position = db.Column(db.Integer, nullable=True)
+
     @property
     def titre(self):
         return self.title or self.name

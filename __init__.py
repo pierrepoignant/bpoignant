@@ -382,7 +382,8 @@ def _migrate_schema():
     if 'book_docs' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('book_docs')}
         ajouts = {'title': 'VARCHAR(300) NULL', 'written_at': 'DATE NULL', 'intro': 'TEXT NULL',
-                  'intro_at': 'DATETIME NULL', 'source_html': 'MEDIUMTEXT NULL'}
+                  'intro_at': 'DATETIME NULL', 'source_html': 'MEDIUMTEXT NULL',
+                  'in_book': 'BOOLEAN NOT NULL DEFAULT 1', 'book_position': 'INTEGER NULL'}
         for col, typ in ajouts.items():
             if col not in cols:
                 db.session.execute(text(f"ALTER TABLE book_docs ADD COLUMN {col} {typ}"))
