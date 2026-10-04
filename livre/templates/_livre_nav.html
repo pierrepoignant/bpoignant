@@ -6,6 +6,10 @@
        class="btn btn-sm {% if _p == url_for('admin_livre.classer') %}btn-vert{% else %}btn-outline{% endif %}">
         Classification{% if compte and compte.a_classer %} <span style="opacity: .75;">· {{ compte.a_classer }}</span>{% endif %}
     </a>
+    <a href="{{ url_for('admin_livre.themes') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/themes') %}btn-vert{% else %}btn-outline{% endif %}">
+        Thèmes
+    </a>
     <a href="{{ url_for('admin_livre.intros') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/intros') and not _p.startswith('/admin/livre/intros/faites') %}btn-vert{% else %}btn-outline{% endif %}">
         Intro à faire{% if compte and compte.intro_a_faire %} <span style="opacity: .75;">· {{ compte.intro_a_faire }}</span>{% endif %}
@@ -25,10 +29,6 @@
     <a href="{{ url_for('admin_livre.tous') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/tous') %}btn-vert{% else %}btn-outline{% endif %}">
         Tous les documents
-    </a>
-    <a href="{{ url_for('admin_livre.themes') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/themes') %}btn-vert{% else %}btn-outline{% endif %}">
-        Thèmes
     </a>
     <a href="{{ url_for('admin_livre.livre_pdf') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/pdf') %}btn-vert{% else %}btn-outline{% endif %}">
