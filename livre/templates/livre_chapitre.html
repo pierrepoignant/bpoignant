@@ -37,7 +37,7 @@
                 </form>
             </div>
             <div style="flex: 1; min-width: 0;">
-                <a href="#" onclick="ouvrirLecture({{ c.id }}, {{ c.titre|tojson }}, {{ (c.date_livre.strftime('%d/%m/%Y') if c.date_livre else '')|tojson }}); return false;"
+                <a href="#" onclick='ouvrirLecture({{ c.id }}, {{ c.titre|tojson }}, {{ (c.date_livre.strftime("%d/%m/%Y") if c.date_livre else "")|tojson }}); return false;'
                    style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.3;">{{ c.titre }}</a>
                 <span style="font-size: 0.76rem; color: var(--gris);">
                     {% if c.date_livre %}{{ c.date_livre.strftime('%d/%m/%Y') }}{% endif %}
@@ -46,6 +46,14 @@
                     {% if not c.in_book %} · <span style="color: var(--rouge);">retirée</span>{% endif %}
                 </span>
             </div>
+            {# Changer de chapitre : la chronique quitte celui-ci. #}
+            <form method="POST" action="{{ url_for('admin_livre.decider', doc_id=c.id) }}" style="margin: 0;">
+                <input type="hidden" name="action" value="theme">
+                <select name="theme_id" onchange="this.form.submit()" title="Changer de chapitre"
+                        style="padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.82rem; max-width: 130px;">
+                    {% for th in themes %}<option value="{{ th.id }}" {% if th.id == theme.id %}selected{% endif %}>{{ th.name }}</option>{% endfor %}
+                </select>
+            </form>
             {# L'œil : dans le livre / retiré. #}
             <button type="button" class="oeil btn btn-sm btn-outline" title="{{ 'Retirer du livre' if c.in_book else 'Remettre dans le livre' }}"
                     data-id="{{ c.id }}" data-in="{{ 1 if c.in_book else 0 }}"

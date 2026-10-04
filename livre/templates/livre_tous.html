@@ -39,7 +39,7 @@
     {% for d in docs %}
         <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.8rem 1rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
             <div style="flex: 1 1 240px; min-width: 0;">
-                <a href="#" onclick="ouvrirLecture({{ d.id }}, {{ d.titre | tojson }}, {{ (d.date_livre.strftime('%d/%m/%Y') if d.date_livre else '') | tojson }}); return false;"
+                <a href="#" onclick='ouvrirLecture({{ d.id }}, {{ d.titre | tojson }}, {{ (d.date_livre.strftime("%d/%m/%Y") if d.date_livre else "") | tojson }}); return false;'
                    style="font-weight: 600; color: var(--noir); text-decoration: none; display: block; line-height: 1.35;">{{ d.titre }}</a>
                 <span style="font-size: 0.78rem; color: var(--gris);">
                     {% if d.date_livre %}{{ d.date_livre.strftime('%d/%m/%Y') }}{% endif %}

@@ -53,7 +53,7 @@
                    style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-list-ul"></i></a>
                 <button type="button" class="btn btn-sm btn-outline" title="Modifier le chapitre"
                         style="color: var(--noir); border-color: #e0e0e0;"
-                        onclick="ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or '')|tojson }})"><i class="fas fa-pen-nib"></i></button>
+                        onclick='ouvrirTheme({{ t.id }}, {{ t.name|tojson }}, {{ (t.description or "")|tojson }})'><i class="fas fa-pen-nib"></i></button>
                 <form method="POST" action="{{ url_for('admin_livre.theme_update', theme_id=t.id) }}" style="margin: 0;">
                     <button type="submit" name="supprimer" value="1" class="btn btn-sm btn-outline" style="color: var(--rouge); border-color: #e0e0e0;"
                             onclick="return confirm('Supprimer « {{ t.name }} » ? Ses {{ comptes.get(t.id, (0,0))[1] }} documents repartiront dans la pile à classer.')"><i class="fas fa-trash"></i></button>

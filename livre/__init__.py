@@ -289,6 +289,10 @@ def decider(doc_id):
         theme = db.session.get(BookTheme, request.form.get('theme_id', type=int) or 0)
         if theme is None:
             return jsonify({'ok': False, 'erreur': 'Thème inconnu.'}), 400
+        # Changer de chapitre fait perdre la position manuelle : la chronique
+        # reprend l'ordre chronologique dans son nouveau chapitre.
+        if doc.theme_id != theme.id:
+            doc.book_position = None
         doc.status, doc.theme_id = 'classe', theme.id
     elif action == 'ignorer':
         doc.status, doc.theme_id = 'ignore', None
@@ -374,6 +378,7 @@ def chapitre(theme_id):
     t = db.session.get(BookTheme, theme_id) or abort(404)
     chroniques = _chroniques_du_chapitre(t, inclus_seulement=False)
     return render_template('livre_chapitre.html', theme=t, chroniques=chroniques,
+                           themes=BookTheme.query.order_by(BookTheme.position, BookTheme.name).all(),
                            retenus=sum(1 for c in chroniques if c.in_book), compte=_compte())
 
 
