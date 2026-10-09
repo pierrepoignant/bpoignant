@@ -598,8 +598,10 @@ def _ordre_chapitre():
 def _chroniques_du_chapitre(theme, inclus_seulement=True):
     q = theme.docs.filter_by(status='classe')
     if inclus_seulement:
-        q = q.filter_by(in_book=True)
-    return q.order_by(*_ordre_chapitre()).all()
+        return q.filter_by(in_book=True).order_by(*_ordre_chapitre()).all()
+    # Vue complète : les retenues d'abord, les retirées en bas, chaque groupe
+    # dans l'ordre du chapitre.
+    return q.order_by(BookDoc.in_book.desc(), *_ordre_chapitre()).all()
 
 
 def _docs_par_theme():

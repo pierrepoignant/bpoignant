@@ -23,8 +23,8 @@
 
     <div id="chroniques" style="display: grid; gap: 0.5rem;">
     {% for c in chroniques %}
-        <div class="chro" data-id="{{ c.id }}"
-             style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.7rem 0.9rem; display: flex; gap: 0.6rem 0.5rem; align-items: center; flex-wrap: wrap; {% if not c.in_book %}opacity: 0.5;{% endif %}">
+        <div class="chro{% if not c.in_book %} masquee{% endif %}" data-id="{{ c.id }}"
+             style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.7rem 0.9rem; display: flex; gap: 0.6rem 0.5rem; align-items: center; flex-wrap: wrap;">
             <div class="poignee" style="cursor: grab; color: var(--gris); padding: 4px; touch-action: none;" title="Glisser"><i class="fas fa-grip-vertical"></i></div>
             <div style="display: flex; flex-direction: column; gap: 2px;">
                 <form method="POST" action="{{ url_for('admin_livre.chapitre_move', theme_id=theme.id, doc_id=c.id) }}" style="margin: 0;">
@@ -113,11 +113,21 @@
             .then(r => r.json()).then(j => {
                 if (!j.ok) throw new Error();
                 const carte = btn.closest('.chro');
+                const liste = document.getElementById('chroniques');
                 btn.dataset.in = j.in_book ? '1' : '0';
                 btn.querySelector('i').className = j.in_book ? 'far fa-eye' : 'far fa-eye-slash';
                 btn.style.color = j.in_book ? 'var(--noir)' : 'var(--rouge)';
                 btn.title = j.in_book ? 'Retirer du livre' : 'Remettre dans le livre';
-                carte.style.opacity = j.in_book ? '1' : '0.5';
+                carte.classList.toggle('masquee', !j.in_book);
+                if (!j.in_book) {
+                    // Retirée : elle descend au bas de la liste.
+                    liste.appendChild(carte);
+                } else {
+                    // Remise : elle rejoint le bas du groupe des retenues,
+                    // juste avant la première carte masquée.
+                    const premiereMasquee = liste.querySelector('.chro.masquee');
+                    liste.insertBefore(carte, premiereMasquee);
+                }
             }).catch(() => alert('Impossible de modifier.'))
             .finally(() => btn.disabled = false);
     }
@@ -135,5 +145,5 @@
         });
     })();
     </script>
-    <style>.glisse-fantome { opacity: 0.4; } .chro.sortable-chosen { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }</style>
+    <style>.chro.masquee { opacity: 0.5; } .glisse-fantome { opacity: 0.4; } .chro.sortable-chosen { box-shadow: 0 6px 18px rgba(0,0,0,0.18); }</style>
 {% endblock %}
