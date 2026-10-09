@@ -21,7 +21,7 @@
                         <strong style="color: var(--noir);">{{ c.display_name }}</strong>
                         {% if c.email %}<span style="margin-left: 0.5rem;">&lt;{{ c.email }}&gt;</span>{% endif %}
                         · {{ c.created_at.strftime('%d/%m/%Y %H:%M') }}
-                        · sur <a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.article.title }}</a>
+                        · sur {% if c.sur_video %}<a href="{{ url_for('minute.minute_landing') }}" target="_blank"><i class="fa-brands fa-tiktok"></i> {{ c.cible_titre }}</a>{% else %}<a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.cible_titre }}</a>{% endif %}
                     </div>
                     <div style="white-space: pre-wrap; line-height: 1.55;">{{ c.content }}</div>
                 </div>
@@ -61,7 +61,7 @@
             <div style="font-size: 0.8rem; color: var(--gris);">
                 <strong style="color: var(--noir);">{{ c.display_name }}</strong>
                 · {{ c.created_at.strftime('%d/%m/%Y') }}
-                · <a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.article.title|truncate(40) }}</a>
+                · {% if c.sur_video %}<a href="{{ url_for('minute.minute_landing') }}" target="_blank"><i class="fa-brands fa-tiktok"></i> {{ c.cible_titre|truncate(40) }}</a>{% else %}<a href="{{ url_for('articles.public_show', slug=c.article.slug) }}#comments" target="_blank">{{ c.cible_titre|truncate(40) }}</a>{% endif %}
             </div>
             <div style="font-size: 0.9rem; color: var(--noir); margin-top: 2px;">{{ c.content|truncate(160) }}</div>
         </div>

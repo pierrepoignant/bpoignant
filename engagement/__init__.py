@@ -300,3 +300,103 @@ def delete_comment(comment_id):
     db.session.commit()
     flash("Commentaire supprimé.", 'success')
     return redirect(url_for('admin_comments.list_comments'))
+
+
+# ─── LA MINUTE : likes et commentaires sur les vidéos ───────
+#
+# On réutilise Comment et Reaction, qui portent désormais aussi un video_id.
+# Le like est une réaction au cœur (❤️), dédupliquée par visiteur ; les
+# commentaires passent par la même modération que ceux des articles.
+
+LIKE_EMOJI = '❤️'
+
+
+def _video_ou_404(post_id):
+    from tiktok.models import TikTokPost
+    v = db.session.get(TikTokPost, post_id)
+    if v is None or v.video_url is None:
+        abort(404)
+    return v
+
+
+@engagement_bp.route('/minute/<int:post_id>/engagement')
+def video_engagement(post_id):
+    """Likes et commentaires approuvés d'une vidéo, pour le lecteur."""
+    v = _video_ou_404(post_id)
+    visitor = _stable_visitor_hash()
+    likes = Reaction.query.filter_by(video_id=v.id, emoji=LIKE_EMOJI).count()
+    liked = Reaction.query.filter_by(video_id=v.id, emoji=LIKE_EMOJI, visitor_hash=visitor).first() is not None
+    commentaires = (Comment.query.filter_by(video_id=v.id, approved=True)
+                    .order_by(Comment.created_at.desc())
+                    .limit(200).all())
+    return jsonify({
+        'likes': likes, 'liked': liked,
+        'comments': [{'nom': c.display_name, 'contenu': c.content,
+                      'date': c.created_at.strftime('%d/%m/%Y')} for c in commentaires],
+        'count': len(commentaires),
+    })
+
+
+@engagement_bp.route('/minute/<int:post_id>/like', methods=['POST'])
+def video_like(post_id):
+    v = _video_ou_404(post_id)
+    visitor = _stable_visitor_hash()
+    existing = Reaction.query.filter_by(video_id=v.id, emoji=LIKE_EMOJI, visitor_hash=visitor).first()
+    if existing:
+        db.session.delete(existing); db.session.commit()
+        liked = False
+    else:
+        db.session.add(Reaction(video_id=v.id, emoji=LIKE_EMOJI, visitor_hash=visitor))
+        try:
+            db.session.commit(); liked = True
+        except Exception:
+            db.session.rollback(); liked = True
+    likes = Reaction.query.filter_by(video_id=v.id, emoji=LIKE_EMOJI).count()
+    return jsonify({'likes': likes, 'liked': liked})
+
+
+@engagement_bp.route('/minute/<int:post_id>/comment', methods=['POST'])
+def video_comment(post_id):
+    v = _video_ou_404(post_id)
+    # Pot de miel : un champ caché qu'aucun humain ne remplit.
+    if (request.form.get('website') or '').strip():
+        return jsonify({'ok': True, 'approved': False, 'message': 'Merci !'})
+
+    prenom = (request.form.get('prenom') or '').strip()
+    contenu = (request.form.get('content') or '').strip()
+    if not prenom:
+        return jsonify({'ok': False, 'message': "Indiquez votre prénom."}), 400
+    if len(contenu) < 3:
+        return jsonify({'ok': False, 'message': "Le commentaire est trop court."}), 400
+    if len(contenu) > 5000:
+        return jsonify({'ok': False, 'message': "Commentaire trop long."}), 400
+
+    auto = current_app.config.get('COMMENTS_AUTO_APPROVE', False)
+    c = Comment(video_id=v.id, prenom=prenom[:120], content=contenu,
+                approved=bool(auto), approved_at=datetime.utcnow() if auto else None)
+    db.session.add(c); db.session.commit()
+    try:
+        _notify_admins_of_video_comment(v, c)
+    except Exception as exc:
+        log.warning("video comment alert failed: %s", exc)
+    return jsonify({'ok': True, 'approved': bool(auto),
+                    'message': "Merci pour votre commentaire !" if auto
+                    else "Merci ! Votre commentaire sera publié après relecture."})
+
+
+def _notify_admins_of_video_comment(video, comment):
+    if not mail_is_configured():
+        return
+    recipients = User.query.filter(User.is_admin == True, User.email.isnot(None)).all()  # noqa: E712
+    if not recipients:
+        return
+    token = _make_approve_token(comment.id)
+    approve_url = url_for('engagement.approve_via_link', token=token, _external=True)
+    moderation_url = url_for('admin_comments.list_comments', _external=True)
+    sujet = f"Commentaire vidéo : {video.title[:80]}"
+    for admin in recipients:
+        corps = (f"<p><strong>{comment.display_name}</strong> a commenté la vidéo "
+                 f"« {video.title} » :</p><blockquote>{comment.content}</blockquote>"
+                 f"<p><a href=\"{approve_url}\">Publier ce commentaire</a> · "
+                 f"<a href=\"{moderation_url}\">Modération</a></p>")
+        send_email(to_email=admin.email, to_name=admin.username, subject=sujet, html=corps)

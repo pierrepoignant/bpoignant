@@ -390,6 +390,30 @@ def _migrate_schema():
                 db.session.execute(text(f"ALTER TABLE book_docs ADD COLUMN {col} {typ}"))
         db.session.commit()
 
+    # Commentaires et réactions sur les vidéos de La Minute : colonnes video_id,
+    # et les FK d'article deviennent facultatives (un commentaire porte sur l'un
+    # ou l'autre).
+    for table in ('comments', 'reactions'):
+        if table in inspector.get_table_names():
+            cols = {c['name'] for c in inspector.get_columns(table)}
+            if 'video_id' not in cols:
+                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN video_id INTEGER NULL"))
+                db.session.execute(text(f"ALTER TABLE {table} MODIFY article_id INTEGER NULL"))
+                db.session.commit()
+                try:
+                    db.session.execute(text(f"CREATE INDEX ix_{table}_video_id ON {table} (video_id)"))
+                    db.session.commit()
+                except OperationalError:
+                    db.session.rollback()
+            if table == 'reactions':
+                try:
+                    db.session.execute(text(
+                        "ALTER TABLE reactions ADD CONSTRAINT uq_reaction_visitor_video "
+                        "UNIQUE (video_id, emoji, visitor_hash)"))
+                    db.session.commit()
+                except OperationalError:
+                    db.session.rollback()
+
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}
         if 'confirmed_at' not in cols:

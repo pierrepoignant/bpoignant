@@ -93,6 +93,34 @@
     <button type="button" class="minute-nav" id="minute-suivant" aria-label="Vidéo suivante">
         <i class="fas fa-chevron-down"></i>
     </button>
+
+    {# Colonne d'actions, à la TikTok : aimer, et ouvrir les commentaires. #}
+    <div id="minute-actions">
+        <button type="button" id="minute-like" aria-label="J'aime">
+            <i class="far fa-heart"></i><span id="minute-like-n">0</span>
+        </button>
+        <button type="button" id="minute-comm" aria-label="Commentaires">
+            <i class="far fa-comment"></i><span id="minute-comm-n">0</span>
+        </button>
+    </div>
+
+    {# Panneau des commentaires, glissé depuis le bas. #}
+    <div id="minute-commentaires" aria-label="Commentaires">
+        <div id="minute-comm-tete">
+            <strong id="minute-comm-titre">Commentaires</strong>
+            <button type="button" id="minute-comm-fermer" aria-label="Fermer les commentaires"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div id="minute-comm-liste"></div>
+        <form id="minute-comm-form" autocomplete="off">
+            <input type="text" name="website" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+            <input type="text" id="minute-comm-prenom" name="prenom" placeholder="Votre prénom" maxlength="120" required>
+            <div style="display:flex; gap:0.5rem; align-items:flex-end;">
+                <textarea id="minute-comm-texte" name="content" placeholder="Votre commentaire…" rows="1" maxlength="5000" required></textarea>
+                <button type="submit" id="minute-comm-envoyer" aria-label="Envoyer"><i class="fas fa-paper-plane"></i></button>
+            </div>
+            <p id="minute-comm-retour"></p>
+        </form>
+    </div>
 </div>
 
 {% include '_newsletter_form.html' %}
@@ -142,6 +170,7 @@
         document.getElementById('minute-suivant').style.visibility = i < clips.length - 1 ? 'visible' : 'hidden';
         var p = video.play();
         if (p && p.catch) p.catch(function () {});
+        chargerEngagement(el.dataset.id);
     }
 
     function ouvrir(i) {
@@ -156,6 +185,7 @@
     }
 
     function fermer(depuisHistorique) {
+        var pan = document.getElementById('minute-commentaires'); if (pan) pan.classList.remove('ouvert');
         if (!lecteur.classList.contains('ouvert')) return;
         video.pause();
         video.removeAttribute('src');
@@ -169,6 +199,82 @@
 
     clips.forEach(function (el, i) {
         el.addEventListener('click', function () { ouvrir(i); });
+    });
+
+    // ─── Likes et commentaires ───────────────────────────────
+    var postCourant = null;
+    var elLike = document.getElementById('minute-like');
+    var elLikeN = document.getElementById('minute-like-n');
+    var elCommN = document.getElementById('minute-comm-n');
+    var elCommTitre = document.getElementById('minute-comm-titre');
+    var elListe = document.getElementById('minute-comm-liste');
+    var panneau = document.getElementById('minute-commentaires');
+    var elRetour = document.getElementById('minute-comm-retour');
+
+    function echapper(t) {
+        var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML;
+    }
+    function rendreCommentaires(liste) {
+        elCommN.textContent = liste.length;
+        elCommTitre.textContent = liste.length ? (liste.length + ' commentaire' + (liste.length > 1 ? 's' : '')) : 'Commentaires';
+        if (!liste.length) { elListe.innerHTML = '<p class="vide">Aucun commentaire pour l\'instant. Soyez le premier.</p>'; return; }
+        elListe.innerHTML = liste.map(function (c) {
+            return '<div class="cm"><strong>' + echapper(c.nom) + '</strong><span>' + echapper(c.date) + '</span>'
+                 + '<p>' + echapper(c.contenu) + '</p></div>';
+        }).join('');
+    }
+    function chargerEngagement(id) {
+        postCourant = id;
+        elLike.classList.remove('aime'); elLikeN.textContent = '0'; elCommN.textContent = '0';
+        if (!id) return;
+        fetch('/minute/' + id + '/engagement').then(function (r) { return r.json(); }).then(function (j) {
+            if (postCourant !== id) return;         // la vidéo a déjà changé
+            elLikeN.textContent = j.likes;
+            elLike.classList.toggle('aime', !!j.liked);
+            rendreCommentaires(j.comments || []);
+        }).catch(function () {});
+    }
+
+    elLike.addEventListener('click', function () {
+        if (!postCourant) return;
+        var id = postCourant;
+        elLike.disabled = true;
+        fetch('/minute/' + id + '/like', {method: 'POST', headers: {'X-Requested-With': 'fetch'}})
+            .then(function (r) { return r.json(); }).then(function (j) {
+                if (postCourant === id) { elLikeN.textContent = j.likes; elLike.classList.toggle('aime', j.liked); }
+            }).catch(function () {}).finally(function () { elLike.disabled = false; });
+    });
+
+    function ouvrirCommentaires() { panneau.classList.add('ouvert'); }
+    function fermerCommentaires() { panneau.classList.remove('ouvert'); elRetour.textContent = ''; }
+    document.getElementById('minute-comm').addEventListener('click', ouvrirCommentaires);
+    document.getElementById('minute-comm-fermer').addEventListener('click', fermerCommentaires);
+
+    // Le textarea grandit avec le texte, dans la limite de quatre lignes.
+    var texte = document.getElementById('minute-comm-texte');
+    texte.addEventListener('input', function () {
+        texte.style.height = 'auto'; texte.style.height = Math.min(texte.scrollHeight, 110) + 'px';
+    });
+
+    document.getElementById('minute-comm-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!postCourant) return;
+        var id = postCourant;
+        var d = new FormData(this);
+        var bouton = document.getElementById('minute-comm-envoyer');
+        bouton.disabled = true; elRetour.className = ''; elRetour.textContent = 'Envoi…';
+        fetch('/minute/' + id + '/comment', {method: 'POST', body: d, headers: {'X-Requested-With': 'fetch'}})
+            .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+            .then(function (res) {
+                elRetour.className = res.ok && res.j.ok ? 'ok' : 'ko';
+                elRetour.textContent = res.j.message || (res.ok ? 'Merci !' : 'Erreur.');
+                if (res.ok && res.j.ok) {
+                    texte.value = ''; texte.style.height = 'auto';
+                    // Si publié d'emblée, on recharge la liste.
+                    if (res.j.approved) chargerEngagement(id);
+                }
+            }).catch(function () { elRetour.className = 'ko'; elRetour.textContent = 'Envoi impossible.'; })
+            .finally(function () { bouton.disabled = false; });
     });
 
     document.getElementById('minute-fermer').addEventListener('click', function () { fermer(); });
