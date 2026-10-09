@@ -1627,3 +1627,14 @@ a:hover { color: var(--rouge-fonce); }
 #minute-comm-retour { margin: 0; font-size: 0.82rem; min-height: 1em; }
 #minute-comm-retour.ok { color: #1F8A55; }
 #minute-comm-retour.ko { color: #E6003E; }
+
+/* La Minute : cœurs et commentaires sous chaque vignette de la grille. */
+.minute-chiffres {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.5rem; margin-top: 0.2rem;
+}
+.minute-compteurs {
+    display: inline-flex; gap: 0.7rem; color: #8a8a90; font-size: 0.8rem; white-space: nowrap;
+}
+.minute-coeurs .fa-heart { color: #E6003E; }
+.minute-compteurs i { font-size: 0.78rem; }

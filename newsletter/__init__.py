@@ -89,7 +89,18 @@ def minute_landing():
         .order_by(TikTokPost.posted_at.desc())
         .all()
     )
-    return render_template('minute_landing.html', videos=videos)
+    # Cœurs et commentaires approuvés par vidéo, en deux requêtes groupées
+    # plutôt qu'une par carte.
+    from engagement.models import Comment, Reaction
+    ids = [v.id for v in videos]
+    likes = dict(db.session.query(Reaction.video_id, db.func.count(Reaction.id))
+                 .filter(Reaction.video_id.in_(ids), Reaction.emoji == '❤️')
+                 .group_by(Reaction.video_id).all()) if ids else {}
+    commentaires = dict(db.session.query(Comment.video_id, db.func.count(Comment.id))
+                        .filter(Comment.video_id.in_(ids), Comment.approved.is_(True))
+                        .group_by(Comment.video_id).all()) if ids else {}
+    return render_template('minute_landing.html', videos=videos,
+                           likes=likes, commentaires=commentaires)
 
 
 @newsletter_bp.route('/subscribe', methods=['POST'])

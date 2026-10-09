@@ -42,9 +42,15 @@
             </div>
             <figcaption>
                 <h2>{{ v.title|truncate(80) }}</h2>
-                <time datetime="{{ v.posted_at.isoformat() if v.posted_at }}">
-                    {{ v.posted_at.strftime('%d/%m/%Y') if v.posted_at else '' }}
-                </time>
+                <div class="minute-chiffres">
+                    <time datetime="{{ v.posted_at.isoformat() if v.posted_at }}">
+                        {{ v.posted_at.strftime('%d/%m/%Y') if v.posted_at else '' }}
+                    </time>
+                    <span class="minute-compteurs">
+                        <span class="minute-coeurs" data-id="{{ v.id }}"><i class="fas fa-heart"></i> <span class="n-like">{{ likes.get(v.id, 0) }}</span></span>
+                        <span><i class="fas fa-comment"></i> <span class="n-comm">{{ commentaires.get(v.id, 0) }}</span></span>
+                    </span>
+                </div>
             </figcaption>
         </figure>
 
