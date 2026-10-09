@@ -54,12 +54,8 @@
     <nav class="admin-tabs" aria-label="Administration">
         {# 1. Écrire #}
         <a href="{{ url_for('admin_articles.list_articles') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
+           class="btn btn-sm {% if _p.startswith('/admin/articles') or _p.startswith('/admin/themes') or _p == '/admin/' or _p == '/admin' %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-newspaper"></i> Articles
-        </a>
-        <a href="{{ url_for('admin_themes.list_themes') }}"
-           class="btn btn-sm {% if _p.startswith('/admin/themes') %}btn-primary{% else %}btn-outline{% endif %}">
-            <i class="fas fa-tags"></i> Thèmes
         </a>
         <a href="{{ url_for('admin_pages.list_pages') }}"
            class="btn btn-sm {% if _p.startswith('/admin/pages') %}btn-primary{% else %}btn-outline{% endif %}">
@@ -138,6 +134,22 @@
 
 
 
+
+    {# Sous-navigation de la section Articles : les articles et leurs thèmes,
+       les thèmes étant désormais rangés là plutôt qu'au premier niveau (où ils
+       se confondaient avec les thèmes du Livre). #}
+    {% if _p.startswith('/admin/articles') or _p.startswith('/admin/themes') or _p == '/admin/' or _p == '/admin' %}
+    <nav class="admin-tabs" aria-label="Articles" style="margin-top: -0.4rem;">
+        <a href="{{ url_for('admin_articles.list_articles') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/articles') or _p == '/admin/' or _p == '/admin' %}btn-vert{% else %}btn-outline{% endif %}">
+            Articles
+        </a>
+        <a href="{{ url_for('admin_themes.list_themes') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/themes') %}btn-vert{% else %}btn-outline{% endif %}">
+            Thèmes
+        </a>
+    </nav>
+    {% endif %}
 
     {# Sous-navigation de la section Newsletter : les trois vues qui occupaient
        auparavant trois onglets de premier niveau. #}
