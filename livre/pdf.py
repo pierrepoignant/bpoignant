@@ -322,10 +322,6 @@ def construire(docs_par_theme, meta):
 
     pdf.page_de_titre()
     pdf.page_copyright(date.today().year)
-    if meta.get('dedicace'):
-        pdf._page_centree(meta['dedicace'])
-    if meta.get('epigraphe'):
-        pdf._page_centree(meta['epigraphe'], meta.get('epigraphe_src') or None)
 
     # Place exacte du sommaire détaillé, calculée par simulation de la mise en
     # page : ni sommaire tronqué, ni page blanche résiduelle.
@@ -337,7 +333,7 @@ def construire(docs_par_theme, meta):
     debut_sommaire = pdf.pages_liminaires - pages_sommaire + 1
 
     if meta.get('avant_propos'):
-        pdf.section_texte('Avant-propos', meta['avant_propos'])
+        pdf.section_texte('Préface', meta['avant_propos'])
 
     for entree in docs_par_theme:
         nom, chroniques = entree[0], entree[1]

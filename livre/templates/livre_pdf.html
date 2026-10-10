@@ -31,17 +31,10 @@
             {% set ct = ci + ' line-height: 1.6; resize: vertical;' %}
 
             <details open style="margin-bottom: 0.6rem;">
-                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.8rem;">Pages liminaires</summary>
-                <label style="{{ ch }}">Dédicace <span style="text-transform:none; color:#bbb;">— « À … », une ligne</span></label>
-                <input type="text" name="dedicace" value="{{ meta.dedicace }}" style="{{ ci }}">
-                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.6rem;">
-                    <div><label style="{{ ch }}">Épigraphe <span style="text-transform:none; color:#bbb;">— une citation</span></label>
-                         <input type="text" name="epigraphe" value="{{ meta.epigraphe }}" style="{{ ci }}"></div>
-                    <div><label style="{{ ch }}">Source</label>
-                         <input type="text" name="epigraphe_src" value="{{ meta.epigraphe_src }}" style="{{ ci }} width: 110px;"></div>
-                </div>
-                <label style="{{ ch }}">Avant-propos <span style="text-transform:none; color:#bbb;">— votre introduction au livre entier</span></label>
-                <textarea name="avant_propos" rows="5" style="{{ ct }}">{{ meta.avant_propos }}</textarea>
+                <summary style="cursor: pointer; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.8rem;">Préface du livre</summary>
+                <label style="{{ ch }}">Préface <span style="text-transform:none; color:#bbb;">— le texte d'ouverture du livre entier</span></label>
+                <textarea name="avant_propos" rows="8" placeholder="Pendant dix ans, j'ai écrit presque chaque semaine…"
+                          style="{{ ct }}">{{ meta.avant_propos }}</textarea>
             </details>
 
             <details style="margin-bottom: 0.6rem;">
