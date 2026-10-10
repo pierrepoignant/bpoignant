@@ -414,6 +414,13 @@ def _migrate_schema():
                 except OperationalError:
                     db.session.rollback()
 
+    if 'tiktok_posts' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('tiktok_posts')}
+        if 'youtube_video_id' not in cols:
+            db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN youtube_video_id VARCHAR(40) NULL"))
+            db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN youtube_posted_at DATETIME NULL"))
+            db.session.commit()
+
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}
         if 'confirmed_at' not in cols:

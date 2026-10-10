@@ -104,7 +104,7 @@ def _traiter(app, job_id):
     the job is finished with (successfully or not), False to try again."""
     import video
     from init_db import db
-    from tiktok import attach_render, sync_posts, post_to_x_backend, post_to_linkedin_backend
+    from tiktok import attach_render, sync_posts, post_to_x_backend, post_to_linkedin_backend, post_to_youtube_backend
 
     job = video.get_job(job_id) or {}
     auto = dict(job.get('auto') or {})
@@ -157,9 +157,16 @@ def _traiter(app, job_id):
     resultats.append('X' if ok_x else f'X échoué ({detail_x})')
     ok_li, detail_li = post_to_linkedin_backend(post)
     resultats.append('LinkedIn' if ok_li else f'LinkedIn échoué ({detail_li})')
+    # YouTube seulement si la chaîne est connectée : sinon on n'encombre pas le
+    # compte rendu d'un « non connecté » à chaque clip.
+    import youtube
+    ok_yt = True
+    if youtube.is_connected():
+        ok_yt, detail_yt = post_to_youtube_backend(post)
+        resultats.append('YouTube' if ok_yt else f'YouTube échoué ({detail_yt})')
     db.session.commit()
 
-    _fin(job_id, 'fait' if (ok_x and ok_li) else 'partiel',
+    _fin(job_id, 'fait' if (ok_x and ok_li and ok_yt) else 'partiel',
          f"Rattaché à « {post.title[:60]} » · " + ', '.join(resultats))
     return True
 

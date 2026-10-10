@@ -610,6 +610,58 @@ def post_to_linkedin_backend(post, texte=None):
     return True, post.linkedin_post_id
 
 
+def post_to_youtube_backend(post, texte=None):
+    """Publier un clip sur YouTube (en Short). Renvoie (ok, video_id_ou_erreur)."""
+    import tempfile
+    import requests as http
+    import youtube
+    from init_db import db
+
+    if post.youtube_video_id:
+        return False, "déjà publié"
+    if not post.video_url:
+        return False, "aucune vidéo"
+    if not youtube.is_connected():
+        return False, "YouTube n'est pas connecté"
+
+    legende = (texte or '').strip() or (post.caption or post.title or '')
+    tmp = None
+    try:
+        with http.get(post.video_url, stream=True, timeout=180) as resp:
+            if resp.status_code != 200:
+                return False, f"vidéo illisible dans le stockage ({resp.status_code})"
+            fd, tmp = tempfile.mkstemp(suffix='.mp4')
+            with os.fdopen(fd, 'wb') as fh:
+                for chunk in resp.iter_content(1024 * 256):
+                    fh.write(chunk)
+        ok, detail = youtube.upload(tmp, post.title, caption=legende)
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    if not ok:
+        return False, str(detail)
+    post.youtube_video_id = str(detail)
+    post.youtube_posted_at = datetime.utcnow()
+    db.session.commit()
+    return True, post.youtube_video_id
+
+
+@admin_tiktok_bp.route('/<int:post_id>/post-youtube', methods=['POST'])
+@admin_required
+def post_to_youtube(post_id):
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    ok, detail = post_to_youtube_backend(post)
+    if ok:
+        flash("Vidéo publiée sur YouTube.", 'success')
+    else:
+        flash(f"Échec de la publication sur YouTube : {detail}", 'danger')
+    return redirect(request.referrer or url_for('admin_tiktok.edit', post_id=post_id))
+
+
 @admin_tiktok_bp.route('/<int:post_id>/post-x', methods=['POST'])
 @admin_required
 def post_to_x(post_id):

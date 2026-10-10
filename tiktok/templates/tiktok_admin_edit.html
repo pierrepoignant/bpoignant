@@ -149,6 +149,20 @@
                         </button>
                     </form>
                     {% endif %}
+                    {# YouTube : le lien une fois publié, le bouton sinon. #}
+                    {% if p.youtube_video_id %}
+                    <a href="{{ p.youtube_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-youtube"></i> Voir sur YouTube
+                    </a>
+                    {% elif p.has_video %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_youtube', post_id=p.id) }}"
+                          onsubmit="return confirm('Publier cette vidéo sur YouTube maintenant ?'); const b=this.querySelector('button'); b.disabled=true; b.innerHTML='Envoi…';" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm" style="width: 100%; background: #FF0000; color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
+                            <i class="fa-brands fa-youtube"></i> Publier sur YouTube
+                        </button>
+                    </form>
+                    {% endif %}
                     {% if p.has_video %}
                     <a href="{{ p.video_url }}" download class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
                         <i class="fas fa-download"></i> Télécharger

@@ -67,6 +67,9 @@ class TikTokPost(db.Model):
     # publie pas pour un membre.
     linkedin_post_id = db.Column(db.String(120), nullable=True)
     linkedin_posted_at = db.Column(db.DateTime, nullable=True)
+    # YouTube (en Shorts) : identifiant de la vidéo et date de publication.
+    youtube_video_id = db.Column(db.String(40), nullable=True)
+    youtube_posted_at = db.Column(db.DateTime, nullable=True)
     # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
     # publication d'un membre, et aucun scrapeur n'atteint les impressions,
     # qui ne figurent pas sur la page publique.
@@ -117,6 +120,11 @@ class TikTokPost(db.Model):
         if not self.linkedin_post_id:
             return None
         return f"https://www.linkedin.com/feed/update/{self.linkedin_post_id}/"
+
+    @property
+    def youtube_url(self):
+        from youtube import video_url
+        return video_url(self.youtube_video_id)
 
     @property
     def x_url(self):

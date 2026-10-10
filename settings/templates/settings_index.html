@@ -162,6 +162,67 @@
         </p>
         {% endif %}
     </div>
+    {# YouTube : publier les clips en Shorts. Même compte Google que Drive et
+       Gmail, mais une autorisation à part (téléversement seul). #}
+    <section id="youtube" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.4rem 1.6rem; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.1rem; margin: 0 0 0.3rem;">
+            <i class="fa-brands fa-youtube" style="color: #FF0000;"></i> YouTube
+        </h2>
+        <p style="color: var(--gris); font-size: 0.88rem; margin: 0 0 1.1rem; line-height: 1.6;">
+            Publier les clips en Shorts, en plus de TikTok, X et LinkedIn. Même compte
+            Google que Drive, mais une autorisation séparée (téléversement seul) : la
+            connecter ne touche pas Drive.
+        </p>
+
+        {% if not youtube_has_client %}
+        <p style="font-size: 0.9rem; color: #8a6d00; background: rgba(255,165,0,0.12); border-radius: 10px; padding: 12px 16px;">
+            Renseignez d'abord l'identifiant et le secret OAuth Google (section Google Drive ci-dessous) :
+            YouTube utilise le même client.
+        </p>
+        {% elif youtube_panne %}
+        <div style="background: #FDECEA; border: 1px solid #E6003E; border-radius: 12px; padding: 1.2rem; margin-bottom: 1rem;">
+            <p style="margin: 0 0 0.6rem; color: #8a1c1c; font-size: 0.92rem;"><i class="fas fa-triangle-exclamation"></i> {{ youtube_panne }}</p>
+            <a href="{{ url_for('admin_settings.youtube_connect') }}" class="btn btn-primary"><i class="fa-brands fa-youtube"></i> Reconnecter YouTube</a>
+        </div>
+        {% elif youtube_connected %}
+        <p style="font-size: 0.92rem; margin: 0 0 1rem;">
+            <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+            Connecté à la chaîne <strong>{{ youtube_channel or 'sans nom' }}</strong>.
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.2rem;">
+            <form method="POST" action="{{ url_for('admin_settings.youtube_verify') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Vérifier</button>
+            </form>
+            <a href="{{ url_for('admin_settings.youtube_connect') }}" class="btn btn-sm btn-primary">Renouveler l'autorisation</a>
+            <form method="POST" action="{{ url_for('admin_settings.youtube_disconnect') }}" style="margin: 0;"
+                  onsubmit="return confirm('Déconnecter YouTube ?')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">Déconnecter</button>
+            </form>
+        </div>
+        <form method="POST" action="{{ url_for('admin_settings.youtube_privacy') }}" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <label style="font-size: 0.82rem; color: var(--gris); text-transform: uppercase; letter-spacing: 0.04em;">Visibilité des vidéos publiées</label>
+            <select name="privacy" onchange="this.form.submit()" style="padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit;">
+                <option value="public" {% if youtube_privacy == 'public' %}selected{% endif %}>Publique</option>
+                <option value="unlisted" {% if youtube_privacy == 'unlisted' %}selected{% endif %}>Non répertoriée</option>
+                <option value="private" {% if youtube_privacy == 'private' %}selected{% endif %}>Privée</option>
+            </select>
+        </form>
+        {% else %}
+        <a href="{{ url_for('admin_settings.youtube_connect') }}" class="btn btn-primary" style="margin-bottom: 1rem;">
+            <i class="fa-brands fa-youtube"></i> Connecter la chaîne de Bernard
+        </a>
+        <p style="font-size: 0.82rem; color: var(--gris); line-height: 1.6; margin: 0;">
+            Sur la console Google du site : activez l'<em>API YouTube Data v3</em> et ajoutez
+            cette adresse aux URI de redirection autorisés.
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.6rem;">
+            <code id="yt-uri" style="flex: 1; min-width: 240px; background: var(--gris-clair); padding: 8px 12px; border-radius: 8px; font-size: 0.82rem; word-break: break-all;">{{ youtube_redirect_uri }}</code>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="navigator.clipboard.writeText(document.getElementById('yt-uri').textContent.trim()); this.textContent='Copié';">Copier</button>
+        </div>
+        {% endif %}
+    </section>
+
     {# TikTok : publier depuis le serveur. Deux régimes, et ce n'est pas nous
        qui choisissons — tant que l'application n'a pas passé l'audit de
        TikTok, une publication directe reste privée, donc invisible. #}

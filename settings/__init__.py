@@ -63,6 +63,12 @@ def index():
         tiktok_mode=tiktok_publish.mode(),
         tiktok_force_inbox=tiktok_publish.force_inbox(),
         tiktok_redirect_uri=url_for('admin_settings.tiktok_callback', _external=True),
+        youtube_connected=__import__('youtube').is_connected(),
+        youtube_channel=__import__('youtube').channel_title(),
+        youtube_privacy=__import__('youtube').privacy(),
+        youtube_panne=__import__('youtube').check_auth(),
+        youtube_has_client=__import__('youtube').has_client_credentials(),
+        youtube_redirect_uri=url_for('admin_settings.youtube_callback', _external=True),
         linkedin_client_id=linkedin._client_id(),
         linkedin_has_secret=bool(linkedin._client_secret()),
         linkedin_connected=linkedin.is_configured(),
@@ -321,6 +327,71 @@ def gdrive_verify():
           else f"Google Drive ne répond toujours pas : {message}",
           'success' if ok else 'danger')
     return redirect(request.form.get('next') or url_for('admin_settings.index'))
+
+
+def _yt_callback_url():
+    return url_for('admin_settings.youtube_callback', _external=True)
+
+
+@admin_settings_bp.route('/youtube/connect')
+@admin_required
+def youtube_connect():
+    import youtube
+    state = secrets.token_urlsafe(24)
+    session['youtube_oauth_state'] = state
+    try:
+        url = youtube.authorization_url(_yt_callback_url(), state)
+    except youtube.YouTubeError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#youtube')
+    return redirect(url)
+
+
+@admin_settings_bp.route('/youtube/callback')
+@admin_required
+def youtube_callback():
+    import youtube
+    expected = session.pop('youtube_oauth_state', None)
+    if request.args.get('error'):
+        flash(f"Connexion YouTube refusée ({request.args['error']}).", 'danger')
+        return redirect(url_for('admin_settings.index') + '#youtube')
+    if not expected or request.args.get('state') != expected:
+        flash("Réponse YouTube inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_settings.index') + '#youtube')
+    try:
+        youtube.exchange_code(request.args.get('code'), _yt_callback_url())
+    except youtube.YouTubeError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#youtube')
+    flash(f"YouTube connecté — chaîne « {youtube.channel_title() or 'sans nom'} ».", 'success')
+    return redirect(url_for('admin_settings.index') + '#youtube')
+
+
+@admin_settings_bp.route('/youtube/verify', methods=['POST'])
+@admin_required
+def youtube_verify():
+    import youtube
+    ok, message = youtube.verify_credentials()
+    flash(message, 'success' if ok else 'danger')
+    return redirect(url_for('admin_settings.index') + '#youtube')
+
+
+@admin_settings_bp.route('/youtube/privacy', methods=['POST'])
+@admin_required
+def youtube_privacy():
+    import youtube
+    youtube.set_privacy(request.form.get('privacy') or 'public')
+    flash("Visibilité YouTube enregistrée.", 'success')
+    return redirect(url_for('admin_settings.index') + '#youtube')
+
+
+@admin_settings_bp.route('/youtube/disconnect', methods=['POST'])
+@admin_required
+def youtube_disconnect():
+    import youtube
+    youtube.disconnect()
+    flash("YouTube déconnecté.", 'info')
+    return redirect(url_for('admin_settings.index') + '#youtube')
 
 
 @admin_settings_bp.route('/gdrive/connect')
