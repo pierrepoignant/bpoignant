@@ -283,3 +283,45 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Rattrapage YouTube : chaque jour, quelques clips pas encore sur YouTube, du
+# plus ancien au plus récent. Le quota n'autorise que ~6 envois/jour, donc le
+# backlog monte par petites fournées ; sert aussi de filet pour un clip qu'un
+# montage aurait manqué. 10:00 Paris, après l'enchaînement LinkedIn de 09:00.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-youtube-backfill
+  namespace: default
+spec:
+  schedule: "0 10 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Six envois vidéo peuvent prendre plusieurs minutes : marge large.
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: youtube-backfill
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "youtube_backfill.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

@@ -610,6 +610,43 @@ def post_to_linkedin_backend(post, texte=None):
     return True, post.linkedin_post_id
 
 
+def backfill_youtube(limit=6, log_fn=print):
+    """Publier sur YouTube les clips qui n'y sont pas encore, du plus ancien au
+    plus récent, jusqu'à `limit` ou l'épuisement du quota.
+
+    Le quota YouTube n'autorise que six envois par jour : on avance par petites
+    fournées quotidiennes plutôt qu'en un bloc. Un échec « quota épuisé »
+    arrête la fournée proprement, pour reprendre le lendemain là où on en était.
+    """
+    import youtube
+    from init_db import db
+    if not youtube.is_connected():
+        log_fn("YouTube n'est pas connecté — rien à faire.")
+        return 0, 0
+    clips = (TikTokPost.query
+             .filter(TikTokPost.video_url.isnot(None),
+                     TikTokPost.youtube_video_id.is_(None))
+             .order_by(TikTokPost.posted_at.asc(), TikTokPost.id.asc())
+             .limit(limit).all())
+    faits = 0
+    for post in clips:
+        ok, detail = post_to_youtube_backend(post)
+        if ok:
+            faits += 1
+            log_fn(f"publié : {post.title[:50]} → {youtube.video_url(detail)}")
+        else:
+            log_fn(f"échec : {post.title[:50]} — {detail}")
+            # Quota épuisé : inutile d'insister, on reprendra demain.
+            if 'quota' in str(detail).lower():
+                log_fn("Quota du jour épuisé — arrêt, reprise demain.")
+                break
+    reste = (TikTokPost.query
+             .filter(TikTokPost.video_url.isnot(None),
+                     TikTokPost.youtube_video_id.is_(None)).count())
+    log_fn(f"{faits} publiée(s) ; {reste} encore à faire.")
+    return faits, reste
+
+
 def post_to_youtube_backend(post, texte=None):
     """Publier un clip sur YouTube (en Short). Renvoie (ok, video_id_ou_erreur)."""
     import tempfile
