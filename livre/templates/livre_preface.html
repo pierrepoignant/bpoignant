@@ -1,0 +1,21 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — préface{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>La préface : le texte d'ouverture du livre, avant les chapitres.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    <form method="POST" style="max-width: 760px; margin-top: 1rem;">
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">
+            Préface du livre <span style="text-transform:none; letter-spacing:0; color:#bbb;">— elle paraît après le sommaire, avant le premier chapitre</span>
+        </label>
+        <textarea name="avant_propos" rows="16" placeholder="Pendant dix ans, j'ai écrit presque chaque semaine…&#10;&#10;Séparez les paragraphes par une ligne vide."
+                  style="width: 100%; padding: 14px 16px; border: 1px solid #e0e0e0; border-radius: 12px; font-family: inherit; font-size: 1.05rem; line-height: 1.7; resize: vertical;">{{ preface }}</textarea>
+        <div style="display: flex; gap: 0.6rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
+            <button type="submit" class="btn btn-primary" style="min-height: 46px;"><i class="fas fa-check"></i> Enregistrer la préface</button>
+            <span style="font-size: 0.8rem; color: var(--gris);">Les paragraphes se séparent par une ligne vide.</span>
+        </div>
+    </form>
+{% endblock %}

@@ -741,6 +741,19 @@ def livre_pdf():
                            taille=infos.get('octets'))
 
 
+@admin_livre_bp.route('/preface', methods=['GET', 'POST'])
+@admin_required
+def preface():
+    """La préface du livre, sur sa propre page — le texte d'ouverture."""
+    from settings.models import get_config, set_config
+    if request.method == 'POST':
+        set_config(CHAMPS_LIVRE['avant_propos'], (request.form.get('avant_propos') or '').strip())
+        flash("Préface enregistrée.", 'success')
+        return redirect(url_for('admin_livre.preface'))
+    return render_template('livre_preface.html', compte=_compte(),
+                           preface=(get_config(CHAMPS_LIVRE['avant_propos']) or ''))
+
+
 @admin_livre_bp.route('/pdf/reglages', methods=['POST'])
 @admin_required
 def livre_pdf_reglages():
@@ -748,8 +761,11 @@ def livre_pdf_reglages():
     set_config(KEY_TITRE, (request.form.get('titre') or '').strip())
     set_config(KEY_SOUS_TITRE, (request.form.get('sous_titre') or '').strip())
     set_config(KEY_AUTEUR, (request.form.get('auteur') or '').strip())
+    # N'écrire que les champs réellement présents dans ce formulaire : la
+    # préface a sa propre page et ne doit pas être effacée en enregistrant ici.
     for cle, config in CHAMPS_LIVRE.items():
-        set_config(config, (request.form.get(cle) or '').strip())
+        if cle in request.form:
+            set_config(config, (request.form.get(cle) or '').strip())
     flash("Réglages du livre enregistrés.", 'success')
     return redirect(url_for('admin_livre.livre_pdf'))
 

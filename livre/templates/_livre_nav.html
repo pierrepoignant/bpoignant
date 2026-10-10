@@ -18,6 +18,10 @@
        class="btn btn-sm {% if _docs %}btn-vert{% else %}btn-outline{% endif %}">
         Tous les documents
     </a>
+    <a href="{{ url_for('admin_livre.preface') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/preface') %}btn-vert{% else %}btn-outline{% endif %}">
+        Préface du livre
+    </a>
     <a href="{{ url_for('admin_livre.livre_pdf') }}"
        class="btn btn-sm {% if _p.startswith('/admin/livre/pdf') %}btn-vert{% else %}btn-outline{% endif %}">
         <i class="far fa-file-pdf"></i> Livre PDF
