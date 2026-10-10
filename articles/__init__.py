@@ -746,18 +746,32 @@ def _resolve_author():
 def delete_article(article_id):
     article = db.session.get(Article, article_id) or abort(404)
 
-    # Cascade: remove everything that references this article before deleting
-    # it (there are no ON DELETE rules, so the FK constraints would otherwise
-    # block the delete).
+    # Il n'y a aucune règle ON DELETE : chaque table qui pointe vers l'article
+    # doit être traitée à la main, sinon sa contrainte bloque la suppression.
+    # Ce qui appartient à l'article est supprimé ; les liens optionnels vers une
+    # vidéo ou une chronique du livre sont seulement détachés, pour ne pas
+    # détruire la vidéo ou le texte au passage. (`article_themes` est géré par
+    # la relation SQLAlchemy et se vide tout seul.)
     from engagement.models import Comment, Reaction
-    from newsletter.models import Campaign, Delivery
+    from newsletter.models import Campaign, Delivery, EmailEvent
     from analytics.models import PageView
+    from tweets.models import TweetReply
+    from tiktok.models import TikTokPost
+    from livre.models import BookDoc
 
     Comment.query.filter_by(article_id=article.id).delete(synchronize_session=False)
     Reaction.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    EmailEvent.query.filter_by(article_id=article.id).delete(synchronize_session=False)
     Delivery.query.filter_by(article_id=article.id).delete(synchronize_session=False)
     Campaign.query.filter_by(article_id=article.id).delete(synchronize_session=False)
-    # Page views are logged by path, not by FK.
+    TweetReply.query.filter_by(article_id=article.id).delete(synchronize_session=False)
+    # Détacher, sans supprimer : une vidéo ou une chronique du livre survit à
+    # l'article qui lui était associé.
+    TikTokPost.query.filter_by(article_id=article.id).update(
+        {'article_id': None}, synchronize_session=False)
+    BookDoc.query.filter_by(article_id=article.id).update(
+        {'article_id': None}, synchronize_session=False)
+    # Les vues sont enregistrées par chemin, pas par clé étrangère.
     PageView.query.filter_by(path=f'/articles/{article.slug}').delete(synchronize_session=False)
 
     db.session.delete(article)
