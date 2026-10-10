@@ -1,33 +1,21 @@
 {# Sous-menu du Livre : classer, voir ce qui l'est, ce qui est écarté, tout
    parcourir, et les chapitres. Les compteurs disent où en est le travail. #}
 {% set _p = request.path %}
+{# Les pages « documents » : classer et les vues filtrées. Elles partagent un
+   second niveau sous « Tous les documents ». #}
+{% set _docs = _p == url_for('admin_livre.classer')
+   or _p.startswith('/admin/livre/intros')
+   or _p.startswith('/admin/livre/classes')
+   or _p.startswith('/admin/livre/ignores')
+   or _p.startswith('/admin/livre/tous')
+   or _p.startswith('/admin/livre/doc/') %}
 <nav class="admin-tabs" aria-label="Le Livre" style="margin-top: -0.4rem;">
-    <a href="{{ url_for('admin_livre.classer') }}"
-       class="btn btn-sm {% if _p == url_for('admin_livre.classer') %}btn-vert{% else %}btn-outline{% endif %}">
-        Classification{% if compte and compte.a_classer %} <span style="opacity: .75;">· {{ compte.a_classer }}</span>{% endif %}
-    </a>
     <a href="{{ url_for('admin_livre.themes') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/themes') %}btn-vert{% else %}btn-outline{% endif %}">
+       class="btn btn-sm {% if _p.startswith('/admin/livre/themes') or _p.startswith('/admin/livre/chapitre') %}btn-vert{% else %}btn-outline{% endif %}">
         Chapitres
     </a>
-    <a href="{{ url_for('admin_livre.intros') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/intros') and not _p.startswith('/admin/livre/intros/faites') %}btn-vert{% else %}btn-outline{% endif %}">
-        Intro à faire{% if compte and compte.intro_a_faire %} <span style="opacity: .75;">· {{ compte.intro_a_faire }}</span>{% endif %}
-    </a>
-    <a href="{{ url_for('admin_livre.classes') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/classes') %}btn-vert{% else %}btn-outline{% endif %}">
-        Classés{% if compte %} <span style="opacity: .75;">· {{ compte.classe }}</span>{% endif %}
-    </a>
-    <a href="{{ url_for('admin_livre.intros_faites') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/intros/faites') %}btn-vert{% else %}btn-outline{% endif %}">
-        Intro faite{% if compte and compte.intro_faite %} <span style="opacity: .75;">· {{ compte.intro_faite }}</span>{% endif %}
-    </a>
-    <a href="{{ url_for('admin_livre.ignores') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/ignores') %}btn-vert{% else %}btn-outline{% endif %}">
-        Ignorés{% if compte %} <span style="opacity: .75;">· {{ compte.ignore }}</span>{% endif %}
-    </a>
     <a href="{{ url_for('admin_livre.tous') }}"
-       class="btn btn-sm {% if _p.startswith('/admin/livre/tous') %}btn-vert{% else %}btn-outline{% endif %}">
+       class="btn btn-sm {% if _docs %}btn-vert{% else %}btn-outline{% endif %}">
         Tous les documents
     </a>
     <a href="{{ url_for('admin_livre.livre_pdf') }}"
@@ -35,6 +23,37 @@
         <i class="far fa-file-pdf"></i> Livre PDF
     </a>
 </nav>
+
+{# Sous-menu des documents : les étapes du tri. N'apparaît que dans cette
+   section, sous « Tous les documents ». #}
+{% if _docs %}
+<nav class="admin-tabs" aria-label="Documents" style="margin-top: -0.6rem;">
+    <a href="{{ url_for('admin_livre.classer') }}"
+       class="btn btn-sm {% if _p == url_for('admin_livre.classer') %}btn-primary{% else %}btn-outline{% endif %}">
+        Classification{% if compte and compte.a_classer %} <span style="opacity: .75;">· {{ compte.a_classer }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.intros') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/intros') and not _p.startswith('/admin/livre/intros/faites') %}btn-primary{% else %}btn-outline{% endif %}">
+        Intro à faire{% if compte and compte.intro_a_faire %} <span style="opacity: .75;">· {{ compte.intro_a_faire }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.classes') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/classes') %}btn-primary{% else %}btn-outline{% endif %}">
+        Classés{% if compte %} <span style="opacity: .75;">· {{ compte.classe }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.intros_faites') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/intros/faites') %}btn-primary{% else %}btn-outline{% endif %}">
+        Intro faite{% if compte and compte.intro_faite %} <span style="opacity: .75;">· {{ compte.intro_faite }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.ignores') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/ignores') %}btn-primary{% else %}btn-outline{% endif %}">
+        Ignorés{% if compte %} <span style="opacity: .75;">· {{ compte.ignore }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_livre.tous') }}"
+       class="btn btn-sm {% if _p.startswith('/admin/livre/tous') %}btn-primary{% else %}btn-outline{% endif %}">
+        Tous
+    </a>
+</nav>
+{% endif %}
 
 {# L'overlay de lecture, partagé par toutes les pages du Livre : le texte
    entier, en typographie de lecture, fermé d'un geste. #}
