@@ -638,6 +638,17 @@ def generer_livre(app):
         GEN.clear()
         GEN.update(en_cours=True, etape="Composition du livre…",
                    demarre=datetime.utcnow().isoformat(timespec='seconds'))
+    # On efface d'emblée l'ancien livre et sa fiche : pendant la composition,
+    # la page ne propose plus un PDF périmé au téléchargement, et s'il reste des
+    # chroniques masquées depuis, elles ne survivront pas dans un vieux fichier.
+    try:
+        import storage
+        from settings.models import delete_config
+        storage.delete_file(S3_LIVRE)
+        storage.delete_file(S3_COUVERTURE)
+        delete_config(KEY_PDF_META)
+    except Exception:
+        log.exception('livre : nettoyage de l\'ancien PDF impossible')
 
     def _travail():
         with app.app_context():

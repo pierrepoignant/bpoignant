@@ -113,9 +113,13 @@
 
         {% if genere_le %}
         <div id="gen-liens" style="margin-top: 0.8rem;">
+            <div style="background: rgba(31,138,85,0.08); border: 1px solid rgba(31,138,85,0.3); border-radius: 10px; padding: 9px 12px; font-size: 0.8rem; line-height: 1.5; margin-bottom: 0.7rem;">
+                <i class="fas fa-circle-check" style="color: var(--vert);"></i>
+                PDF à jour du <strong>{{ genere_le.strftime('%d/%m/%Y à %H:%M') }}</strong><br>
+                <span style="color: var(--gris);">{% if infos.chroniques %}{{ infos.chroniques }} chroniques · {% endif %}{% if infos.pages %}{{ infos.pages }} pages{% endif %}{% if taille %} · {{ (taille / 1024 / 1024) | round(1) }} Mo{% endif %}</span>
+            </div>
             <a href="{{ url_for('admin_livre.livre_pdf_telecharger', quoi='livre') }}" class="btn btn-sm btn-primary" style="width: 100%; margin-bottom: 0.4rem;"><i class="fas fa-download"></i> Télécharger le livre</a>
             <a href="{{ url_for('admin_livre.livre_pdf_telecharger', quoi='couverture') }}" class="btn btn-sm btn-outline" style="width: 100%; color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-download"></i> Télécharger la couverture</a>
-            <p style="font-size: 0.75rem; color: var(--gris); margin: 0.5rem 0 0;">Dernière composition le {{ genere_le.strftime('%d/%m/%Y à %H:%M') }}{% if infos.pages %} · {{ infos.pages }} pages{% endif %}{% if taille %} · {{ (taille / 1024 / 1024) | round(1) }} Mo{% endif %}.</p>
         </div>
         {% endif %}
       </div>
@@ -134,7 +138,7 @@
             if (!e.etape) { boite.style.display = 'none'; return; }
             boite.style.display = 'block';
             let html = (e.en_cours ? '<i class="fas fa-spinner fa-spin"></i> ' : (e.etape === 'Échec' ? '<i class="fas fa-circle-exclamation" style="color:var(--rouge)"></i> ' : '<i class="fas fa-circle-check" style="color: var(--vert);"></i> ')) + '<strong>' + e.etape + '</strong>';
-            if (e.chroniques) html += ' · ' + e.chroniques + ' chroniques'; if (e.pages) html += ', ' + e.pages + ' pages';
+            if (e.chroniques) html += ' · ' + e.chroniques + ' chroniques'; if (e.pages) html += ', ' + e.pages + ' pages'; if (e.etape === 'Terminé') html += ' — rechargement…';
             if (e.erreur) html += '<br><span style="color:var(--rouge)">' + e.erreur + '</span>';
             boite.innerHTML = html;
         }

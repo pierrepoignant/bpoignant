@@ -203,3 +203,15 @@ def stat_file(key):
         return {'size': head.get('ContentLength'), 'modified': head.get('LastModified')}
     except Exception:
         return None
+
+
+def delete_file(key):
+    """Remove an object. Silent when it isn't there — the point is that it's
+    gone, and deleting an absent key is success, not an error."""
+    if not is_configured():
+        return
+    c = _config()
+    try:
+        _client().delete_object(Bucket=c['bucket'], Key=key)
+    except Exception as exc:
+        import logging; logging.getLogger(__name__).warning("delete_file(%s) failed: %s", key, exc)
