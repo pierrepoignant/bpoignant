@@ -50,10 +50,10 @@
             <button type="button" class="btn btn-sm btn-outline" title="Changer de chapitre"
                     style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;"
                     onclick='choisirChapitre({{ c.id }}, {{ c.titre|tojson }})'><i class="fas fa-folder-open"></i> Chapitre</button>
-            {# Intro : écrire ou relire l'intro de cette chronique. Vert si faite. #}
-            <a href="{{ url_for('admin_livre.intros', doc=c.id) }}" class="btn btn-sm btn-outline"
-               title="{{ 'Relire l’intro' if c.intro else 'Écrire l’intro' }}"
-               style="color: {{ 'var(--vert)' if c.intro else 'var(--noir)' }}; border-color: #e0e0e0; white-space: nowrap;"><i class="fas fa-pen-nib"></i> Intro</a>
+            {# Modifier : titre, intro et texte de la chronique. Vert si l'intro est faite. #}
+            <a href="{{ url_for('admin_livre.doc_edit', doc_id=c.id, retour='chapitre') }}" class="btn btn-sm btn-outline"
+               title="Modifier la chronique"
+               style="color: {{ 'var(--vert)' if c.intro else 'var(--noir)' }}; border-color: #e0e0e0; white-space: nowrap;"><i class="fas fa-pen"></i> Modifier</a>
             {# L'œil : dans le livre / retiré. #}
             <button type="button" class="oeil btn btn-sm btn-outline" title="{{ 'Retirer du livre' if c.in_book else 'Remettre dans le livre' }}"
                     data-id="{{ c.id }}" data-in="{{ 1 if c.in_book else 0 }}"

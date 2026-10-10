@@ -1,0 +1,69 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — modifier{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}
+<p style="margin: 0;">
+    {% if doc.theme_id %}<a href="{{ url_for('admin_livre.chapitre', theme_id=doc.theme_id) }}" style="color: var(--gris);"><i class="fas fa-arrow-left"></i> {{ doc.theme.name }}</a> · {% endif %}
+    Modifier la chronique
+</p>
+{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    <form method="POST" id="chronique-form" style="max-width: 760px; margin-top: 1rem;">
+        <input type="hidden" name="retour" value="{{ retour }}">
+
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">Titre</label>
+        <input type="text" name="title" value="{{ doc.title or doc.name }}" maxlength="300" required
+               style="width: 100%; padding: 11px 13px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1.05rem; font-weight: 600; margin-bottom: 1.2rem;">
+
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">Intro <span style="text-transform:none; letter-spacing:0; color:#bbb;">— quelques lignes en tête de la chronique dans le livre (facultatif)</span></label>
+        <textarea name="intro" rows="4" placeholder="Le contexte du moment, pourquoi ce texte, ce qu'il en reste…"
+                  style="width: 100%; padding: 11px 13px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1rem; line-height: 1.6; resize: vertical; margin-bottom: 1.2rem;">{{ doc.intro or '' }}</textarea>
+
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">Texte</label>
+        <div id="editor" style="background: white; min-height: 320px;"></div>
+        <textarea name="content_html" id="content_html" style="display: none;"></textarea>
+
+        <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.2rem;">
+            <button type="submit" class="btn btn-primary" style="min-height: 46px;"><i class="fas fa-check"></i> Enregistrer</button>
+            {% if doc.theme_id %}
+            <a href="{{ url_for('admin_livre.chapitre', theme_id=doc.theme_id) }}" class="btn btn-outline" style="min-height: 46px; color: var(--noir); border-color: #e0e0e0;">Retour au chapitre</a>
+            {% endif %}
+            <span style="margin-left: auto; align-self: center; font-size: 0.8rem; color: var(--gris);">
+                {% if doc.date_livre %}{{ doc.date_livre.strftime('%d/%m/%Y') }} · {% endif %}<span id="compte-mots">{{ doc.word_count or 0 }}</span> mots
+            </span>
+        </div>
+    </form>
+
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <script>
+        const initialHtml = {{ (doc.content_html or '')|tojson }};
+        const quill = new Quill('#editor', {
+            theme: 'snow',
+            modules: { toolbar: [
+                [{ header: [2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                ['blockquote'],
+                [{ list: 'ordered' }, { list: 'bullet' }],
+                ['link'],
+                ['clean'],
+            ] },
+        });
+        if (initialHtml) quill.clipboard.dangerouslyPasteHTML(initialHtml);
+        function majMots() {
+            var t = quill.getText().trim();
+            document.getElementById('compte-mots').textContent = t ? t.split(/\s+/).length : 0;
+        }
+        quill.on('text-change', majMots); majMots();
+        document.getElementById('chronique-form').addEventListener('submit', function () {
+            document.getElementById('content_html').value = quill.root.innerHTML;
+        });
+    </script>
+{% endblock %}

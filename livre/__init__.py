@@ -371,6 +371,39 @@ def intro_save(doc_id):
     return redirect(request.referrer or url_for('admin_livre.intros'))
 
 
+@admin_livre_bp.route('/doc/<int:doc_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def doc_edit(doc_id):
+    """Modifier une chronique : son titre, son intro, son texte.
+
+    Le texte garde son HTML (même éditeur Quill que les articles). Enregistrer
+    met aussi à jour le texte brut servant à la recherche et au comptage.
+    """
+    from articles import _clean_html
+    from articles.cleanup import clean_article_html, clean_text
+    doc = db.session.get(BookDoc, doc_id) or abort(404)
+    if request.method == 'POST':
+        titre = (request.form.get('title') or '').strip()
+        doc.title = (clean_text(titre)[:300] or doc.title) if titre else doc.title
+        intro = (request.form.get('intro') or '').strip()
+        doc.intro = intro or None
+        doc.intro_at = datetime.utcnow() if intro else doc.intro_at
+        if intro:
+            doc.no_intro = False
+        html = clean_article_html(_clean_html(request.form.get('content_html') or ''))
+        doc.content_html = html
+        doc.content_text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html)).strip()
+        doc.word_count = len(doc.content_text.split())
+        db.session.commit()
+        flash("Chronique enregistrée.", 'success')
+        retour = request.form.get('retour')
+        if retour == 'chapitre' and doc.theme_id:
+            return redirect(url_for('admin_livre.chapitre', theme_id=doc.theme_id))
+        return redirect(url_for('admin_livre.doc_edit', doc_id=doc.id))
+    return render_template('livre_edit.html', doc=doc, compte=_compte(),
+                           retour=request.args.get('retour') or '')
+
+
 @admin_livre_bp.route('/chapitre/<int:theme_id>')
 @admin_required
 def chapitre(theme_id):

@@ -51,10 +51,10 @@
                     <option disabled>──────</option>
                     <option value="reprendre">Retirer la classification</option>
                 </select>
-                <a href="{{ url_for('admin_livre.intros', doc=d.id) }}" class="btn btn-sm btn-outline" title="{{ 'Relire l’intro' if d.intro else 'Écrire l’intro' }}" style="color: {{ 'var(--vert)' if d.intro else 'var(--noir)' }}; border-color: #e0e0e0;"><i class="fas fa-pen-nib"></i></a>
+                <a href="{{ url_for('admin_livre.doc_edit', doc_id=d.id) }}" class="btn btn-sm btn-outline" title="Modifier la chronique" style="color: {{ 'var(--vert)' if d.intro else 'var(--noir)' }}; border-color: #e0e0e0;"><i class="fas fa-pen"></i></a>
                 <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline" title="Écarter du livre" style="color: var(--rouge); border-color: #e0e0e0;"><i class="fas fa-ban"></i></button>
                 {% elif mode == 'intros' %}
-                <a href="{{ url_for('admin_livre.intros', doc=d.id) }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-pen-nib"></i> Modifier</a>
+                <a href="{{ url_for('admin_livre.doc_edit', doc_id=d.id) }}" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-pen"></i> Modifier</a>
                 {% else %}
                 <button type="submit" name="action" value="reprendre" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"><i class="fas fa-rotate-left"></i> Reprendre</button>
                 {% endif %}
