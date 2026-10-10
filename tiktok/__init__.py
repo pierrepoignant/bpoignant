@@ -680,6 +680,86 @@ def backfill_youtube(limit=6, log_fn=print):
     return faits, reste
 
 
+def post_to_facebook_backend(post, texte=None):
+    """Publier un clip sur la Page Facebook. Renvoie (ok, id_ou_erreur)."""
+    import meta
+    from init_db import db
+    if post.fb_post_id:
+        return False, "déjà publié"
+    if not post.video_url:
+        return False, "aucune vidéo"
+    if not meta.facebook_ready():
+        return False, "Facebook n'est pas connecté"
+    legende = (texte or '').strip() or (post.caption or post.title or '')
+    ok, detail = meta.post_to_page(post.video_url, legende)
+    if not ok:
+        return False, str(detail)
+    post.fb_post_id = str(detail)
+    post.fb_posted_at = datetime.utcnow()
+    db.session.commit()
+    return True, post.fb_post_id
+
+
+def post_to_instagram_backend(post, texte=None):
+    """Publier un clip en Reel Instagram. Renvoie (ok, media_id_ou_erreur)."""
+    import meta
+    from init_db import db
+    if post.instagram_media_id:
+        return False, "déjà publié"
+    if not post.video_url:
+        return False, "aucune vidéo"
+    if not meta.instagram_ready():
+        return False, "Instagram n'est pas rattaché"
+    legende = (texte or '').strip() or (post.caption or post.title or '')
+    ok, detail = meta.post_reel(post.video_url, legende)
+    if not ok:
+        return False, str(detail)
+    post.instagram_media_id = str(detail)
+    post.instagram_posted_at = datetime.utcnow()
+    db.session.commit()
+    return True, post.instagram_media_id
+
+
+@admin_tiktok_bp.route('/<int:post_id>/post-facebook', methods=['POST'])
+@admin_required
+def post_to_facebook(post_id):
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    ok, detail = post_to_facebook_backend(post)
+    flash("Vidéo publiée sur Facebook." if ok else f"Échec Facebook : {detail}",
+          'success' if ok else 'danger')
+    return redirect(request.referrer or url_for('admin_tiktok.edit', post_id=post_id))
+
+
+@admin_tiktok_bp.route('/<int:post_id>/post-instagram', methods=['POST'])
+@admin_required
+def post_to_instagram(post_id):
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    ok, detail = post_to_instagram_backend(post)
+    flash("Reel publié sur Instagram." if ok else f"Échec Instagram : {detail}",
+          'success' if ok else 'danger')
+    return redirect(request.referrer or url_for('admin_tiktok.edit', post_id=post_id))
+
+
+def refresh_meta_stats(log_fn=print):
+    """Relever les chiffres Facebook et Instagram de toutes les vidéos publiées."""
+    import meta
+    from init_db import db
+    n = 0
+    maintenant = datetime.utcnow()
+    for post in TikTokPost.query.filter(TikTokPost.fb_post_id.isnot(None)).all():
+        st = meta.facebook_stats(post.fb_post_id)
+        if st:
+            post.fb_views = st['views']; post.meta_metrics_at = maintenant; n += 1
+    for post in TikTokPost.query.filter(TikTokPost.instagram_media_id.isnot(None)).all():
+        st = meta.instagram_stats(post.instagram_media_id)
+        if st:
+            post.instagram_views = st['views']; post.instagram_likes = st['likes']
+            post.instagram_comments = st['comments']; post.meta_metrics_at = maintenant; n += 1
+    db.session.commit()
+    log_fn(f"chiffres Meta relevés pour {n} publication(s).")
+    return n
+
+
 def post_to_youtube_backend(post, texte=None):
     """Publier un clip sur YouTube (en Short). Renvoie (ok, video_id_ou_erreur)."""
     import tempfile

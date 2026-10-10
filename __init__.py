@@ -425,6 +425,14 @@ def _migrate_schema():
                       'youtube_comments INTEGER NULL', 'youtube_metrics_at DATETIME NULL'):
                 db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
             db.session.commit()
+        if 'fb_post_id' not in cols:
+            for c in ('fb_post_id VARCHAR(60) NULL', 'fb_posted_at DATETIME NULL',
+                      'fb_views INTEGER NULL', 'instagram_media_id VARCHAR(60) NULL',
+                      'instagram_posted_at DATETIME NULL', 'instagram_views INTEGER NULL',
+                      'instagram_likes INTEGER NULL', 'instagram_comments INTEGER NULL',
+                      'meta_metrics_at DATETIME NULL'):
+                db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
+            db.session.commit()
 
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}

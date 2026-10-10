@@ -75,6 +75,16 @@ class TikTokPost(db.Model):
     youtube_likes = db.Column(db.Integer, nullable=True)
     youtube_comments = db.Column(db.Integer, nullable=True)
     youtube_metrics_at = db.Column(db.DateTime, nullable=True)
+    # Facebook (Page) et Instagram (Reel) : identifiants, dates, et chiffres.
+    fb_post_id = db.Column(db.String(60), nullable=True)
+    fb_posted_at = db.Column(db.DateTime, nullable=True)
+    fb_views = db.Column(db.Integer, nullable=True)
+    instagram_media_id = db.Column(db.String(60), nullable=True)
+    instagram_posted_at = db.Column(db.DateTime, nullable=True)
+    instagram_views = db.Column(db.Integer, nullable=True)
+    instagram_likes = db.Column(db.Integer, nullable=True)
+    instagram_comments = db.Column(db.Integer, nullable=True)
+    meta_metrics_at = db.Column(db.DateTime, nullable=True)
     # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
     # publication d'un membre, et aucun scrapeur n'atteint les impressions,
     # qui ne figurent pas sur la page publique.
@@ -130,6 +140,16 @@ class TikTokPost(db.Model):
     def youtube_url(self):
         from youtube import video_url
         return video_url(self.youtube_video_id)
+
+    @property
+    def facebook_url(self):
+        from meta import facebook_url
+        return facebook_url(self.fb_post_id)
+
+    @property
+    def instagram_url(self):
+        from meta import instagram_url
+        return instagram_url(self.instagram_media_id)
 
     @property
     def x_url(self):

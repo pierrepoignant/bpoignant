@@ -11,6 +11,8 @@
     {% if p.views is not none %}<span><i class="fa-brands fa-tiktok"></i> {{ p.views }} vues · {{ p.likes }} j'aime</span>{% endif %}
     {% if p.x_view_count is not none %}<span><i class="fa-brands fa-x-twitter"></i> {{ p.x_view_count }} vues</span>{% endif %}
     {% if p.youtube_views is not none %}<span><i class="fa-brands fa-youtube" style="color:#FF0000;"></i> {{ p.youtube_views }} vues · {{ p.youtube_likes }} j'aime · {{ p.youtube_comments }} comm.</span>{% endif %}
+    {% if p.fb_views is not none %}<span><i class="fa-brands fa-facebook" style="color:#1877F2;"></i> {{ p.fb_views }} vues</span>{% endif %}
+    {% if p.instagram_views is not none %}<span><i class="fa-brands fa-instagram" style="color:#E4405F;"></i> {{ p.instagram_views }} vues · {{ p.instagram_likes }} j'aime · {{ p.instagram_comments }} comm.</span>{% endif %}
     {% if minute_delivered %}<span><i class="far fa-envelope"></i> {{ minute_delivered }} destinataires</span>{% endif %}
 </p>
 {% endblock %}
@@ -161,6 +163,34 @@
                           onsubmit="return confirm('Publier cette vidéo sur YouTube maintenant ?'); const b=this.querySelector('button'); b.disabled=true; b.innerHTML='Envoi…';" style="margin: 0;">
                         <button type="submit" class="btn btn-sm" style="width: 100%; background: #FF0000; color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
                             <i class="fa-brands fa-youtube"></i> Publier sur YouTube
+                        </button>
+                    </form>
+                    {% endif %}
+                    {# Facebook : le lien une fois publié, le bouton sinon. #}
+                    {% if p.fb_post_id %}
+                    <a href="{{ p.facebook_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-facebook"></i> Voir sur Facebook
+                    </a>
+                    {% elif p.has_video %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_facebook', post_id=p.id) }}"
+                          onsubmit="return confirm('Publier cette vidéo sur la Page Facebook maintenant ?'); const b=this.querySelector('button'); b.disabled=true; b.innerHTML='Envoi…';" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm" style="width: 100%; background: #1877F2; color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
+                            <i class="fa-brands fa-facebook"></i> Publier sur Facebook
+                        </button>
+                    </form>
+                    {% endif %}
+                    {# Instagram : le lien une fois publié, le bouton sinon. #}
+                    {% if p.instagram_media_id %}
+                    <a href="{{ p.instagram_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"
+                       style="color: var(--noir); border-color: #e0e0e0;">
+                        <i class="fa-brands fa-instagram"></i> Voir sur Instagram
+                    </a>
+                    {% elif p.has_video %}
+                    <form method="POST" action="{{ url_for('admin_tiktok.post_to_instagram', post_id=p.id) }}"
+                          onsubmit="return confirm('Publier ce Reel sur Instagram maintenant ?'); const b=this.querySelector('button'); b.disabled=true; b.innerHTML='Envoi…';" style="margin: 0;">
+                        <button type="submit" class="btn btn-sm" style="width: 100%; background: linear-gradient(45deg,#F58529,#DD2A7B,#8134AF); color: #fff; border: none; border-radius: 50px; padding: 6px 12px;">
+                            <i class="fa-brands fa-instagram"></i> Publier sur Instagram
                         </button>
                     </form>
                     {% endif %}

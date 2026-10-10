@@ -69,6 +69,14 @@ def index():
         youtube_panne=__import__('youtube').check_auth(),
         youtube_has_client=__import__('youtube').has_client_credentials(),
         youtube_redirect_uri=url_for('admin_settings.youtube_callback', _external=True),
+        meta_has_client=__import__('meta').has_client_credentials(),
+        meta_app_id=__import__('meta')._app_id(),
+        meta_connected=__import__('meta').is_connected(),
+        meta_page_name=__import__('meta').page_name(),
+        meta_ig_username=__import__('meta').ig_username(),
+        meta_ig_ready=__import__('meta').instagram_ready(),
+        meta_panne=__import__('meta').auth_error(),
+        meta_redirect_uri=url_for('admin_settings.meta_callback', _external=True),
         linkedin_client_id=linkedin._client_id(),
         linkedin_has_secret=bool(linkedin._client_secret()),
         linkedin_connected=linkedin.is_configured(),
@@ -327,6 +335,72 @@ def gdrive_verify():
           else f"Google Drive ne répond toujours pas : {message}",
           'success' if ok else 'danger')
     return redirect(request.form.get('next') or url_for('admin_settings.index'))
+
+
+def _meta_callback_url():
+    return url_for('admin_settings.meta_callback', _external=True)
+
+
+@admin_settings_bp.route('/meta/credentials', methods=['POST'])
+@admin_required
+def meta_credentials():
+    import meta
+    meta.save_settings(request.form.get('app_id'), request.form.get('app_secret'))
+    flash("Identifiants Meta enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index') + '#meta')
+
+
+@admin_settings_bp.route('/meta/connect')
+@admin_required
+def meta_connect():
+    import meta
+    state = secrets.token_urlsafe(24)
+    session['meta_oauth_state'] = state
+    try:
+        url = meta.authorization_url(_meta_callback_url(), state)
+    except meta.MetaError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#meta')
+    return redirect(url)
+
+
+@admin_settings_bp.route('/meta/callback')
+@admin_required
+def meta_callback():
+    import meta
+    expected = session.pop('meta_oauth_state', None)
+    if request.args.get('error'):
+        flash(f"Connexion Meta refusée ({request.args.get('error_description') or request.args['error']}).", 'danger')
+        return redirect(url_for('admin_settings.index') + '#meta')
+    if not expected or request.args.get('state') != expected:
+        flash("Réponse Meta inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_settings.index') + '#meta')
+    try:
+        meta.exchange_code(request.args.get('code'), _meta_callback_url())
+    except meta.MetaError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#meta')
+    ig = f", Instagram @{meta.ig_username()}" if meta.instagram_ready() else " (aucun Instagram rattaché à la Page)"
+    flash(f"Meta connecté — Page « {meta.page_name()} »{ig}.", 'success')
+    return redirect(url_for('admin_settings.index') + '#meta')
+
+
+@admin_settings_bp.route('/meta/verify', methods=['POST'])
+@admin_required
+def meta_verify():
+    import meta
+    ok, message = meta.verify_credentials()
+    flash(message, 'success' if ok else 'danger')
+    return redirect(url_for('admin_settings.index') + '#meta')
+
+
+@admin_settings_bp.route('/meta/disconnect', methods=['POST'])
+@admin_required
+def meta_disconnect():
+    import meta
+    meta.disconnect()
+    flash("Meta déconnecté.", 'info')
+    return redirect(url_for('admin_settings.index') + '#meta')
 
 
 def _yt_callback_url():

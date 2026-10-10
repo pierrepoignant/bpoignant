@@ -104,7 +104,8 @@ def _traiter(app, job_id):
     the job is finished with (successfully or not), False to try again."""
     import video
     from init_db import db
-    from tiktok import attach_render, sync_posts, post_to_x_backend, post_to_linkedin_backend, post_to_youtube_backend
+    from tiktok import (attach_render, sync_posts, post_to_x_backend, post_to_linkedin_backend,
+                        post_to_youtube_backend, post_to_facebook_backend, post_to_instagram_backend)
 
     job = video.get_job(job_id) or {}
     auto = dict(job.get('auto') or {})
@@ -164,9 +165,17 @@ def _traiter(app, job_id):
     if youtube.is_connected():
         ok_yt, detail_yt = post_to_youtube_backend(post)
         resultats.append('YouTube' if ok_yt else f'YouTube échoué ({detail_yt})')
+    import meta
+    ok_fb = ok_ig = True
+    if meta.facebook_ready():
+        ok_fb, detail_fb = post_to_facebook_backend(post)
+        resultats.append('Facebook' if ok_fb else f'Facebook échoué ({detail_fb})')
+    if meta.instagram_ready():
+        ok_ig, detail_ig = post_to_instagram_backend(post)
+        resultats.append('Instagram' if ok_ig else f'Instagram échoué ({detail_ig})')
     db.session.commit()
 
-    _fin(job_id, 'fait' if (ok_x and ok_li and ok_yt) else 'partiel',
+    _fin(job_id, 'fait' if (ok_x and ok_li and ok_yt and ok_fb and ok_ig) else 'partiel',
          f"Rattaché à « {post.title[:60]} » · " + ', '.join(resultats))
     return True
 
