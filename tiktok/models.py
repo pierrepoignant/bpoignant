@@ -70,6 +70,11 @@ class TikTokPost(db.Model):
     # YouTube (en Shorts) : identifiant de la vidéo et date de publication.
     youtube_video_id = db.Column(db.String(40), nullable=True)
     youtube_posted_at = db.Column(db.DateTime, nullable=True)
+    # Chiffres YouTube, relevés par l'API (videos.list) comme pour X et TikTok.
+    youtube_views = db.Column(db.Integer, nullable=True)
+    youtube_likes = db.Column(db.Integer, nullable=True)
+    youtube_comments = db.Column(db.Integer, nullable=True)
+    youtube_metrics_at = db.Column(db.DateTime, nullable=True)
     # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
     # publication d'un membre, et aucun scrapeur n'atteint les impressions,
     # qui ne figurent pas sur la page publique.

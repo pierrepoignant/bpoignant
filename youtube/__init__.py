@@ -30,8 +30,10 @@ TOKEN_URL = 'https://oauth2.googleapis.com/token'
 UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos'
 CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels'
 
-# Téléverser, et rien d'autre : ni lire, ni modifier, ni supprimer la chaîne.
-SCOPE = 'https://www.googleapis.com/auth/youtube.upload'
+# Téléverser une vidéo, et lire les statistiques publiques (vues, likes,
+# commentaires) — rien de plus : ni modifier, ni supprimer la chaîne.
+SCOPE = ('https://www.googleapis.com/auth/youtube.upload '
+         'https://www.googleapis.com/auth/youtube.readonly')
 # Catégorie « News & Politics » — la plus juste pour des chroniques d'actualité.
 CATEGORY_NEWS = '25'
 
@@ -298,6 +300,35 @@ def _explain(resp, defaut):
     if resp.status_code == 403 and 'quota' in message.lower():
         return "Quota YouTube du jour épuisé — réessayez demain, ou demandez un quota plus large à Google."
     return f"{defaut} : {message or resp.status_code}"
+
+
+def fetch_stats(video_ids):
+    """{video_id: {'views','likes','comments'}} pour une liste d'identifiants.
+
+    `videos.list` lit les statistiques publiques, cinquante identifiants par
+    appel, un seul point de quota par appel : lire toute la chaîne coûte presque
+    rien. Demande le scope youtube.readonly, ajouté à l'autorisation.
+    """
+    ids = [v for v in (video_ids or []) if v]
+    if not ids:
+        return {}
+    token = _access_token()
+    out = {}
+    for debut in range(0, len(ids), 50):
+        lot = ids[debut:debut + 50]
+        r = requests.get('https://www.googleapis.com/youtube/v3/videos',
+                         params={'part': 'statistics', 'id': ','.join(lot)},
+                         headers={'Authorization': f'Bearer {token}'}, timeout=_TIMEOUT)
+        if r.status_code != 200:
+            raise YouTubeError(_explain(r, "statistiques illisibles"))
+        for item in (r.json() or {}).get('items') or []:
+            st = item.get('statistics') or {}
+            out[item['id']] = {
+                'views': int(st.get('viewCount') or 0),
+                'likes': int(st.get('likeCount') or 0),
+                'comments': int(st.get('commentCount') or 0),
+            }
+    return out
 
 
 def video_url(video_id):

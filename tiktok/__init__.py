@@ -610,6 +610,39 @@ def post_to_linkedin_backend(post, texte=None):
     return True, post.linkedin_post_id
 
 
+def refresh_youtube_stats(log_fn=print):
+    """Relever les chiffres YouTube de toutes les vidéos publiées. Un seul appel
+    par tranche de cinquante, donc quasi rien en quota."""
+    import youtube
+    from init_db import db
+    if not youtube.is_connected():
+        log_fn("YouTube n'est pas connecté — rien à faire.")
+        return 0
+    posts = TikTokPost.query.filter(TikTokPost.youtube_video_id.isnot(None)).all()
+    if not posts:
+        return 0
+    par_id = {p.youtube_video_id: p for p in posts}
+    try:
+        stats = youtube.fetch_stats(list(par_id))
+    except youtube.YouTubeError as exc:
+        log_fn(f"statistiques YouTube indisponibles : {exc}")
+        return 0
+    maintenant = datetime.utcnow()
+    n = 0
+    for vid, chiffres in stats.items():
+        post = par_id.get(vid)
+        if post is None:
+            continue
+        post.youtube_views = chiffres['views']
+        post.youtube_likes = chiffres['likes']
+        post.youtube_comments = chiffres['comments']
+        post.youtube_metrics_at = maintenant
+        n += 1
+    db.session.commit()
+    log_fn(f"chiffres YouTube relevés pour {n} vidéo(s).")
+    return n
+
+
 def backfill_youtube(limit=6, log_fn=print):
     """Publier sur YouTube les clips qui n'y sont pas encore, du plus ancien au
     plus récent, jusqu'à `limit` ou l'épuisement du quota.

@@ -420,6 +420,11 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN youtube_video_id VARCHAR(40) NULL"))
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN youtube_posted_at DATETIME NULL"))
             db.session.commit()
+        if 'youtube_views' not in cols:
+            for c in ('youtube_views INTEGER NULL', 'youtube_likes INTEGER NULL',
+                      'youtube_comments INTEGER NULL', 'youtube_metrics_at DATETIME NULL'):
+                db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
+            db.session.commit()
 
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}

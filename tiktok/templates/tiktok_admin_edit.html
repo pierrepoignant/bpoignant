@@ -10,6 +10,7 @@
     <span><i class="far fa-eye"></i> {{ site_views }} sur le site</span>
     {% if p.views is not none %}<span><i class="fa-brands fa-tiktok"></i> {{ p.views }} vues · {{ p.likes }} j'aime</span>{% endif %}
     {% if p.x_view_count is not none %}<span><i class="fa-brands fa-x-twitter"></i> {{ p.x_view_count }} vues</span>{% endif %}
+    {% if p.youtube_views is not none %}<span><i class="fa-brands fa-youtube" style="color:#FF0000;"></i> {{ p.youtube_views }} vues · {{ p.youtube_likes }} j'aime · {{ p.youtube_comments }} comm.</span>{% endif %}
     {% if minute_delivered %}<span><i class="far fa-envelope"></i> {{ minute_delivered }} destinataires</span>{% endif %}
 </p>
 {% endblock %}

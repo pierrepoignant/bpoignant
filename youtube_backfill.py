@@ -49,6 +49,8 @@ def main():
                 return
             import tiktok
             tiktok.backfill_youtube(limit=args.limit)
+            # Et relever les chiffres de ce qui est déjà en ligne.
+            tiktok.refresh_youtube_stats()
 
 
 if __name__ == '__main__':

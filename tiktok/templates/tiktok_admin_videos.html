@@ -49,12 +49,14 @@
                 {% set cm = commentaires.get(c.id) %}
                 {% if cm and cm[0] %} · <a href="{{ url_for('admin_tiktok.comments_page', post_id=c.id) }}" style="color: var(--rouge);"><i class="fas fa-comments"></i> {{ cm[0] }} à traiter{% if cm[1] %}, {{ cm[1] }} réponse{{ 's' if cm[1] > 1 }} prête{{ 's' if cm[1] > 1 }}{% endif %}</a>{% endif %}
                 {% if c.x_view_count is not none %} · <i class="fa-brands fa-x-twitter"></i> {{ c.x_view_count }}{% endif %}
+                {% if c.youtube_views is not none %} · <i class="fa-brands fa-youtube" style="color:#FF0000;"></i> {{ c.youtube_views }}{% endif %}
             </div>
 
             <div class="fiche-pastilles">
                 {{ pastille(c.posted_url, 'fa-brands fa-tiktok', 'TikTok', c.posted_url, '#000') }}
                 {{ pastille(c.x_post_id, 'fa-brands fa-x-twitter', 'X', c.x_url, '#000') }}
                 {{ pastille(c.linkedin_post_id, 'fa-brands fa-linkedin-in', 'LinkedIn', c.linkedin_url, '#0A66C2') }}
+                {{ pastille(c.youtube_video_id, 'fa-brands fa-youtube', 'YouTube', c.youtube_url, '#FF0000') }}
                 {% set envoi = minute_sends.get(c.id) %}
                 {{ pastille(envoi, 'far fa-envelope',
                             'La Minute — %s destinataires le %s'|format(envoi.success_count, envoi.sent_at.strftime('%d/%m/%Y')) if envoi else 'Pas encore envoyé dans La Minute',
