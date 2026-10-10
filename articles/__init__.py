@@ -392,6 +392,17 @@ def list_articles():
                 url = x_share_url(url_for('articles.public_show', slug=a.slug, _external=True))
                 x_proposed_by_article[a.id] = compose_article_tweet(a.title, a.tweet_summary, url)
 
+    # Texte prêt à coller pour le profil Facebook personnel de Bernard. L'API
+    # Meta ne publie pas sur un profil personnel (seulement sur une Page), donc
+    # ici on ne publie pas : on prépare l'accroche et le lien, Bernard colle.
+    fb_prepared_by_article = {}
+    for a in articles:
+        if a.published:
+            lien = url_for('articles.public_show', slug=a.slug, _external=True)
+            accroche = (a.social_summary or '').strip() or (a.summary or '').strip()
+            fb_prepared_by_article[a.id] = (
+                f"{accroche}\n\n{lien}" if accroche else f"{a.title}\n\n{lien}")
+
     return render_template(
         'articles_admin_list.html',
         articles=articles,
@@ -404,6 +415,7 @@ def list_articles():
         abonnes_lettre=__import__('newsletter')._mailable_query('lettre').count(),
         mon_email=getattr(current_user, 'email', '') or '',
         x_proposed_by_article=x_proposed_by_article,
+        fb_prepared_by_article=fb_prepared_by_article,
     )
 
 
