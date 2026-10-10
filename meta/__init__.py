@@ -30,10 +30,14 @@ VERSION = 'v21.0'
 DIALOG = 'https://www.facebook.com/{v}/dialog/oauth'
 
 # Publier sur la Page, lister les Pages, lire leur engagement, et publier sur
-# l'Instagram professionnel qui leur est rattaché.
+# l'Instagram professionnel qui leur est rattaché. On ne demande que le
+# strict nécessaire : chaque permission supplémentaire est une case de plus à
+# activer dans l'application Meta, et une de plus à faire refuser si elle n'y
+# est pas. Les vues d'une vidéo de Page passent par pages_read_engagement, donc
+# read_insights (statistiques globales de la Page) n'est pas demandé.
 SCOPE = ('pages_show_list,pages_manage_posts,pages_read_engagement,'
          'business_management,instagram_basic,instagram_content_publish,'
-         'instagram_manage_insights,read_insights')
+         'instagram_manage_insights')
 
 KEY_APP_ID = 'meta_app_id'
 KEY_APP_SECRET = 'meta_app_secret'
