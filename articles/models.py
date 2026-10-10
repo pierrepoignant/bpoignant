@@ -77,6 +77,13 @@ class Article(db.Model):
     x_retweet_count = db.Column(db.Integer, nullable=True)
     x_metrics_at = db.Column(db.DateTime, nullable=True)
 
+    # Facebook : la Page de Bernard. L'identifiant du post et sa date — une
+    # publication de lien (accroche + lien de l'article), l'aperçu étant tiré
+    # des balises Open Graph de la page. Le profil personnel n'est pas publiable
+    # par l'API, donc il n'y a ici que la Page.
+    fb_page_post_id = db.Column(db.String(60), nullable=True)
+    fb_page_posted_at = db.Column(db.DateTime, nullable=True)
+
     # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
     # n'expose aucune statistique pour la publication d'un membre, donc il n'y
     # a ni vues ni réactions à stocker.
@@ -100,6 +107,12 @@ class Article(db.Model):
     themes = db.relationship('Theme', secondary=article_themes,
                              backref=db.backref('articles', lazy='selectin'),
                              lazy='selectin', order_by='Theme.name')
+
+    @property
+    def fb_page_post_url(self):
+        if not self.fb_page_post_id:
+            return None
+        return f"https://www.facebook.com/{self.fb_page_post_id}"
 
     @property
     def linkedin_post_url(self):

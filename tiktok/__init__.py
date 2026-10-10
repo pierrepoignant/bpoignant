@@ -680,6 +680,48 @@ def backfill_youtube(limit=6, log_fn=print):
     return faits, reste
 
 
+def backfill_meta(limit=1, log_fn=print):
+    """Publier sur Facebook et Instagram les clips qui n'y sont pas encore, du
+    plus ancien au plus récent, jusqu'à `limit` clips.
+
+    Un clip est « à faire » s'il manque sur l'un ou l'autre réseau ; chaque run
+    en traite un seul, poussé sur les deux réseaux là où il manque. Appelé
+    plusieurs fois par jour par le CronJob, l'arriéré s'écoule au compte-gouttes.
+    Sert aussi de filet : un clip que l'enchaînement après montage aurait manqué
+    est rattrapé ici.
+    """
+    import meta
+    if not meta.is_connected():
+        log_fn("Facebook n'est pas connecté — rien à faire.")
+        return 0, 0
+    from sqlalchemy import or_
+    clips = (TikTokPost.query
+             .filter(TikTokPost.video_url.isnot(None),
+                     or_(TikTokPost.fb_post_id.is_(None),
+                         TikTokPost.instagram_media_id.is_(None)))
+             .order_by(TikTokPost.posted_at.asc(), TikTokPost.id.asc())
+             .limit(limit).all())
+    faits = 0
+    for post in clips:
+        bouts = []
+        if not post.fb_post_id and meta.facebook_ready():
+            ok, detail = post_to_facebook_backend(post)
+            bouts.append('Facebook' if ok else f'Facebook échoué ({detail})')
+        if not post.instagram_media_id and meta.instagram_ready():
+            ok, detail = post_to_instagram_backend(post)
+            bouts.append('Instagram' if ok else f'Instagram échoué ({detail})')
+        if bouts:
+            faits += 1
+            log_fn(f"{post.posted_at:%Y-%m-%d} · {post.title[:45]} → " + ', '.join(bouts))
+    from sqlalchemy import or_ as _or
+    reste = (TikTokPost.query
+             .filter(TikTokPost.video_url.isnot(None),
+                     _or(TikTokPost.fb_post_id.is_(None),
+                         TikTokPost.instagram_media_id.is_(None))).count())
+    log_fn(f"{faits} clip(s) traité(s) ; {reste} encore à faire.")
+    return faits, reste
+
+
 def post_to_facebook_backend(post, texte=None):
     """Publier un clip sur la Page Facebook. Renvoie (ok, id_ou_erreur)."""
     import meta

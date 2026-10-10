@@ -55,6 +55,9 @@
                     {{ pastille(a.linkedin_posted_at, 'fa-brands fa-linkedin-in',
                                 'Partagé sur LinkedIn le %s'|format(a.linkedin_posted_at.strftime('%d/%m/%Y')) if a.linkedin_posted_at else 'Pas encore sur LinkedIn',
                                 a.linkedin_post_url, '#0A66C2') }}
+                    {{ pastille(a.fb_page_posted_at, 'fa-brands fa-facebook',
+                                'Sur la Page Facebook le %s'|format(a.fb_page_posted_at.strftime('%d/%m/%Y')) if a.fb_page_posted_at else 'Pas encore sur la Page Facebook',
+                                a.fb_page_post_url, '#1877F2') }}
                     {{ pastille(a.published, 'fas fa-globe',
                                 'En ligne' if a.published else 'Brouillon — pas en ligne',
                                 url_for('articles.public_show', slug=a.slug) if a.published else None,
@@ -96,6 +99,16 @@
                     <button type="submit" class="btn btn-sm"
                             style="border-radius:50px; padding:6px 14px; background:#0A66C2; color:#fff; border:none;">
                         <i class="fa-brands fa-linkedin-in"></i> Publier
+                    </button>
+                </form>
+                {% endif %}
+                {# Page Facebook : publication directe par l'API, une fois. #}
+                {% if meta_connected and not a.fb_page_posted_at %}
+                <form method="POST" action="{{ url_for('admin_articles.share_facebook_page', article_id=a.id) }}"
+                      style="margin: 0;" onsubmit="return confirm('Publier « {{ a.title|truncate(60)|e }} » sur la Page Facebook ?')">
+                    <button type="submit" class="btn btn-sm"
+                            style="border-radius:50px; padding:6px 14px; background:#1877F2; color:#fff; border:none;">
+                        <i class="fa-brands fa-facebook"></i> Page
                     </button>
                 </form>
                 {% endif %}

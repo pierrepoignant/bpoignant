@@ -325,3 +325,84 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Rattrapage Facebook + Instagram : un clip de l'arriéré par exécution, poussé
+# sur les deux réseaux. Quatre créneaux en journée (heure de Paris) pour la
+# portée — les posts de nuit ne touchent personne. 29 clips ≈ 8 jours.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-meta-video-backfill
+  namespace: default
+spec:
+  schedule: "0 9,13,17,21 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Une vidéo sur deux réseaux, Instagram transcode le Reel : marge large.
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: meta-video-backfill
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "meta_backfill.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi
+---
+# Publication auto des articles sur la Page Facebook : au plus un par jour, le
+# plus ancien jamais posté parmi les articles parus depuis l'activation. 09:15
+# Paris, juste après les enchaînements X et LinkedIn de 09:00.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-facebook-article-autopost
+  namespace: default
+spec:
+  schedule: "15 9 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: facebook-article-autopost
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "auto_facebook.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

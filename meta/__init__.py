@@ -51,6 +51,7 @@ KEY_PAGE_TOKEN = 'meta_page_token'
 KEY_IG_ID = 'meta_ig_user_id'
 KEY_IG_NAME = 'meta_ig_username'
 KEY_AUTH_ERROR = 'meta_auth_error'
+KEY_ARTICLE_MINID = 'meta_fb_article_min_id'
 
 _TIMEOUT = 30
 
@@ -252,6 +253,31 @@ def post_to_page(video_url, caption):
     return True, str(vid)
 
 
+def post_link_to_page(link, message):
+    """Publier un lien sur la Page (publication de fil). Renvoie (ok, id).
+
+    L'aperçu — titre, image, extrait — est tiré des balises Open Graph de la
+    page liée, donc le `message` ne porte que l'accroche. C'est la forme juste
+    pour un article : le lien s'affiche en carte sous le texte.
+    """
+    if not is_connected():
+        return False, "Facebook n'est pas connecté"
+    try:
+        r = requests.post(f'{API}/{VERSION}/{page_id()}/feed',
+                          data={'link': link, 'message': (message or '')[:5000],
+                                'access_token': _page_token()},
+                          timeout=_TIMEOUT)
+        corps = _corps(r)
+    except MetaError as exc:
+        return False, str(exc)
+    except requests.RequestException as exc:
+        return False, f"Connexion à Facebook interrompue : {exc}"
+    pid = corps.get('id') or corps.get('post_id')
+    if not pid:
+        return False, "Facebook n'a pas renvoyé d'identifiant."
+    return True, str(pid)
+
+
 def post_reel(video_url, caption, attente_max=180):
     """Publier un Reel Instagram : conteneur, attente, publication.
 
@@ -342,3 +368,105 @@ def instagram_url(media_id):
     # L'identifiant média n'est pas le shortcode de l'URL publique ; le lien
     # vers le profil est le plus sûr sans appel supplémentaire.
     return f'https://www.instagram.com/{ig_username().lstrip("@")}/' if media_id and ig_username() else None
+
+
+# ─── Articles → Page Facebook ───────────────────────────────
+#
+# Même principe que X et LinkedIn : un article par jour, le plus ancien jamais
+# publié sur la Page, pour écouler sans tout déverser d'un coup. Mais on ne veut
+# PAS vider l'arriéré des dizaines d'anciens articles : la publication auto ne
+# concerne que les articles créés après l'activation. Ce seuil est l'identifiant
+# maximal des articles au moment où on l'a activée ; tout article d'identifiant
+# supérieur est « nouveau ». Les quelques articles rattrapés à la main (les
+# derniers) portent déjà leur date de publication Page, donc sont ignorés.
+
+def article_autopost_min_id():
+    try:
+        return int(get_config(KEY_ARTICLE_MINID) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def set_article_autopost_min_id(value):
+    set_config(KEY_ARTICLE_MINID, str(int(value)))
+
+
+def article_autopost_enabled():
+    return bool(get_config(KEY_ARTICLE_MINID))
+
+
+def compose_article_page_post(article, url):
+    """Le texte d'un post d'article : l'accroche réseaux si on l'a, le résumé
+    sinon ; à défaut le titre. Le lien n'est pas dans le texte — il est passé à
+    part et s'affiche en carte."""
+    accroche = (getattr(article, 'social_summary', '') or '').strip() \
+        or (getattr(article, 'summary', '') or '').strip()
+    return accroche or (article.title or '')
+
+
+def fb_post_article(article):
+    """Publier un article sur la Page. Renvoie (ok, id_ou_erreur)."""
+    from flask import url_for
+    from init_db import db
+    if article.fb_page_post_id:
+        return False, "déjà publié"
+    if not is_connected():
+        return False, "Facebook n'est pas connecté"
+    url = url_for('articles.public_show', slug=article.slug, _external=True)
+    ok, detail = post_link_to_page(url, compose_article_page_post(article, url))
+    if not ok:
+        return False, str(detail)
+    article.fb_page_post_id = str(detail)
+    article.fb_page_posted_at = datetime.utcnow()
+    db.session.commit()
+    return True, article.fb_page_post_id
+
+
+def _paris_day(dt_utc):
+    from zoneinfo import ZoneInfo
+    return dt_utc.replace(tzinfo=ZoneInfo('UTC')).astimezone(
+        ZoneInfo('Europe/Paris')).date()
+
+
+def fb_last_article_post_at():
+    from sqlalchemy import func
+    from articles.models import Article
+    from init_db import db
+    return db.session.query(func.max(Article.fb_page_posted_at)).scalar()
+
+
+def fb_already_posted_article_today():
+    dernier = fb_last_article_post_at()
+    return dernier is not None and _paris_day(dernier) == _paris_day(datetime.utcnow())
+
+
+def fb_next_article_to_post():
+    """Le plus ancien article publié, jamais mis sur la Page, et postérieur au
+    seuil d'activation (identifiant supérieur au seuil)."""
+    from articles.models import Article
+    return (Article.query
+            .filter(Article.published == True,  # noqa: E712
+                    Article.fb_page_posted_at.is_(None),
+                    Article.id > article_autopost_min_id())
+            .order_by(Article.created_at.asc())
+            .first())
+
+
+def fb_auto_post_article():
+    """Publier le plus ancien article éligible, sauf si un est déjà parti
+    aujourd'hui. Renvoie un dict dont `status` vaut posted / too_soon /
+    nothing_to_post / disabled / not_connected / failed."""
+    if not article_autopost_enabled():
+        return {'status': 'disabled'}
+    if not is_connected():
+        return {'status': 'not_connected'}
+    if fb_already_posted_article_today():
+        return {'status': 'too_soon', 'last': fb_last_article_post_at()}
+    article = fb_next_article_to_post()
+    if article is None:
+        return {'status': 'nothing_to_post'}
+    ok, detail = fb_post_article(article)
+    if not ok:
+        log.error("auto Page Facebook échoué pour l'article %s : %s", article.id, detail)
+        return {'status': 'failed', 'article': article, 'detail': detail}
+    return {'status': 'posted', 'article': article}

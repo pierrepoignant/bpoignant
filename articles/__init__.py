@@ -416,6 +416,7 @@ def list_articles():
         mon_email=getattr(current_user, 'email', '') or '',
         x_proposed_by_article=x_proposed_by_article,
         fb_prepared_by_article=fb_prepared_by_article,
+        meta_connected=__import__('meta').is_connected(),
     )
 
 
@@ -496,6 +497,33 @@ def share_linkedin(article_id):
         flash("Article partagé sur LinkedIn.", 'success')
     else:
         flash(f"Échec du partage sur LinkedIn : {detail}", 'danger')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/<int:article_id>/share-facebook-page', methods=['POST'])
+@admin_required
+def share_facebook_page(article_id):
+    """Publier un article sur la Page Facebook (publication de lien).
+
+    Le profil personnel n'est pas publiable par l'API : c'est la Page. L'aperçu
+    (titre, image, extrait) vient des balises Open Graph de l'article.
+    """
+    import meta
+
+    article = db.session.get(Article, article_id) or abort(404)
+    if not article.published:
+        flash("L'article doit être publié avant de le partager sur la Page.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if article.fb_page_posted_at:
+        flash(f"Déjà sur la Page Facebook le {article.fb_page_posted_at:%d/%m/%Y}.", 'info')
+        return redirect(url_for('admin_articles.list_articles'))
+    if not meta.is_connected():
+        flash("Facebook n'est pas connecté — voir Réglages.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+
+    ok, detail = meta.fb_post_article(article)
+    flash("Article publié sur la Page Facebook." if ok else f"Échec Facebook : {detail}",
+          'success' if ok else 'danger')
     return redirect(url_for('admin_articles.list_articles'))
 
 

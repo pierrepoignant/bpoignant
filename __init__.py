@@ -434,6 +434,13 @@ def _migrate_schema():
                 db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
             db.session.commit()
 
+    if 'articles' in inspector.get_table_names():
+        cols = {c['name'] for c in inspector.get_columns('articles')}
+        if 'fb_page_post_id' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN fb_page_post_id VARCHAR(60) NULL"))
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN fb_page_posted_at DATETIME NULL"))
+            db.session.commit()
+
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}
         if 'confirmed_at' not in cols:
