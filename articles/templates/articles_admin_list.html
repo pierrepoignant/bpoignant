@@ -58,6 +58,11 @@
                     {{ pastille(a.fb_page_posted_at, 'fa-brands fa-facebook',
                                 'Sur la Page Facebook le %s'|format(a.fb_page_posted_at.strftime('%d/%m/%Y')) if a.fb_page_posted_at else 'Pas encore sur la Page Facebook',
                                 a.fb_page_post_url, '#1877F2') }}
+                    {% if a.fb_profile_likes is not none or a.fb_profile_comments is not none %}
+                    {{ pastille(True, 'fas fa-user',
+                                'Profil Facebook : %s j’aime, %s commentaires'|format(a.fb_profile_likes or 0, a.fb_profile_comments or 0),
+                                a.fb_profile_post_url, '#1877F2') }}
+                    {% endif %}
                     {{ pastille(a.published, 'fas fa-globe',
                                 'En ligne' if a.published else 'Brouillon — pas en ligne',
                                 url_for('articles.public_show', slug=a.slug) if a.published else None,
@@ -297,6 +302,14 @@
                         style="color: var(--noir); border-color: #e0e0e0; background: white;"
                         title="Normaliser le HTML de tous les articles">
                     <i class="fas fa-broom"></i> Tout nettoyer
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_articles.refresh_facebook_profile_route') }}" style="margin: 0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Relevé…';">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; background: white;"
+                        title="Lire les posts publics du profil Facebook de Bernard et reporter j'aime et commentaires sur les articles cités">
+                    <i class="fa-brands fa-facebook" style="color:#1877F2;"></i> Relever Facebook (profil)
                 </button>
             </form>
         </div>

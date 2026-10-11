@@ -1,6 +1,7 @@
 from datetime import datetime, date, time, timedelta
 
 import bleach
+import re
 from flask import (
     Blueprint, abort, current_app, flash, jsonify, redirect, render_template,
     request, session, url_for,
@@ -524,6 +525,116 @@ def share_facebook_page(article_id):
     ok, detail = meta.fb_post_article(article)
     flash("Article publié sur la Page Facebook." if ok else f"Échec Facebook : {detail}",
           'success' if ok else 'danger')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+# ─── Facebook profil personnel (scraping Apify) ─────────────
+#
+# Le profil personnel de Bernard n'a pas d'API : Meta l'a retirée en 2018. On
+# lit donc ses posts publics par un scrapeur Apify, et on relie chaque post à
+# l'article dont il contient le lien bernardpoignant.fr. Fragile par nature
+# (Facebook bloque, change sa page), donc un relevé raté ne touche à rien.
+
+_LIEN_ARTICLE = re.compile(r'bernardpoignant\.fr/articles/([A-Za-z0-9\-]+)', re.I)
+
+
+def _fb_profile_pick(item, *names):
+    for n in names:
+        v = item.get(n)
+        if v not in (None, ''):
+            return v
+    return None
+
+
+def _fb_profile_date(item):
+    brut = _fb_profile_pick(item, 'time', 'timestamp', 'date', 'publishTime', 'pubDate')
+    if brut is None:
+        return None
+    try:
+        if isinstance(brut, (int, float)) or (isinstance(brut, str) and brut.isdigit()):
+            return datetime.utcfromtimestamp(int(brut))
+        from datetime import datetime as _dt
+        return _dt.fromisoformat(str(brut).replace('Z', '+00:00')).replace(tzinfo=None)
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
+def _fb_profile_slug(item):
+    """Le slug d'article contenu dans un post, ou None.
+
+    On regarde le texte, les liens attachés et l'URL du post : selon l'acteur
+    et la mise en page Facebook, le lien peut se trouver dans l'un ou l'autre.
+    """
+    champs = [str(_fb_profile_pick(item, 'text', 'message', 'postText') or '')]
+    for cle in ('links', 'link', 'url', 'postUrl', 'facebookUrl',
+                'previewTarget', 'previewSource', 'topLevelUrl'):
+        v = item.get(cle)
+        if isinstance(v, str):
+            champs.append(v)
+        elif isinstance(v, (list, tuple)):
+            champs += [str(x.get('url') if isinstance(x, dict) else x) for x in v]
+    for texte in champs:
+        m = _LIEN_ARTICLE.search(texte or '')
+        if m:
+            return m.group(1).rstrip('.,);')
+    return None
+
+
+def refresh_facebook_profile(log_fn=print):
+    """Relever les posts publics du profil Facebook de Bernard et reporter les
+    j'aime / commentaires sur les articles qu'ils citent. Renvoie le nombre
+    d'articles mis à jour."""
+    import apify
+    from flask import url_for  # noqa: F401  (contexte fourni par l'appelant)
+    if not apify.is_configured():
+        log_fn("Apify n'est pas configuré — rien à faire.")
+        return 0
+    try:
+        items = apify.scrape_facebook_profile()
+    except apify.ApifyError as exc:
+        log_fn(f"Scraping Facebook impossible : {exc}")
+        return 0
+    maintenant = datetime.utcnow()
+    n = 0
+    for item in items or []:
+        slug = _fb_profile_slug(item)
+        if not slug:
+            continue
+        article = Article.query.filter_by(slug=slug).first()
+        if article is None:
+            continue
+        article.fb_profile_post_url = (_fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl') or '')[:500] or None
+        article.fb_profile_posted_at = _fb_profile_date(item) or article.fb_profile_posted_at
+        likes = _fb_profile_pick(item, 'likes', 'likesCount', 'reactionsCount', 'reactions', 'topReactionsCount')
+        comm = _fb_profile_pick(item, 'comments', 'commentsCount')
+        shares = _fb_profile_pick(item, 'shares', 'sharesCount')
+        try:
+            article.fb_profile_likes = int(likes) if likes is not None else article.fb_profile_likes
+        except (TypeError, ValueError):
+            pass
+        try:
+            article.fb_profile_comments = int(comm) if comm is not None else article.fb_profile_comments
+        except (TypeError, ValueError):
+            pass
+        try:
+            article.fb_profile_shares = int(shares) if shares is not None else article.fb_profile_shares
+        except (TypeError, ValueError):
+            pass
+        article.fb_profile_metrics_at = maintenant
+        n += 1
+    db.session.commit()
+    log_fn(f"Facebook profil : {n} article(s) mis à jour sur {len(items or [])} post(s) lus.")
+    return n
+
+
+@admin_articles_bp.route('/facebook-profile/refresh', methods=['POST'])
+@admin_required
+def refresh_facebook_profile_route():
+    try:
+        n = refresh_facebook_profile()
+        flash(f"Relevé Facebook (profil) : {n} article(s) mis à jour.", 'success')
+    except Exception as exc:  # noqa: BLE001
+        flash(f"Relevé Facebook (profil) impossible : {exc}", 'danger')
     return redirect(url_for('admin_articles.list_articles'))
 
 

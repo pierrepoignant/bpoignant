@@ -84,6 +84,17 @@ class Article(db.Model):
     fb_page_post_id = db.Column(db.String(60), nullable=True)
     fb_page_posted_at = db.Column(db.DateTime, nullable=True)
 
+    # Facebook profil personnel : pas d'API, donc ces chiffres viennent du
+    # scraping Apify du profil public. On relie un post à l'article par le lien
+    # bernardpoignant.fr qu'il contient. Fragile (Facebook bloque), donc tout
+    # est nullable et un relevé raté laisse les valeurs précédentes.
+    fb_profile_post_url = db.Column(db.String(500), nullable=True)
+    fb_profile_posted_at = db.Column(db.DateTime, nullable=True)
+    fb_profile_likes = db.Column(db.Integer, nullable=True)
+    fb_profile_comments = db.Column(db.Integer, nullable=True)
+    fb_profile_shares = db.Column(db.Integer, nullable=True)
+    fb_profile_metrics_at = db.Column(db.DateTime, nullable=True)
+
     # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
     # n'expose aucune statistique pour la publication d'un membre, donc il n'y
     # a ni vues ni réactions à stocker.

@@ -40,6 +40,14 @@ DEFAULT_ACTOR_COMMENTS = 'clockworks~tiktok-comments-scraper'
 KEY_ACTOR_COMMENTS = 'apify_actor_comments'
 KEY_ACTOR_LINKEDIN_COMPANY = 'apify_actor_linkedin_company'
 
+# Facebook : le profil personnel de Bernard n'a pas d'API (Meta l'a retirée en
+# 2018), donc ses posts publics se lisent par un scrapeur. Fragile par nature —
+# Facebook bloque et change sa page — mais c'est la seule voie pour ramener les
+# j'aime et commentaires d'un post de profil vers la fiche article.
+DEFAULT_ACTOR_FACEBOOK = 'apify~facebook-posts-scraper'
+KEY_ACTOR_FACEBOOK = 'apify_actor_facebook'
+KEY_FACEBOOK_PROFILE = 'apify_facebook_profile'
+
 _TIMEOUT = 30
 # An actor run is not instant; this is the ceiling for the synchronous call
 # that starts a run and waits for its dataset.
@@ -161,6 +169,30 @@ def scrape_posts(urls):
         return []
     return run_actor({'postURLs': urls, 'shouldDownloadVideos': False,
                       'shouldDownloadCovers': False})
+
+
+def facebook_actor():
+    return (get_config(KEY_ACTOR_FACEBOOK) or DEFAULT_ACTOR_FACEBOOK).strip()
+
+
+def facebook_profile_url():
+    """L'URL du profil Facebook public à relever."""
+    return (get_config(KEY_FACEBOOK_PROFILE) or '').strip()
+
+
+def scrape_facebook_profile(url=None, limit=50):
+    """Les posts publics récents d'un profil (ou d'une Page) Facebook.
+
+    Lit une URL de profil et renvoie les posts : texte, lien, j'aime,
+    commentaires, partages, date. Scraping : ne voit que le public, et peut
+    échouer si Facebook bloque — l'appelant encaisse une liste vide plutôt que
+    de planter.
+    """
+    url = (url or facebook_profile_url()).strip()
+    if not url:
+        raise ApifyError("Aucun profil Facebook renseigné dans Réglages.")
+    return run_actor({'startUrls': [{'url': url}], 'resultsLimit': limit},
+                     actor_id=facebook_actor())
 
 
 def normalise(item):
