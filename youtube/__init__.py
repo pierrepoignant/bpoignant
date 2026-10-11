@@ -30,10 +30,14 @@ TOKEN_URL = 'https://oauth2.googleapis.com/token'
 UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos'
 CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels'
 
-# Téléverser une vidéo, et lire les statistiques publiques (vues, likes,
-# commentaires) — rien de plus : ni modifier, ni supprimer la chaîne.
+# Téléverser une vidéo, lire les statistiques publiques (vues, likes,
+# commentaires), et gérer les commentaires. force-ssl est le scope que Google
+# exige pour RÉPONDRE à un commentaire — il n'en existe pas de plus fin : il
+# autorise aussi modérer et supprimer. On s'en sert uniquement pour lire et
+# répondre ; le reste, on n'y touche pas.
 SCOPE = ('https://www.googleapis.com/auth/youtube.upload '
-         'https://www.googleapis.com/auth/youtube.readonly')
+         'https://www.googleapis.com/auth/youtube.readonly '
+         'https://www.googleapis.com/auth/youtube.force-ssl')
 # Catégorie « News & Politics » — la plus juste pour des chroniques d'actualité.
 CATEGORY_NEWS = '25'
 
