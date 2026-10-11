@@ -473,3 +473,98 @@ def fb_auto_post_article():
         log.error("auto Page Facebook échoué pour l'article %s : %s", article.id, detail)
         return {'status': 'failed', 'article': article, 'detail': detail}
     return {'status': 'posted', 'article': article}
+
+
+# ─── Commentaires (Page Facebook et Instagram) ──────────────
+
+def _parse_fb_time(valeur):
+    if not valeur:
+        return None
+    try:
+        from datetime import datetime as _dt
+        return _dt.fromisoformat(str(valeur).replace('Z', '+00:00')).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def fetch_facebook_comments(object_id, limit=100):
+    """Les commentaires d'un post de Page. Liste de dicts normalisés.
+
+    Fonctionne pour une vidéo de Page comme pour une publication de lien. On ne
+    prend que les commentaires de premier niveau, dans l'ordre le plus récent.
+    """
+    if not (object_id and is_connected()):
+        return []
+    try:
+        corps = _get(f'{object_id}/comments', {
+            'fields': 'id,message,from{name,id},created_time,like_count',
+            'order': 'reverse_chronological', 'limit': limit,
+        }, token=_page_token())
+    except MetaError:
+        return []
+    out = []
+    for c in corps.get('data') or []:
+        frm = c.get('from') or {}
+        out.append({
+            'external_id': c.get('id'),
+            'author': frm.get('name'),
+            'author_id': frm.get('id'),
+            'text': c.get('message') or '',
+            'likes': c.get('like_count'),
+            'posted_at': _parse_fb_time(c.get('created_time')),
+        })
+    return out
+
+
+def reply_facebook_comment(comment_id, text):
+    """Répondre à un commentaire de Page. Renvoie (ok, id_ou_erreur)."""
+    if not (comment_id and (text or '').strip()):
+        return False, "réponse vide"
+    try:
+        r = requests.post(f'{API}/{VERSION}/{comment_id}/comments',
+                          data={'message': text.strip()[:8000], 'access_token': _page_token()},
+                          timeout=_TIMEOUT)
+        corps = _corps(r)
+    except MetaError as exc:
+        return False, str(exc)
+    except requests.RequestException as exc:
+        return False, f"Connexion à Facebook interrompue : {exc}"
+    return True, str(corps.get('id') or 'ok')
+
+
+def fetch_instagram_comments(media_id, limit=100):
+    """Les commentaires d'un Reel Instagram. Liste de dicts normalisés."""
+    if not (media_id and instagram_ready()):
+        return []
+    try:
+        corps = _get(f'{media_id}/comments', {
+            'fields': 'id,text,username,timestamp,like_count', 'limit': limit,
+        }, token=_page_token())
+    except MetaError:
+        return []
+    out = []
+    for c in corps.get('data') or []:
+        out.append({
+            'external_id': c.get('id'),
+            'author': c.get('username'),
+            'text': c.get('text') or '',
+            'likes': c.get('like_count'),
+            'posted_at': _parse_fb_time(c.get('timestamp')),
+        })
+    return out
+
+
+def reply_instagram_comment(comment_id, text):
+    """Répondre à un commentaire Instagram. Renvoie (ok, id_ou_erreur)."""
+    if not (comment_id and (text or '').strip()):
+        return False, "réponse vide"
+    try:
+        r = requests.post(f'{API}/{VERSION}/{comment_id}/replies',
+                          data={'message': text.strip()[:2000], 'access_token': _page_token()},
+                          timeout=_TIMEOUT)
+        corps = _corps(r)
+    except MetaError as exc:
+        return False, str(exc)
+    except requests.RequestException as exc:
+        return False, f"Connexion à Instagram interrompue : {exc}"
+    return True, str(corps.get('id') or 'ok')

@@ -337,3 +337,72 @@ def fetch_stats(video_ids):
 
 def video_url(video_id):
     return f'https://www.youtube.com/watch?v={video_id}' if video_id else None
+
+
+# ─── Commentaires ───────────────────────────────────────────
+
+def fetch_comments(video_id, limit=100):
+    """Les commentaires de premier niveau d'une vidéo. Liste de dicts normalisés.
+
+    Lecture seule (youtube.readonly suffit). On ne descend pas dans les
+    réponses : Bernard répond aux commentaires du public, pas aux fils entre
+    spectateurs.
+    """
+    if not video_id:
+        return []
+    token = _access_token()
+    out = []
+    page = None
+    lus = 0
+    while lus < limit:
+        params = {'part': 'snippet', 'videoId': video_id,
+                  'maxResults': min(100, limit - lus), 'order': 'time',
+                  'textFormat': 'plainText'}
+        if page:
+            params['pageToken'] = page
+        r = requests.get('https://www.googleapis.com/youtube/v3/commentThreads',
+                         params=params, headers={'Authorization': f'Bearer {token}'},
+                         timeout=_TIMEOUT)
+        if r.status_code == 403 and 'disabled comments' in r.text.lower():
+            break
+        if r.status_code != 200:
+            raise YouTubeError(_explain(r, "commentaires illisibles"))
+        data = r.json() or {}
+        for item in data.get('items') or []:
+            top = ((item.get('snippet') or {}).get('topLevelComment') or {})
+            sn = top.get('snippet') or {}
+            out.append({
+                'external_id': top.get('id'),
+                'author': sn.get('authorDisplayName'),
+                'text': sn.get('textOriginal') or sn.get('textDisplay') or '',
+                'likes': sn.get('likeCount'),
+                'posted_at': sn.get('publishedAt'),
+            })
+            lus += 1
+        page = data.get('nextPageToken')
+        if not page:
+            break
+    return out
+
+
+def reply_to_comment(parent_id, text):
+    """Répondre à un commentaire. Renvoie (ok, id_ou_erreur). Exige force-ssl."""
+    if not (parent_id and (text or '').strip()):
+        return False, "réponse vide"
+    try:
+        token = _access_token()
+    except YouTubeError as exc:
+        return False, str(exc)
+    try:
+        r = requests.post('https://www.googleapis.com/youtube/v3/comments',
+                          params={'part': 'snippet'},
+                          headers={'Authorization': f'Bearer {token}',
+                                   'Content-Type': 'application/json'},
+                          json={'snippet': {'parentId': parent_id,
+                                            'textOriginal': text.strip()[:9000]}},
+                          timeout=_TIMEOUT)
+    except requests.RequestException as exc:
+        return False, f"Connexion à YouTube interrompue : {exc}"
+    if r.status_code not in (200, 201):
+        return False, _explain(r, "réponse refusée")
+    return True, (r.json() or {}).get('id') or 'ok'

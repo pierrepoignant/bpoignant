@@ -73,6 +73,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/tiktok/videos') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-film"></i> Vidéos
         </a>
+        <a href="{{ url_for('admin_social.index') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/commentaires-reseaux') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-comments"></i> Commentaires réseaux
+        </a>
         {% if video_tools %}
         <a href="{{ url_for('admin_video.index') }}"
            class="btn btn-sm {% if _p.startswith('/admin/video') %}btn-primary{% else %}btn-outline{% endif %}">

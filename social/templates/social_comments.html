@@ -1,0 +1,151 @@
+{% extends 'admin_base.html' %}
+{% block title %}Commentaires réseaux{% endblock %}
+
+{% block admin_title %}<i class="fas fa-comments" style="color: var(--vert);"></i> Commentaires — réseaux{% endblock %}
+{% block admin_subtitle %}
+<p style="margin: 0;">YouTube, Facebook et Instagram. Seuls les commentaires neufs pour lesquels une réponse est proposée.</p>
+{% endblock %}
+
+{% block admin_content %}
+    <style>
+        .cm-tete { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+        .cm-pub { margin: 1.6rem 0 0.7rem; }
+        .cm-pub h2 { font-size: 1rem; margin: 0 0 0.2rem; line-height: 1.4; }
+        .cm-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; padding: 2px 8px; border-radius: 50px; color: #fff; }
+        .cm-carte { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1rem 1.1rem; margin-bottom: 0.8rem; transition: opacity .25s; }
+        .cm-meta { font-size: 0.8rem; color: var(--gris); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.35rem; }
+        .cm-texte { margin: 0 0 0.7rem; font-size: 0.95rem; line-height: 1.55; word-break: break-word; }
+        .cm-reponse { background: var(--gris-clair); border-left: 3px solid var(--vert); border-radius: 0 8px 8px 0; padding: 0.6rem 0.8rem; font-size: 0.92rem; line-height: 1.55; margin-bottom: 0.6rem; }
+        .cm-note { font-size: 0.78rem; color: var(--gris); margin-bottom: 0.6rem; }
+        .cm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .cm-actions .btn { min-height: 40px; padding: 8px 14px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+        .modal-card { background: white; border-radius: 14px; padding: 1.3rem; width: 100%; max-width: 520px; }
+        @media (max-width: 480px) { .cm-actions .btn { flex: 1 1 auto; text-align: center; } }
+    </style>
+
+    {% set couleurs = {'youtube': '#FF0000', 'facebook': '#1877F2', 'instagram': '#E4405F'} %}
+    {% set icones = {'youtube': 'fa-youtube', 'facebook': 'fa-facebook', 'instagram': 'fa-instagram'} %}
+
+    <div class="cm-tete">
+        <p style="margin: 0; font-size: 0.9rem;">
+            <strong>{{ publications|map(attribute='comments')|map('length')|sum }}</strong> à traiter
+            · {{ repondus }} répondu{{ 's' if repondus > 1 }}
+            {% if total_neufs > (publications|map(attribute='comments')|map('length')|sum) %}
+            <br><span style="color: var(--gris); font-size: 0.82rem;">{{ total_neufs }} neufs au total (les autres sans réponse proposée)</span>{% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('admin_social.refresh') }}" style="margin: 0;"
+              onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Lecture…';">
+            <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;"
+                    {% if etat.en_cours %}disabled{% endif %}>
+                <i class="fas fa-rotate"></i> Lire les commentaires
+            </button>
+        </form>
+    </div>
+
+    {% if not youtube_ok or not meta_ok %}
+    <p style="font-size: 0.82rem; color: #8a6d00; background: rgba(255,165,0,0.12); border-radius: 10px; padding: 10px 14px; margin: 0 0 1rem;">
+        {% if not youtube_ok %}YouTube n'est pas connecté. {% endif %}
+        {% if not meta_ok %}Facebook/Instagram ne sont pas connectés. {% endif %}
+        Les commentaires de ces réseaux ne seront pas lus tant qu'ils ne le sont pas (Réglages).
+    </p>
+    {% endif %}
+
+    <p style="font-size: 0.82rem; color: var(--gris); margin: 0 0 0.4rem; line-height: 1.6;">
+        Le moteur propose une réponse quand il y a quelque chose à répondre — pas aux compliments,
+        ni aux insultes, ni aux polémiques. Trois gestes : écarter, répondre, ou modifier avant de répondre.
+    </p>
+    <div id="etat" role="status" style="{% if not etat.en_cours and not etat.fini %}display:none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 1rem;">
+        {{ etat.message }}
+    </div>
+
+    {% if not publications %}
+    <div class="cm-carte" style="text-align: center; color: var(--gris); font-size: 0.92rem;">
+        Rien à traiter pour l'instant. Cliquez « Lire les commentaires » pour aller les chercher.
+    </div>
+    {% endif %}
+
+    {% for pub in publications %}
+    <div class="cm-pub">
+        <h2>{{ pub.titre|truncate(90) }}</h2>
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            {% for net in pub.networks %}
+            <span class="cm-badge" style="background: {{ couleurs[net] }};"><i class="fa-brands {{ icones[net] }}"></i> {{ {'youtube':'YouTube','facebook':'Facebook','instagram':'Instagram'}[net] }}</span>
+            {% endfor %}
+            <span style="font-size: 0.78rem; color: var(--gris); align-self: center;">{{ pub.comments|length }} à traiter</span>
+        </div>
+    </div>
+
+    {% for c in pub.comments %}
+    <div class="cm-carte" id="carte-{{ c.id }}">
+        <div class="cm-meta">
+            <span class="cm-badge" style="background: {{ couleurs[c.network] }};"><i class="fa-brands {{ icones[c.network] }}"></i> {{ c.network_label }}</span>
+            <strong style="color: var(--noir);">@{{ c.author or 'inconnu' }}</strong>
+            {% if c.likes %}· {{ c.likes }} j'aime{% endif %}
+            {% if c.posted_at %}· {{ c.posted_at.strftime('%d/%m/%Y') }}{% endif %}
+        </div>
+        <p class="cm-texte">{{ c.text }}</p>
+        <div class="cm-reponse" id="reponse-{{ c.id }}">{{ c.suggested_reply }}</div>
+        {% if c.suggestion_note %}<div class="cm-note">{{ c.suggestion_note }}</div>{% endif %}
+        <div class="cm-actions">
+            <form method="POST" action="{{ url_for('admin_social.reply', comment_id=c.id) }}" style="margin:0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Envoi…';">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-paper-plane"></i> Répondre</button>
+            </form>
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                    onclick="ouvrirEdition({{ c.id }}, {{ c.network_label|tojson }})">
+                <i class="fas fa-pen"></i> Modifier et répondre
+            </button>
+            <form method="POST" action="{{ url_for('admin_social.discard', comment_id=c.id) }}" style="margin:0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--gris); border-color: #e0e0e0;"><i class="fas fa-xmark"></i> Écarter</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+
+    {# Overlay : modifier avant de répondre #}
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="margin:0 0 0.3rem; font-size:1.1rem;">Modifier et répondre</h3>
+            <p id="edit-reseau" style="color: var(--gris); margin:0 0 0.8rem; font-size:0.85rem;"></p>
+            <form id="edit-form" method="POST" action="">
+                <textarea id="edit-text" name="text" rows="5"
+                          style="width:100%; padding:10px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit; font-size:0.95rem;"></textarea>
+                <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem;">
+                    <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0;" onclick="fermerEdition()">Annuler</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-paper-plane"></i> Publier la réponse</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    var BASE = "{{ url_for('admin_social.index') }}";
+    function ouvrirEdition(id, reseau) {
+        var f = document.getElementById('edit-form');
+        f.action = BASE + id + '/reply';
+        document.getElementById('edit-text').value = (document.getElementById('reponse-' + id).textContent || '').trim();
+        document.getElementById('edit-reseau').textContent = 'La réponse partira sur ' + reseau + ' sous le nom de Bernard.';
+        document.getElementById('edit-modal').style.display = 'flex';
+        document.getElementById('edit-text').focus();
+    }
+    function fermerEdition() { document.getElementById('edit-modal').style.display = 'none'; }
+    document.getElementById('edit-modal').addEventListener('click', function (e) { if (e.target === this) fermerEdition(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fermerEdition(); });
+
+    {% if etat.en_cours %}
+    // Pendant une lecture, rafraîchir l'état puis recharger quand c'est fini.
+    (function () {
+        var tick = setInterval(function () {
+            fetch("{{ url_for('admin_social.etat') }}").then(function (r) { return r.json(); }).then(function (e) {
+                var box = document.getElementById('etat');
+                box.style.display = ''; box.textContent = e.message || '';
+                if (!e.en_cours) { clearInterval(tick); setTimeout(function () { location.reload(); }, 1200); }
+            });
+        }, 2500);
+    })();
+    {% endif %}
+    </script>
+{% endblock %}

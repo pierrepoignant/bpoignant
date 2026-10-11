@@ -147,6 +147,10 @@ def create_app(db_name='ovh'):
     from livre import admin_livre_bp
     app.register_blueprint(admin_livre_bp)
 
+    from social.models import SocialComment  # noqa: F401
+    from social import admin_social_bp
+    app.register_blueprint(admin_social_bp)
+
     # Veilleur d'enchaînement après montage : uniquement là où les fichiers
     # sont, c'est-à-dire sur la machine de développement.
     try:
