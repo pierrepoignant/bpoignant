@@ -446,3 +446,43 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Publication auto des articles sur Threads : au plus un par jour, le plus
+# ancien jamais posté parmi ceux parus après l'activation. 09:20 Paris, après
+# X, LinkedIn et la Page Facebook.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-threads-article-autopost
+  namespace: default
+spec:
+  schedule: "20 9 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: threads-article-autopost
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "auto_threads.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

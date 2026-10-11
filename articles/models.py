@@ -95,6 +95,10 @@ class Article(db.Model):
     fb_profile_shares = db.Column(db.Integer, nullable=True)
     fb_profile_metrics_at = db.Column(db.DateTime, nullable=True)
 
+    # Threads : identifiant et date du post. API séparée de la Page/Instagram.
+    threads_post_id = db.Column(db.String(60), nullable=True)
+    threads_posted_at = db.Column(db.DateTime, nullable=True)
+
     # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
     # n'expose aucune statistique pour la publication d'un membre, donc il n'y
     # a ni vues ni réactions à stocker.
@@ -118,6 +122,11 @@ class Article(db.Model):
     themes = db.relationship('Theme', secondary=article_themes,
                              backref=db.backref('articles', lazy='selectin'),
                              lazy='selectin', order_by='Theme.name')
+
+    @property
+    def threads_post_url(self):
+        from threads import post_url
+        return post_url(self.threads_post_id)
 
     @property
     def fb_page_post_url(self):

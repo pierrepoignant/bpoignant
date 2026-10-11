@@ -418,6 +418,7 @@ def list_articles():
         x_proposed_by_article=x_proposed_by_article,
         fb_prepared_by_article=fb_prepared_by_article,
         meta_connected=__import__('meta').is_connected(),
+        threads_connected=__import__('threads').is_connected(),
     )
 
 
@@ -524,6 +525,27 @@ def share_facebook_page(article_id):
 
     ok, detail = meta.fb_post_article(article)
     flash("Article publié sur la Page Facebook." if ok else f"Échec Facebook : {detail}",
+          'success' if ok else 'danger')
+    return redirect(url_for('admin_articles.list_articles'))
+
+
+@admin_articles_bp.route('/<int:article_id>/share-threads', methods=['POST'])
+@admin_required
+def share_threads(article_id):
+    """Publier un article sur Threads (accroche + lien)."""
+    import threads
+    article = db.session.get(Article, article_id) or abort(404)
+    if not article.published:
+        flash("L'article doit être publié avant Threads.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if article.threads_posted_at:
+        flash(f"Déjà sur Threads le {article.threads_posted_at:%d/%m/%Y}.", 'info')
+        return redirect(url_for('admin_articles.list_articles'))
+    if not threads.is_connected():
+        flash("Threads n'est pas connecté — voir Réglages.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    ok, detail = threads.post_article(article)
+    flash("Article publié sur Threads." if ok else f"Échec Threads : {detail}",
           'success' if ok else 'danger')
     return redirect(url_for('admin_articles.list_articles'))
 

@@ -63,6 +63,9 @@
                                 'Profil Facebook : %s j’aime, %s commentaires'|format(a.fb_profile_likes or 0, a.fb_profile_comments or 0),
                                 a.fb_profile_post_url, '#1877F2') }}
                     {% endif %}
+                    {{ pastille(a.threads_posted_at, 'fa-brands fa-threads',
+                                'Sur Threads le %s'|format(a.threads_posted_at.strftime('%d/%m/%Y')) if a.threads_posted_at else 'Pas encore sur Threads',
+                                a.threads_post_url, '#000000') }}
                     {{ pastille(a.published, 'fas fa-globe',
                                 'En ligne' if a.published else 'Brouillon — pas en ligne',
                                 url_for('articles.public_show', slug=a.slug) if a.published else None,
@@ -114,6 +117,16 @@
                     <button type="submit" class="btn btn-sm"
                             style="border-radius:50px; padding:6px 14px; background:#1877F2; color:#fff; border:none;">
                         <i class="fa-brands fa-facebook"></i> Page
+                    </button>
+                </form>
+                {% endif %}
+                {# Threads : publication directe par l'API, une fois. #}
+                {% if threads_connected and not a.threads_posted_at %}
+                <form method="POST" action="{{ url_for('admin_articles.share_threads', article_id=a.id) }}"
+                      style="margin: 0;" onsubmit="return confirm('Publier « {{ a.title|truncate(60)|e }} » sur Threads ?')">
+                    <button type="submit" class="btn btn-sm"
+                            style="border-radius:50px; padding:6px 14px; background:#000; color:#fff; border:none;">
+                        <i class="fa-brands fa-threads"></i> Threads
                     </button>
                 </form>
                 {% endif %}

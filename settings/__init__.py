@@ -77,6 +77,12 @@ def index():
         meta_ig_ready=__import__('meta').instagram_ready(),
         meta_panne=__import__('meta').auth_error(),
         meta_redirect_uri=url_for('admin_settings.meta_callback', _external=True),
+        threads_has_client=__import__('threads').has_client_credentials(),
+        threads_app_id=__import__('threads')._app_id(),
+        threads_connected=__import__('threads').is_connected(),
+        threads_username=__import__('threads').username(),
+        threads_panne=__import__('threads').auth_error(),
+        threads_redirect_uri=url_for('admin_settings.threads_callback', _external=True),
         linkedin_client_id=linkedin._client_id(),
         linkedin_has_secret=bool(linkedin._client_secret()),
         linkedin_connected=linkedin.is_configured(),
@@ -335,6 +341,71 @@ def gdrive_verify():
           else f"Google Drive ne répond toujours pas : {message}",
           'success' if ok else 'danger')
     return redirect(request.form.get('next') or url_for('admin_settings.index'))
+
+
+def _threads_callback_url():
+    return url_for('admin_settings.threads_callback', _external=True)
+
+
+@admin_settings_bp.route('/threads/credentials', methods=['POST'])
+@admin_required
+def threads_credentials():
+    import threads
+    threads.save_settings(request.form.get('app_id'), request.form.get('app_secret'))
+    flash("Identifiants Threads enregistrés.", 'success')
+    return redirect(url_for('admin_settings.index') + '#threads')
+
+
+@admin_settings_bp.route('/threads/connect')
+@admin_required
+def threads_connect():
+    import threads
+    state = secrets.token_urlsafe(24)
+    session['threads_oauth_state'] = state
+    try:
+        url = threads.authorization_url(_threads_callback_url(), state)
+    except threads.ThreadsError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#threads')
+    return redirect(url)
+
+
+@admin_settings_bp.route('/threads/callback')
+@admin_required
+def threads_callback():
+    import threads
+    expected = session.pop('threads_oauth_state', None)
+    if request.args.get('error'):
+        flash(f"Connexion Threads refusée ({request.args.get('error_description') or request.args['error']}).", 'danger')
+        return redirect(url_for('admin_settings.index') + '#threads')
+    if not expected or request.args.get('state') != expected:
+        flash("Réponse Threads inattendue — recommencez la connexion.", 'danger')
+        return redirect(url_for('admin_settings.index') + '#threads')
+    try:
+        threads.exchange_code(request.args.get('code'), _threads_callback_url())
+    except threads.ThreadsError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('admin_settings.index') + '#threads')
+    flash(f"Threads connecté — @{threads.username()}.", 'success')
+    return redirect(url_for('admin_settings.index') + '#threads')
+
+
+@admin_settings_bp.route('/threads/verify', methods=['POST'])
+@admin_required
+def threads_verify():
+    import threads
+    ok, message = threads.verify_credentials()
+    flash(message, 'success' if ok else 'danger')
+    return redirect(url_for('admin_settings.index') + '#threads')
+
+
+@admin_settings_bp.route('/threads/disconnect', methods=['POST'])
+@admin_required
+def threads_disconnect():
+    import threads
+    threads.disconnect()
+    flash("Threads déconnecté.", 'info')
+    return redirect(url_for('admin_settings.index') + '#threads')
 
 
 def _meta_callback_url():

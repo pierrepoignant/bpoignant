@@ -450,6 +450,10 @@ def _migrate_schema():
                       'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL'):
                 db.session.execute(text(f"ALTER TABLE articles ADD COLUMN {c}"))
             db.session.commit()
+        if 'threads_post_id' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_post_id VARCHAR(60) NULL"))
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_posted_at DATETIME NULL"))
+            db.session.commit()
 
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}
