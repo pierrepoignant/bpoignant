@@ -34,14 +34,17 @@ DIALOG = 'https://www.facebook.com/{v}/dialog/oauth'
 # strict nécessaire : chaque permission supplémentaire est une case de plus à
 # activer dans l'application Meta, et une de plus à faire refuser si elle n'y
 # est pas. Les vues d'une vidéo de Page passent par pages_read_engagement, donc
-# read_insights (statistiques globales de la Page) n'est pas demandé. De même,
-# instagram_manage_insights (nombre de vues d'un Reel) n'est pas demandé : il
-# se heurtait à « Invalid Scopes » sans accès avancé, et seul le compte de vues
-# en dépend — la publication, les j'aime et les commentaires s'en passent. Les
-# vues d'un Reel resteront donc à zéro tant que cette permission n'est pas
-# ajoutée côté Meta puis réintroduite ici.
+# read_insights (statistiques globales de la Page) n'est pas demandé : les vues
+# d'une vidéo de Page passent déjà par pages_read_engagement.
+# instagram_manage_insights donne le nombre de vues d'un Reel. Il faut d'abord
+# l'activer dans l'application Meta (cas d'usage « Instagram API setup with
+# Facebook login »), sinon la connexion échoue sur « Invalid Scopes ». Une fois
+# activé côté Meta, reconnecter la Page pour que le jeton le porte ; sans lui,
+# la publication, les j'aime et les commentaires fonctionnent, mais les vues
+# Instagram restent à zéro.
 SCOPE = ('pages_show_list,pages_manage_posts,pages_read_engagement,'
-         'business_management,instagram_basic,instagram_content_publish')
+         'business_management,instagram_basic,instagram_content_publish,'
+         'instagram_manage_insights')
 
 KEY_APP_ID = 'meta_app_id'
 KEY_APP_SECRET = 'meta_app_secret'

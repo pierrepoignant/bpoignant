@@ -55,6 +55,10 @@ def main():
                 return
             import tiktok
             tiktok.backfill_meta(limit=args.limit)
+            # Et relever les chiffres de ce qui est déjà en ligne : vues côté
+            # Facebook, j'aime et commentaires côté Instagram. Les vues d'un Reel
+            # restent à zéro tant que instagram_manage_insights n'est pas accordé.
+            tiktok.refresh_meta_stats()
 
 
 if __name__ == '__main__':
