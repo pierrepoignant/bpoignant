@@ -36,6 +36,7 @@
             {% if doc.theme_id %}
             <a href="{{ url_for('admin_livre.chapitre', theme_id=doc.theme_id) }}" class="btn btn-outline" style="min-height: 46px; color: var(--noir); border-color: #e0e0e0;">Retour au chapitre</a>
             {% endif %}
+            <span id="autosave-etat" style="align-self: center; font-size: 0.8rem; color: var(--gris);">Enregistrement automatique</span>
             <span style="margin-left: auto; align-self: center; font-size: 0.8rem; color: var(--gris);">
                 {% if doc.date_livre %}{{ doc.date_livre.strftime('%d/%m/%Y') }} · {% endif %}<span id="compte-mots">{{ doc.word_count or 0 }}</span> mots
             </span>
@@ -65,5 +66,45 @@
         document.getElementById('chronique-form').addEventListener('submit', function () {
             document.getElementById('content_html').value = quill.root.innerHTML;
         });
+
+        // Enregistrement automatique : Bernard ferme souvent sans cliquer.
+        const AUTOSAVE = "{{ url_for('admin_livre.doc_edit_autosave', doc_id=doc.id) }}";
+        const etat = document.getElementById('autosave-etat');
+        const champTitre = document.querySelector('input[name=title]');
+        const champIntro = document.querySelector('textarea[name=intro]');
+        let minuteur = null, dernier = '';
+
+        function signature() {
+            return champTitre.value + '' + champIntro.value + '' + quill.root.innerHTML;
+        }
+        function sauver(keepalive) {
+            if (signature() === dernier) return;
+            dernier = signature();
+            etat.textContent = 'Enregistrement…';
+            const corps = new URLSearchParams();
+            corps.set('title', champTitre.value);
+            corps.set('intro', champIntro.value);
+            corps.set('content_html', quill.root.innerHTML);
+            fetch(AUTOSAVE, {
+                method: 'POST', body: corps, keepalive: !!keepalive,
+                headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch'},
+            }).then(r => r.json()).then(d => {
+                etat.textContent = d && d.ok ? 'Enregistré à ' + d.at : 'Échec de l’enregistrement';
+                if (d && d.mots != null) document.getElementById('compte-mots').textContent = d.mots;
+            }).catch(() => etat.textContent = 'Hors ligne — réessai à la fermeture');
+        }
+        function differer() {
+            etat.textContent = 'Modifié…';
+            clearTimeout(minuteur);
+            minuteur = setTimeout(() => sauver(false), 1500);
+        }
+        dernier = signature();
+        champTitre.addEventListener('input', differer);
+        champIntro.addEventListener('input', differer);
+        quill.on('text-change', differer);
+        champTitre.addEventListener('blur', () => sauver(false));
+        champIntro.addEventListener('blur', () => sauver(false));
+        window.addEventListener('beforeunload', () => sauver(true));
+        document.addEventListener('visibilitychange', () => { if (document.hidden) sauver(true); });
     </script>
 {% endblock %}

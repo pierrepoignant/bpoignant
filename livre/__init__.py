@@ -404,6 +404,35 @@ def doc_edit(doc_id):
                            retour=request.args.get('retour') or '')
 
 
+@admin_livre_bp.route('/doc/<int:doc_id>/edit/autosave', methods=['POST'])
+@admin_required
+def doc_edit_autosave(doc_id):
+    """Enregistrer titre, intro et texte au fil de la frappe — même nettoyage
+    que l'enregistrement normal, sans recharger la page."""
+    from articles import _clean_html
+    from articles.cleanup import clean_article_html, clean_text
+    doc = db.session.get(BookDoc, doc_id)
+    if doc is None:
+        return jsonify(ok=False), 404
+    if 'title' in request.form:
+        titre = (request.form.get('title') or '').strip()
+        if titre:
+            doc.title = clean_text(titre)[:300] or doc.title
+    if 'intro' in request.form:
+        intro = (request.form.get('intro') or '').strip()
+        doc.intro = intro or None
+        if intro:
+            doc.no_intro = False
+            doc.intro_at = doc.intro_at or datetime.utcnow()
+    if 'content_html' in request.form:
+        html = clean_article_html(_clean_html(request.form.get('content_html') or ''))
+        doc.content_html = html
+        doc.content_text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html)).strip()
+        doc.word_count = len(doc.content_text.split())
+    db.session.commit()
+    return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'), mots=doc.word_count or 0)
+
+
 @admin_livre_bp.route('/chapitre/<int:theme_id>')
 @admin_required
 def chapitre(theme_id):
