@@ -571,6 +571,23 @@ def theme_update(theme_id):
     return redirect(url_for('admin_livre.themes'))
 
 
+@admin_livre_bp.route('/theme/<int:theme_id>/autosave', methods=['POST'])
+@admin_required
+def theme_autosave(theme_id):
+    """Enregistrer la préface (et le nom) d'un chapitre au fil de la frappe,
+    sans recharger la page — Bernard ferme souvent sans cliquer « Enregistrer »."""
+    t = db.session.get(BookTheme, theme_id)
+    if t is None:
+        return jsonify(ok=False), 404
+    if 'description' in request.form:
+        t.description = (request.form.get('description') or '').strip() or None
+    nom = (request.form.get('name') or '').strip()
+    if nom:
+        t.name = nom[:80]
+    db.session.commit()
+    return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'))
+
+
 # ─── Le livre en PDF ────────────────────────────────────────
 
 KEY_TITRE = 'livre_titre'
@@ -752,6 +769,15 @@ def preface():
         return redirect(url_for('admin_livre.preface'))
     return render_template('livre_preface.html', compte=_compte(),
                            preface=(get_config(CHAMPS_LIVRE['avant_propos']) or ''))
+
+
+@admin_livre_bp.route('/preface/autosave', methods=['POST'])
+@admin_required
+def preface_autosave():
+    """Enregistrer la préface du livre au fil de la frappe."""
+    from settings.models import set_config
+    set_config(CHAMPS_LIVRE['avant_propos'], (request.form.get('avant_propos') or '').strip())
+    return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'))
 
 
 @admin_livre_bp.route('/pdf/reglages', methods=['POST'])

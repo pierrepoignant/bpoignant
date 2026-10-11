@@ -11,11 +11,40 @@
         <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.3rem;">
             Préface du livre <span style="text-transform:none; letter-spacing:0; color:#bbb;">— elle paraît après le sommaire, avant le premier chapitre</span>
         </label>
-        <textarea name="avant_propos" rows="16" placeholder="Pendant dix ans, j'ai écrit presque chaque semaine…&#10;&#10;Séparez les paragraphes par une ligne vide."
+        <textarea name="avant_propos" id="preface-texte" rows="18" placeholder="Pendant dix ans, j'ai écrit presque chaque semaine…&#10;&#10;Séparez les paragraphes par une ligne vide."
                   style="width: 100%; padding: 14px 16px; border: 1px solid #e0e0e0; border-radius: 12px; font-family: inherit; font-size: 1.05rem; line-height: 1.7; resize: vertical;">{{ preface }}</textarea>
         <div style="display: flex; gap: 0.6rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
             <button type="submit" class="btn btn-primary" style="min-height: 46px;"><i class="fas fa-check"></i> Enregistrer la préface</button>
-            <span style="font-size: 0.8rem; color: var(--gris);">Les paragraphes se séparent par une ligne vide.</span>
+            <span id="preface-etat" style="font-size: 0.82rem; color: var(--gris);">Enregistrement automatique à mesure que vous écrivez.</span>
         </div>
     </form>
+
+    <script>
+    // Enregistrement automatique : Bernard ouvre et ferme souvent sans cliquer.
+    const PREFACE_AUTOSAVE = "{{ url_for('admin_livre.preface_autosave') }}";
+    const zone = document.getElementById('preface-texte');
+    const etat = document.getElementById('preface-etat');
+    let timer = null, dernier = zone.value;
+
+    function sauver(keepalive) {
+        if (zone.value === dernier) return;
+        dernier = zone.value;
+        etat.textContent = 'Enregistrement…';
+        const corps = new URLSearchParams();
+        corps.set('avant_propos', zone.value);
+        fetch(PREFACE_AUTOSAVE, {
+            method: 'POST', body: corps, keepalive: !!keepalive,
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch'},
+        }).then(r => r.json()).then(d => etat.textContent = d && d.ok ? 'Enregistré à ' + d.at : 'Échec de l’enregistrement')
+          .catch(() => etat.textContent = 'Hors ligne — réessai à la fermeture');
+    }
+    zone.addEventListener('input', () => {
+        etat.textContent = 'Modifié…';
+        clearTimeout(timer);
+        timer = setTimeout(() => sauver(false), 1200);
+    });
+    zone.addEventListener('blur', () => sauver(false));
+    window.addEventListener('beforeunload', () => sauver(true));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) sauver(true); });
+    </script>
 {% endblock %}

@@ -73,9 +73,11 @@
        page, enregistrés d'un bouton. #}
     <div id="panneau-theme" style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(20,22,34,0.55); align-items: flex-end; justify-content: center;"
          onclick="if (event.target === this) fermerTheme()">
-        <form method="POST" id="form-theme" style="background: white; width: 100%; max-width: 620px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 1.3rem 1.4rem 1.8rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
+        <form method="POST" id="form-theme" style="background: white; width: 100%; max-width: 880px; height: 92vh; height: 92dvh; display: flex; flex-direction: column; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 1.3rem 1.4rem 1.8rem; box-shadow: 0 -8px 40px rgba(0,0,0,0.25);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h2 style="font-size: 1.1rem; margin: 0;">Chapitre</h2>
+                <h2 style="font-size: 1.1rem; margin: 0;">Chapitre
+                    <span id="theme-autosave-etat" style="font-size: 0.78rem; color: var(--gris); font-weight: 400; margin-left: 0.5rem;"></span>
+                </h2>
                 <button type="button" onclick="fermerTheme()" aria-label="Fermer"
                         style="width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--gris-clair); font-size: 1.05rem; cursor: pointer;"><i class="fas fa-xmark"></i></button>
             </div>
@@ -83,28 +85,67 @@
             <input type="text" name="name" id="theme-nom" required maxlength="80"
                    style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-weight: 600; margin-bottom: 1rem;">
             <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Préface du chapitre</label>
-            <textarea name="description" id="theme-desc" rows="5" placeholder="La préface du chapitre : ce qu'il rassemble, pourquoi ces textes vont ensemble…"
-                      style="width: 100%; padding: 11px 13px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1rem; line-height: 1.6; resize: vertical;"></textarea>
+            <textarea name="description" id="theme-desc" placeholder="La préface du chapitre : ce qu'il rassemble, pourquoi ces textes vont ensemble…"
+                      style="width: 100%; flex: 1; min-height: 240px; padding: 13px 15px; border: 1px solid #e0e0e0; border-radius: 10px; font-family: inherit; font-size: 1.05rem; line-height: 1.7; resize: none;"></textarea>
             <div style="display: flex; gap: 0.6rem; margin-top: 1rem;">
-                <button type="submit" class="btn btn-primary" style="min-height: 46px; flex: 1;"><i class="fas fa-check"></i> Enregistrer</button>
-                <button type="button" class="btn btn-outline" style="min-height: 46px; color: var(--noir); border-color: #e0e0e0;" onclick="fermerTheme()">Annuler</button>
+                <button type="submit" class="btn btn-primary" style="min-height: 46px; flex: 1;"><i class="fas fa-check"></i> Enregistrer et fermer</button>
+                <button type="button" class="btn btn-outline" style="min-height: 46px; color: var(--noir); border-color: #e0e0e0;" onclick="fermerTheme()">Fermer</button>
             </div>
         </form>
     </div>
 
     <script>
     const ACTION_THEME = "{{ url_for('admin_livre.theme_update', theme_id=0) }}".replace('/0', '/{id}');
+    const ACTION_AUTOSAVE = "{{ url_for('admin_livre.theme_autosave', theme_id=0) }}".replace('/0/', '/{id}/');
+    let themeCourant = null, themeTimer = null, themeDernier = '';
+
+    function themeEtat(txt) { document.getElementById('theme-autosave-etat').textContent = txt; }
+
+    function themeSauver(keepalive) {
+        if (themeCourant === null) return;
+        const corps = new URLSearchParams();
+        corps.set('name', document.getElementById('theme-nom').value);
+        corps.set('description', document.getElementById('theme-desc').value);
+        const signature = corps.toString();
+        if (signature === themeDernier) return;        // rien de neuf
+        themeDernier = signature;
+        themeEtat('Enregistrement…');
+        fetch(ACTION_AUTOSAVE.replace('{id}', themeCourant), {
+            method: 'POST', body: corps, keepalive: !!keepalive,
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch'},
+        }).then(r => r.json()).then(d => themeEtat(d && d.ok ? 'Enregistré à ' + d.at : 'Échec de l’enregistrement'))
+          .catch(() => themeEtat('Hors ligne — réessai à la fermeture'));
+    }
+    function themeSauverDiffere() {
+        themeEtat('Modifié…');
+        clearTimeout(themeTimer);
+        themeTimer = setTimeout(() => themeSauver(false), 1200);
+    }
+
     function ouvrirTheme(id, nom, desc) {
+        themeCourant = id;
         document.getElementById('form-theme').action = ACTION_THEME.replace('{id}', id);
         document.getElementById('theme-nom').value = nom;
         document.getElementById('theme-desc').value = desc;
+        themeDernier = new URLSearchParams({name: nom, description: desc}).toString();
+        themeEtat('');
         document.getElementById('panneau-theme').style.display = 'flex';
         document.body.style.overflow = 'hidden';
+        document.getElementById('theme-desc').focus();
     }
     function fermerTheme() {
+        clearTimeout(themeTimer);
+        themeSauver(true);                              // sauvegarde finale avant de fermer
         document.getElementById('panneau-theme').style.display = 'none';
         document.body.style.overflow = '';
+        themeCourant = null;
     }
+    document.getElementById('theme-desc').addEventListener('input', themeSauverDiffere);
+    document.getElementById('theme-nom').addEventListener('input', themeSauverDiffere);
+    document.getElementById('theme-desc').addEventListener('blur', () => themeSauver(false));
+    // Fermeture d'onglet ou passage en arrière-plan : sauvegarde de secours.
+    window.addEventListener('beforeunload', () => themeSauver(true));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) themeSauver(true); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerTheme(); });
     </script>
 
