@@ -132,7 +132,9 @@
                 {% endif %}
                 {# Facebook (profil personnel) : l'API ne peut pas publier sur un
                    profil, seulement sur une Page. On prépare le texte, Bernard
-                   le colle lui-même. Toujours disponible, et réutilisable. #}
+                   le colle lui-même. Le bouton disparaît une fois qu'un post du
+                   profil a été rattaché à l'article par le relevé. #}
+                {% if not a.fb_profile_post_url %}
                 <button type="button" class="btn btn-sm"
                         style="border-radius:50px; padding:6px 14px; background:#1877F2; color:#fff; border:none;"
                         onclick="openFbModal(this)"
@@ -140,6 +142,7 @@
                         data-text="{{ fb_prepared_by_article.get(a.id, '') }}">
                     <i class="fa-brands fa-facebook"></i> Facebook (profil)
                 </button>
+                {% endif %}
                 {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"
                    class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
