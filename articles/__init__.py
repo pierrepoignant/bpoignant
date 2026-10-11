@@ -796,6 +796,31 @@ def edit_article(article_id):
     )
 
 
+@admin_articles_bp.route('/<int:article_id>/edit/autosave', methods=['POST'])
+@admin_required
+def edit_article_autosave(article_id):
+    """Enregistrer le texte en cours de frappe, sans effet de bord : ni
+    nouveau slug, ni résumé auto, ni changement de publication, ni thèmes. On
+    ne touche qu'au titre, au résumé, à l'accroche et au corps — pour ne rien
+    perdre si on ferme sans cliquer « Enregistrer »."""
+    from articles.cleanup import clean_article_html, clean_text
+    article = db.session.get(Article, article_id)
+    if article is None:
+        return jsonify(ok=False), 404
+    if 'title' in request.form:
+        titre = clean_text((request.form.get('title') or '').strip())
+        if titre:
+            article.title = titre
+    if 'summary' in request.form:
+        article.summary = (request.form.get('summary') or '').strip()
+    if 'social_summary' in request.form:
+        article.social_summary = (request.form.get('social_summary') or '').strip() or None
+    if 'content_html' in request.form:
+        article.content_html = clean_article_html(_clean_html(request.form.get('content_html') or ''))
+    db.session.commit()
+    return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'))
+
+
 @admin_articles_bp.route('/<int:article_id>/stats')
 @admin_required
 def article_stats(article_id):

@@ -239,6 +239,7 @@
                 <button type="submit" class="btn btn-primary" data-envoi>
                     <i class="fas fa-save"></i> Enregistrer
                 </button>
+                {% if article %}<span id="autosave-etat" style="align-self: center; font-size: 0.8rem; color: var(--gris);">Enregistrement automatique</span>{% endif %}
                 {% if article and article.published %}
                 <a href="{{ url_for('articles.public_show', slug=article.slug) }}" target="_blank"
                    class="btn btn-vert">
@@ -309,6 +310,50 @@
     document.getElementById('article-form').addEventListener('submit', function () {
         document.getElementById('content_html').value = quill.root.innerHTML;
     });
+
+    // ── Enregistrement automatique (article existant seulement) ──────
+    {% if article %}
+    (function () {
+        const AUTOSAVE = "{{ url_for('admin_articles.edit_article_autosave', article_id=article.id) }}";
+        const etat = document.getElementById('autosave-etat');
+        const champTitre = document.getElementById('title');
+        const champResume = document.getElementById('summary');
+        const champSocial = document.getElementById('social_summary');
+        let minuteur = null, dernier = '';
+        function signature() {
+            return [champTitre.value, champResume ? champResume.value : '',
+                    champSocial ? champSocial.value : '', quill.root.innerHTML].join('');
+        }
+        function sauver(keepalive) {
+            if (!etat || signature() === dernier) return;
+            dernier = signature();
+            etat.textContent = 'Enregistrement…';
+            const corps = new URLSearchParams();
+            corps.set('title', champTitre.value);
+            if (champResume) corps.set('summary', champResume.value);
+            if (champSocial) corps.set('social_summary', champSocial.value);
+            corps.set('content_html', quill.root.innerHTML);
+            fetch(AUTOSAVE, {
+                method: 'POST', body: corps, keepalive: !!keepalive,
+                headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch'},
+            }).then(r => r.json()).then(d => etat.textContent = d && d.ok ? 'Enregistré à ' + d.at : 'Échec de l’enregistrement')
+              .catch(() => etat.textContent = 'Hors ligne — réessai à la fermeture');
+        }
+        function differer() {
+            if (etat) etat.textContent = 'Modifié…';
+            clearTimeout(minuteur);
+            minuteur = setTimeout(() => sauver(false), 1500);
+        }
+        dernier = signature();
+        champTitre.addEventListener('input', differer);
+        if (champResume) champResume.addEventListener('input', differer);
+        if (champSocial) champSocial.addEventListener('input', differer);
+        quill.on('text-change', differer);
+        champTitre.addEventListener('blur', () => sauver(false));
+        window.addEventListener('beforeunload', () => sauver(true));
+        document.addEventListener('visibilitychange', () => { if (document.hidden) sauver(true); });
+    })();
+    {% endif %}
 
     // ── Google Drive import ─────────────────────────────────
     {% if gdrive_configured %}
