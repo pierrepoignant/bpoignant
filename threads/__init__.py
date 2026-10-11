@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 API = 'https://graph.threads.net'
 AUTH = 'https://threads.net/oauth/authorize'
-SCOPE = 'threads_basic,threads_content_publish'
+SCOPE = 'threads_basic,threads_content_publish,threads_manage_insights'
 LIMITE = 500
 _TIMEOUT = 30
 
@@ -264,6 +264,32 @@ def post_article(article):
     article.threads_posted_at = datetime.utcnow()
     db.session.commit()
     return True, article.threads_post_id
+
+
+def post_stats(media_id):
+    """(vues, j'aime, réponses, reposts) d'un post Threads, ou None.
+
+    Passe par l'endpoint insights, qui demande threads_manage_insights : si la
+    permission n'est pas accordée, on renvoie None sans bruit.
+    """
+    if not (media_id and is_connected()):
+        return None
+    try:
+        token = _valid_token()
+        data = _corps(requests.get(f'{API}/v1.0/{media_id}/insights',
+                                   params={'metric': 'views,likes,replies,reposts,quotes',
+                                           'access_token': token}, timeout=_TIMEOUT))
+    except ThreadsError:
+        return None
+    out = {}
+    for m in data.get('data') or []:
+        nom = m.get('name')
+        val = m.get('values') and m['values'][0].get('value')
+        if val is None:
+            val = m.get('total_value', {}).get('value')
+        out[nom] = int(val or 0)
+    return {'views': out.get('views', 0), 'likes': out.get('likes', 0),
+            'replies': out.get('replies', 0), 'reposts': out.get('reposts', 0) + out.get('quotes', 0)}
 
 
 def post_url(post_id):

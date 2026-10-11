@@ -1,0 +1,36 @@
+{% macro stat_reseau(icone, nom, couleur='var(--noir)', fait=none, poste_le=none, url=none, metriques=[], releve_le=none, note=none, absent=none) %}
+{# Une carte par réseau, identique partout : en-tête (icône + nom), date de
+   publication et lien vers le post, puis une rangée de chiffres. Un chiffre
+   inconnu s'affiche « — », pas « 0 ». Quand ce n'est pas encore parti, une
+   simple phrase grise. #}
+{% set montre = fait if fait is not none else poste_le %}
+<div style="border: 1px solid var(--gris-clair); border-radius: 10px; padding: 1rem 1.1rem;">
+    <div style="font-weight: 700; margin-bottom: 0.5rem;">
+        <i class="{{ icone }}" style="color: {{ couleur }};"></i> {{ nom }}
+    </div>
+    {% if montre %}
+    {% if poste_le %}
+    <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.7rem;">
+        Publié le {{ poste_le.strftime('%d/%m/%Y') }}
+        {% if url %} · <a href="{{ url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>{% endif %}
+    </div>
+    {% elif url %}
+    <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.7rem;">
+        <a href="{{ url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
+    </div>
+    {% endif %}
+    {% if metriques %}
+    <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem;">
+        {% for m in metriques %}
+        <span><strong>{{ m.valeur if m.valeur is not none else '—' }}</strong>
+              <span style="color: var(--gris); font-size: 0.8rem;">{{ m.label }}</span></span>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if note %}<div style="font-size: 0.8rem; color: var(--gris); margin-top: 0.6rem; line-height: 1.5;">{{ note }}</div>{% endif %}
+    {% if releve_le %}<div style="font-size: 0.76rem; color: #bbb; margin-top: 0.6rem;">relevé le {{ releve_le.strftime('%d/%m/%Y') }}</div>{% endif %}
+    {% else %}
+    <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">{{ absent or ('Pas encore sur ' ~ nom) }}</p>
+    {% endif %}
+</div>
+{% endmacro %}

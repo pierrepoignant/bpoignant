@@ -649,14 +649,46 @@ def refresh_facebook_profile(log_fn=print):
     return n
 
 
+def refresh_article_social_stats(log_fn=print):
+    """Relever les chiffres des articles sur la Page Facebook (j'aime,
+    commentaires, partages) et sur Threads (vues, j'aime, réponses, reposts)."""
+    import meta
+    import threads
+    maintenant = datetime.utcnow()
+    n = 0
+    if meta.is_connected():
+        for a in Article.query.filter(Article.fb_page_post_id.isnot(None)).all():
+            st = meta.facebook_post_stats(a.fb_page_post_id)
+            if st:
+                a.fb_page_likes, a.fb_page_comments, a.fb_page_shares = st['likes'], st['comments'], st['shares']
+                a.fb_page_metrics_at = maintenant
+                n += 1
+    if threads.is_connected():
+        for a in Article.query.filter(Article.threads_post_id.isnot(None)).all():
+            st = threads.post_stats(a.threads_post_id)
+            if st:
+                a.threads_views, a.threads_likes = st['views'], st['likes']
+                a.threads_replies, a.threads_reposts = st['replies'], st['reposts']
+                a.threads_metrics_at = maintenant
+                n += 1
+    db.session.commit()
+    log_fn(f"chiffres réseaux des articles : {n} mise(s) à jour.")
+    return n
+
+
 @admin_articles_bp.route('/facebook-profile/refresh', methods=['POST'])
 @admin_required
 def refresh_facebook_profile_route():
+    messages = []
     try:
-        n = refresh_facebook_profile()
-        flash(f"Relevé Facebook (profil) : {n} article(s) mis à jour.", 'success')
+        messages.append(f"profil Facebook : {refresh_facebook_profile()} article(s)")
     except Exception as exc:  # noqa: BLE001
-        flash(f"Relevé Facebook (profil) impossible : {exc}", 'danger')
+        messages.append(f"profil Facebook impossible ({exc})")
+    try:
+        refresh_article_social_stats(lambda m: messages.append(m))
+    except Exception as exc:  # noqa: BLE001
+        messages.append(f"chiffres Page/Threads impossibles ({exc})")
+    flash("Relevé : " + " · ".join(messages), 'success')
     return redirect(url_for('admin_articles.list_articles'))
 
 

@@ -37,6 +37,8 @@ def main():
                 return
             import articles
             articles.refresh_facebook_profile()
+            # Et les chiffres Page Facebook + Threads des articles.
+            articles.refresh_article_social_stats()
 
 
 if __name__ == '__main__':

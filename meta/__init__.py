@@ -569,3 +569,32 @@ def reply_instagram_comment(comment_id, text):
     except requests.RequestException as exc:
         return False, f"Connexion à Instagram interrompue : {exc}"
     return True, str(corps.get('id') or 'ok')
+
+
+def facebook_post_stats(object_id):
+    """(j'aime, commentaires, partages) d'un post de Page, ou None.
+
+    Vaut pour une publication de lien (article) comme pour une vidéo de Page.
+    Les compteurs passent par summary(true), qui renvoie les totaux sans tirer
+    toute la liste. Le total des commentaires exige pages_read_user_content ;
+    sans ce droit, on se rabat sur j'aime et partages (qui ne demandent que
+    pages_read_engagement), et les commentaires restent inconnus plutôt que de
+    faire échouer tout le relevé. Une valeur inconnue vaut None, pas zéro.
+    """
+    if not (object_id and is_connected()):
+        return None
+
+    def lire(champs):
+        return _get(f'{object_id}', {'fields': champs}, token=_page_token())
+
+    try:
+        c = lire('likes.summary(true).limit(0),comments.summary(true).limit(0),shares')
+    except MetaError:
+        try:
+            c = lire('likes.summary(true).limit(0),shares')
+        except MetaError:
+            return None
+    likes = ((c.get('likes') or {}).get('summary') or {}).get('total_count')
+    comments = ((c.get('comments') or {}).get('summary') or {}).get('total_count')
+    shares = (c.get('shares') or {}).get('count')
+    return {'likes': likes, 'comments': comments, 'shares': shares}

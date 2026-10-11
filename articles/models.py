@@ -98,6 +98,16 @@ class Article(db.Model):
     # Threads : identifiant et date du post. API séparée de la Page/Instagram.
     threads_post_id = db.Column(db.String(60), nullable=True)
     threads_posted_at = db.Column(db.DateTime, nullable=True)
+    # Chiffres du post Threads (API insights) et du post de Page Facebook.
+    threads_views = db.Column(db.Integer, nullable=True)
+    threads_likes = db.Column(db.Integer, nullable=True)
+    threads_replies = db.Column(db.Integer, nullable=True)
+    threads_reposts = db.Column(db.Integer, nullable=True)
+    threads_metrics_at = db.Column(db.DateTime, nullable=True)
+    fb_page_likes = db.Column(db.Integer, nullable=True)
+    fb_page_comments = db.Column(db.Integer, nullable=True)
+    fb_page_shares = db.Column(db.Integer, nullable=True)
+    fb_page_metrics_at = db.Column(db.DateTime, nullable=True)
 
     # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
     # n'expose aucune statistique pour la publication d'un membre, donc il n'y

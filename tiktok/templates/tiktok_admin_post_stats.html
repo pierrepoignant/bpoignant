@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% from '_stat_reseau.html' import stat_reseau %}
 {% block title %}{{ p.title|truncate(40) }}{% endblock %}
 
 {% block admin_title %}<i class="fas fa-chart-line" style="color: var(--vert);"></i> {{ p.title|truncate(60) }}{% endblock %}
@@ -12,42 +13,11 @@
         · <a href="{{ url_for('admin_tiktok.edit', post_id=p.id) }}" style="color: var(--gris);">modifier</a>
     </p>
 
-    {# Quatre sources qui ne se comparent pas : une vue TikTok, une vue X et une
-       lecture sur le site ne mesurent pas la même chose. Elles sont donc côte à
-       côte et datées, jamais additionnées. #}
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.8rem;">
-        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                <i class="fa-brands fa-tiktok"></i> TikTok
-            </div>
-            {% if p.views is not none %}
-            <div style="font-size: 1.9rem; font-weight: 800;">{{ '{:,}'.format(p.views).replace(',', ' ') }}</div>
-            <div style="color: var(--gris); font-size: 0.8rem;">
-                {{ p.likes }} j'aime · {{ p.comments_count }} commentaires · {{ p.shares }} partages
-            </div>
-            {% if p.scraped_at %}<div style="color: #bbb; font-size: 0.75rem; margin-top: 0.3rem;">relevé le {{ p.scraped_at.strftime('%d/%m/%Y') }}</div>{% endif %}
-            {% else %}
-            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Pas encore récupéré.</div>
-            {% endif %}
-        </div>
-
-        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                <i class="fa-brands fa-x-twitter"></i> X
-            </div>
-            {% if p.x_view_count is not none %}
-            <div style="font-size: 1.9rem; font-weight: 800;">{{ '{:,}'.format(p.x_view_count).replace(',', ' ') }}</div>
-            <div style="color: var(--gris); font-size: 0.8rem;">
-                {{ p.x_like_count }} j'aime · {{ p.x_retweet_count }} retweets · {{ p.x_reply_count }} réponses
-            </div>
-            {% if p.x_metrics_at %}<div style="color: #bbb; font-size: 0.75rem; margin-top: 0.3rem;">relevé le {{ p.x_metrics_at.strftime('%d/%m/%Y') }}</div>{% endif %}
-            {% elif p.x_post_id %}
-            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Publié, chiffres pas encore relevés.</div>
-            {% else %}
-            <div style="font-size: 0.9rem; color: var(--gris); margin-top: 0.5rem;">Pas publié sur X.</div>
-            {% endif %}
-        </div>
-
+    {# Deux mesures maison bien à nous — le site et la lettre — puis une carte par
+       réseau, identiques à celles de la page d'un article. Jamais additionnées :
+       une vue TikTok, une vue YouTube et une lecture sur le site ne mesurent pas
+       la même chose. #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
         <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
                 <i class="far fa-eye"></i> Sur le site
@@ -57,7 +27,6 @@
                 {{ vues_site_fenetre }} sur {{ jours }} jours · une par visiteur et par jour
             </div>
         </div>
-
         <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
                 <i class="far fa-envelope"></i> La Minute
@@ -68,6 +37,32 @@
                 le dernier le {{ envois[0].sent_at.strftime('%d/%m/%Y') }}{% else %}pas encore envoyé{% endif %}
             </div>
         </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.8rem;">
+        {{ stat_reseau('fa-brands fa-tiktok', 'TikTok', '#000',
+            fait=(p.views is not none or p.posted_url), poste_le=p.posted_at, url=p.posted_url, releve_le=p.scraped_at,
+            absent='Pas encore récupéré.',
+            metriques=[{'label': 'vues', 'valeur': p.views}, {'label': "j'aime", 'valeur': p.likes},
+                       {'label': 'commentaires', 'valeur': p.comments_count}, {'label': 'partages', 'valeur': p.shares}]) }}
+        {{ stat_reseau('fa-brands fa-x-twitter', 'X', '#000',
+            poste_le=p.x_posted_at, url=p.x_url, releve_le=p.x_metrics_at, absent='Pas publié sur X.',
+            metriques=[{'label': 'vues', 'valeur': p.x_view_count}, {'label': "j'aime", 'valeur': p.x_like_count},
+                       {'label': 'retweets', 'valeur': p.x_retweet_count}, {'label': 'réponses', 'valeur': p.x_reply_count}]) }}
+        {{ stat_reseau('fa-brands fa-youtube', 'YouTube', '#FF0000',
+            poste_le=p.youtube_posted_at, url=p.youtube_url, releve_le=p.youtube_metrics_at, absent='Pas publié sur YouTube.',
+            metriques=[{'label': 'vues', 'valeur': p.youtube_views}, {'label': "j'aime", 'valeur': p.youtube_likes},
+                       {'label': 'commentaires', 'valeur': p.youtube_comments}]) }}
+        {{ stat_reseau('fa-brands fa-facebook', 'Facebook', '#1877F2',
+            poste_le=p.fb_posted_at, url=p.facebook_url, releve_le=p.meta_metrics_at, absent='Pas publié sur Facebook.',
+            metriques=[{'label': 'vues', 'valeur': p.fb_views}]) }}
+        {{ stat_reseau('fa-brands fa-instagram', 'Instagram', '#E4405F',
+            poste_le=p.instagram_posted_at, url=p.instagram_url, releve_le=p.meta_metrics_at, absent='Pas publié sur Instagram.',
+            metriques=[{'label': 'vues', 'valeur': p.instagram_views}, {'label': "j'aime", 'valeur': p.instagram_likes},
+                       {'label': 'commentaires', 'valeur': p.instagram_comments}]) }}
+        {{ stat_reseau('fa-brands fa-linkedin-in', 'LinkedIn', '#0A66C2',
+            poste_le=p.linkedin_posted_at, url=p.linkedin_url, absent='Pas publié sur LinkedIn.',
+            note='LinkedIn ne donne aucun chiffre pour la publication d’un membre.') }}
     </div>
 
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1.2rem; flex-wrap: wrap;">

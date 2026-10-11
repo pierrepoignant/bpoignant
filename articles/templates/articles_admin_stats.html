@@ -1,4 +1,5 @@
 {% extends 'admin_base.html' %}
+{% from '_stat_reseau.html' import stat_reseau %}
 {% block title %}Stats : {{ article.title }}{% endblock %}
 
 {% block admin_title %}<i class="fas fa-chart-line" style="color: var(--vert);"></i> Statistiques de l'article{% endblock %}
@@ -136,72 +137,44 @@
         </h2>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
-            <div style="border: 1px solid var(--gris-clair); border-radius: 10px; padding: 1rem 1.1rem;">
-                <div style="font-weight: 700; margin-bottom: 0.5rem;">
-                    <i class="fa-brands fa-x-twitter"></i> X
-                </div>
-                {% if article.x_posted_at %}
-                <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.7rem;">
-                    Partagé le {{ article.x_posted_at.strftime('%d/%m/%Y') }}
-                    {% if article.x_post_url %}
-                    · <a href="{{ article.x_post_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
-                    {% endif %}
-                </div>
-                <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem;">
-                    <span><strong>{{ article.x_view_count if article.x_view_count is not none else '—' }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">vues</span></span>
-                    <span><strong>{{ article.x_like_count if article.x_like_count is not none else '—' }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">j'aime</span></span>
-                    <span><strong>{{ article.x_retweet_count if article.x_retweet_count is not none else '—' }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">retweets</span></span>
-                    <span><strong>{{ article.x_reply_count if article.x_reply_count is not none else '—' }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">réponses</span></span>
-                </div>
-                {% if article.x_metrics_at %}
-                <div style="font-size: 0.76rem; color: #bbb; margin-top: 0.6rem;">
-                    relevé le {{ article.x_metrics_at.strftime('%d/%m/%Y') }}
-                </div>
-                {% endif %}
-                {% else %}
-                <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">Pas encore partagé sur X.</p>
-                {% endif %}
-            </div>
+            {{ stat_reseau('fa-brands fa-x-twitter', 'X', '#000',
+                poste_le=article.x_posted_at, url=article.x_post_url, releve_le=article.x_metrics_at,
+                absent='Pas encore partagé sur X.',
+                metriques=[{'label': 'vues', 'valeur': article.x_view_count},
+                           {'label': "j'aime", 'valeur': article.x_like_count},
+                           {'label': 'retweets', 'valeur': article.x_retweet_count},
+                           {'label': 'réponses', 'valeur': article.x_reply_count}]) }}
 
-            <div style="border: 1px solid var(--gris-clair); border-radius: 10px; padding: 1rem 1.1rem;">
-                <div style="font-weight: 700; margin-bottom: 0.5rem;">
-                    <i class="fa-brands fa-linkedin-in" style="color: #0A66C2;"></i> LinkedIn
-                </div>
-                {% if article.linkedin_posted_at %}
-                <div style="font-size: 0.82rem; color: var(--gris); margin-bottom: 0.5rem;">
-                    Partagé le {{ article.linkedin_posted_at.strftime('%d/%m/%Y') }}
-                    {% if article.linkedin_post_url %}
-                    · <a href="{{ article.linkedin_post_url }}" target="_blank" rel="noopener" style="color: var(--rouge);">voir le post</a>
-                    {% endif %}
-                </div>
-                {% if article.linkedin_impressions is not none %}
-                <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem;">
-                    <span><strong>{{ article.linkedin_impressions }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">impressions</span></span>
-                    <span><strong>{{ article.linkedin_interactions or 0 }}</strong>
-                          <span style="color: var(--gris); font-size: 0.8rem;">interactions</span></span>
-                </div>
-                {% if article.linkedin_metrics_at %}
-                <div style="font-size: 0.76rem; color: #bbb; margin-top: 0.6rem;">
-                    importé le {{ article.linkedin_metrics_at.strftime('%d/%m/%Y') }}
-                </div>
-                {% endif %}
-                {% else %}
-                {# Ces chiffres n'existent que dans l'export : ni l'API ni la
-                   page publique ne les portent. #}
-                <p style="font-size: 0.82rem; color: var(--gris); margin: 0; line-height: 1.55;">
-                    Pas encore de chiffres — ils viennent de l'export LinkedIn,
-                    à déposer sur <a href="{{ url_for('admin_linkedin.index') }}" style="color: var(--rouge);">la page LinkedIn</a>.
-                </p>
-                {% endif %}
-                {% else %}
-                <p style="font-size: 0.86rem; color: var(--gris); margin: 0;">Pas encore partagé sur LinkedIn.</p>
-                {% endif %}
-            </div>
+            {{ stat_reseau('fa-brands fa-linkedin-in', 'LinkedIn', '#0A66C2',
+                poste_le=article.linkedin_posted_at, url=article.linkedin_post_url, releve_le=article.linkedin_metrics_at,
+                absent='Pas encore partagé sur LinkedIn.',
+                note=(none if article.linkedin_impressions is not none else "Chiffres à importer depuis l'export LinkedIn (page LinkedIn)."),
+                metriques=([{'label': 'impressions', 'valeur': article.linkedin_impressions},
+                            {'label': 'interactions', 'valeur': article.linkedin_interactions or 0}] if article.linkedin_impressions is not none else [])) }}
+
+            {{ stat_reseau('fa-brands fa-facebook', 'Page Facebook', '#1877F2',
+                poste_le=article.fb_page_posted_at, url=article.fb_page_post_url, releve_le=article.fb_page_metrics_at,
+                absent='Pas encore sur la Page Facebook.',
+                metriques=[{'label': "j'aime", 'valeur': article.fb_page_likes},
+                           {'label': 'commentaires', 'valeur': article.fb_page_comments},
+                           {'label': 'partages', 'valeur': article.fb_page_shares}]) }}
+
+            {{ stat_reseau('fas fa-user', 'Profil Facebook', '#1877F2',
+                fait=(article.fb_profile_post_url is not none),
+                poste_le=article.fb_profile_posted_at, url=article.fb_profile_post_url, releve_le=article.fb_profile_metrics_at,
+                absent='Aucun post du profil rattaché à cet article.',
+                note='Profil personnel : chiffres relevés par lecture publique.',
+                metriques=[{'label': "j'aime", 'valeur': article.fb_profile_likes},
+                           {'label': 'commentaires', 'valeur': article.fb_profile_comments},
+                           {'label': 'partages', 'valeur': article.fb_profile_shares}]) }}
+
+            {{ stat_reseau('fa-brands fa-threads', 'Threads', '#000',
+                poste_le=article.threads_posted_at, url=article.threads_post_url, releve_le=article.threads_metrics_at,
+                absent='Pas encore sur Threads.',
+                metriques=[{'label': 'vues', 'valeur': article.threads_views},
+                           {'label': "j'aime", 'valeur': article.threads_likes},
+                           {'label': 'réponses', 'valeur': article.threads_replies},
+                           {'label': 'reposts', 'valeur': article.threads_reposts}]) }}
         </div>
     </div>
 

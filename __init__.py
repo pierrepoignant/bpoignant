@@ -454,6 +454,14 @@ def _migrate_schema():
             db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_post_id VARCHAR(60) NULL"))
             db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_posted_at DATETIME NULL"))
             db.session.commit()
+        if 'threads_views' not in cols:
+            for c in ('threads_views INTEGER NULL', 'threads_likes INTEGER NULL',
+                      'threads_replies INTEGER NULL', 'threads_reposts INTEGER NULL',
+                      'threads_metrics_at DATETIME NULL', 'fb_page_likes INTEGER NULL',
+                      'fb_page_comments INTEGER NULL', 'fb_page_shares INTEGER NULL',
+                      'fb_page_metrics_at DATETIME NULL'):
+                db.session.execute(text(f"ALTER TABLE articles ADD COLUMN {c}"))
+            db.session.commit()
 
     if 'subscribers' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('subscribers')}
