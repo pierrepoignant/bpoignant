@@ -330,6 +330,9 @@ def videos():
         commentaires=__import__('tiktok.comments', fromlist=['compter']).compter([c.id for c in clips]),
         site_views=vues, minute_count=_mailable_query('minute').count(),
         linkedin_ok=linkedin.is_configured(),
+        youtube_ok=__import__('youtube').is_connected(),
+        meta_ok=__import__('meta').is_connected(),
+        ig_ok=__import__('meta').instagram_ready(),
         video_enabled=video_mod.is_enabled(),
         mon_email=getattr(current_user, 'email', '') or '',
     )

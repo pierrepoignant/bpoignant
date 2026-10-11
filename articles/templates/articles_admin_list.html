@@ -5,7 +5,7 @@
 {% block admin_subtitle %}<p>Gérez les articles publiés sur le site.</p>{% endblock %}
 
 
-{% from 'admin_pastille.html' import pastille %}
+{% from 'admin_pastille.html' import pastille, pastille_action %}
 
 {% block admin_content %}
     <div class="admin-row" style="justify-content: space-between; margin-bottom: 1.5rem;">
@@ -45,27 +45,38 @@
                    parti, éteinte sinon. La newsletter en fait partie — c'est un
                    canal de diffusion comme les autres. #}
                 {% set last = last_campaign_by_article.get(a.id) %}
+                {# Les pastilles portent l'action : grise = à faire, cliquer
+                   publie (ou prépare, pour le profil Facebook) ; pleine = fait,
+                   cliquer ouvre le post. Seul « Envoyer » reste un bouton. #}
                 <div class="fiche-pastilles">
                     {{ pastille(last, 'far fa-envelope',
                                 'Envoyé le %s à %s abonnés'|format(last.sent_at.strftime('%d/%m/%Y'), last.success_count) if last else 'Pas encore envoyé aux abonnés',
                                 None, 'var(--rouge)') }}
-                    {{ pastille(a.x_posted_at, 'fa-brands fa-x-twitter',
-                                'Partagé sur X le %s'|format(a.x_posted_at.strftime('%d/%m/%Y')) if a.x_posted_at else 'Pas encore sur X',
-                                a.x_post_url, '#000') }}
-                    {{ pastille(a.linkedin_posted_at, 'fa-brands fa-linkedin-in',
-                                'Partagé sur LinkedIn le %s'|format(a.linkedin_posted_at.strftime('%d/%m/%Y')) if a.linkedin_posted_at else 'Pas encore sur LinkedIn',
-                                a.linkedin_post_url, '#0A66C2') }}
-                    {{ pastille(a.fb_page_posted_at, 'fa-brands fa-facebook',
-                                'Sur la Page Facebook le %s'|format(a.fb_page_posted_at.strftime('%d/%m/%Y')) if a.fb_page_posted_at else 'Pas encore sur la Page Facebook',
-                                a.fb_page_post_url, '#1877F2') }}
-                    {% if a.fb_profile_likes is not none or a.fb_profile_comments is not none %}
-                    {{ pastille(True, 'fas fa-user',
-                                'Profil Facebook : %s j’aime, %s commentaires'|format(a.fb_profile_likes or 0, a.fb_profile_comments or 0),
-                                a.fb_profile_post_url, '#1877F2') }}
-                    {% endif %}
-                    {{ pastille(a.threads_posted_at, 'fa-brands fa-threads',
-                                'Sur Threads le %s'|format(a.threads_posted_at.strftime('%d/%m/%Y')) if a.threads_posted_at else 'Pas encore sur Threads',
-                                a.threads_post_url, '#000000') }}
+                    {{ pastille_action(a.x_posted_at, 'fa-brands fa-x-twitter',
+                                'Sur X le %s'|format(a.x_posted_at.strftime('%d/%m/%Y')) if a.x_posted_at else ('Publier sur X' if a.published and x_configured else 'Pas encore sur X'),
+                                url=a.x_post_url, couleur='#000', onclick='openXModal(this)',
+                                data={'action': url_for('admin_articles.post_to_x', article_id=a.id), 'title': a.title, 'text': x_proposed_by_article.get(a.id, '')},
+                                disabled=(not a.published or not x_configured)) }}
+                    {{ pastille_action(a.linkedin_posted_at, 'fa-brands fa-linkedin-in',
+                                'Sur LinkedIn le %s'|format(a.linkedin_posted_at.strftime('%d/%m/%Y')) if a.linkedin_posted_at else ('Publier sur LinkedIn' if a.published and linkedin_configured else 'Pas encore sur LinkedIn'),
+                                url=a.linkedin_post_url, couleur='#0A66C2',
+                                action=url_for('admin_articles.share_linkedin', article_id=a.id), confirm='Partager cet article sur LinkedIn ?',
+                                disabled=(not a.published or not linkedin_configured)) }}
+                    {{ pastille_action(a.fb_page_posted_at, 'fa-brands fa-facebook',
+                                'Sur la Page Facebook le %s'|format(a.fb_page_posted_at.strftime('%d/%m/%Y')) if a.fb_page_posted_at else ('Publier sur la Page Facebook' if a.published and meta_connected else 'Pas encore sur la Page'),
+                                url=a.fb_page_post_url, couleur='#1877F2',
+                                action=url_for('admin_articles.share_facebook_page', article_id=a.id), confirm='Publier cet article sur la Page Facebook ?',
+                                disabled=(not a.published or not meta_connected)) }}
+                    {{ pastille_action(a.threads_posted_at, 'fa-brands fa-threads',
+                                'Sur Threads le %s'|format(a.threads_posted_at.strftime('%d/%m/%Y')) if a.threads_posted_at else ('Publier sur Threads' if a.published and threads_connected else 'Pas encore sur Threads'),
+                                url=a.threads_post_url, couleur='#000000',
+                                action=url_for('admin_articles.share_threads', article_id=a.id), confirm='Publier cet article sur Threads ?',
+                                disabled=(not a.published or not threads_connected)) }}
+                    {{ pastille_action((a.fb_profile_post_url is not none), 'fas fa-user',
+                                ('Profil Facebook : %s j’aime, %s commentaires'|format(a.fb_profile_likes or 0, a.fb_profile_comments or 0)) if a.fb_profile_post_url else 'Préparer le texte pour le profil Facebook',
+                                url=a.fb_profile_post_url, couleur='#1877F2', onclick='openFbModal(this)',
+                                data={'title': a.title, 'text': fb_prepared_by_article.get(a.id, '')},
+                                disabled=(not a.published)) }}
                     {{ pastille(a.published, 'fas fa-globe',
                                 'En ligne' if a.published else 'Brouillon — pas en ligne',
                                 url_for('articles.public_show', slug=a.slug) if a.published else None,
@@ -90,58 +101,6 @@
                         data-envoi="{{ url_for('admin_articles.send_newsletter', article_id=a.id) }}"
                         data-dernier="{{ last.sent_at.strftime('%d/%m/%Y') if last else '' }}">
                     <i class="fas fa-paper-plane"></i> Envoyer
-                </button>
-                {% if x_configured and not a.x_posted_at %}
-                <button type="button" class="btn btn-sm"
-                        style="border-radius:50px; padding:6px 14px; background:#000; color:#fff; border:none;"
-                        onclick="openXModal(this)"
-                        data-action="{{ url_for('admin_articles.post_to_x', article_id=a.id) }}"
-                        data-title="{{ a.title }}"
-                        data-text="{{ x_proposed_by_article.get(a.id, '') }}">
-                    <i class="fa-brands fa-x-twitter"></i> Publier
-                </button>
-                {% endif %}
-                {% if linkedin_configured and not a.linkedin_posted_at %}
-                <form method="POST" action="{{ url_for('admin_articles.share_linkedin', article_id=a.id) }}"
-                      style="margin: 0;" onsubmit="return confirm('Partager « {{ a.title|truncate(60)|e }} » sur LinkedIn ?')">
-                    <button type="submit" class="btn btn-sm"
-                            style="border-radius:50px; padding:6px 14px; background:#0A66C2; color:#fff; border:none;">
-                        <i class="fa-brands fa-linkedin-in"></i> Publier
-                    </button>
-                </form>
-                {% endif %}
-                {# Page Facebook : publication directe par l'API, une fois. #}
-                {% if meta_connected and not a.fb_page_posted_at %}
-                <form method="POST" action="{{ url_for('admin_articles.share_facebook_page', article_id=a.id) }}"
-                      style="margin: 0;" onsubmit="return confirm('Publier « {{ a.title|truncate(60)|e }} » sur la Page Facebook ?')">
-                    <button type="submit" class="btn btn-sm"
-                            style="border-radius:50px; padding:6px 14px; background:#1877F2; color:#fff; border:none;">
-                        <i class="fa-brands fa-facebook"></i> Page
-                    </button>
-                </form>
-                {% endif %}
-                {# Threads : publication directe par l'API, une fois. #}
-                {% if threads_connected and not a.threads_posted_at %}
-                <form method="POST" action="{{ url_for('admin_articles.share_threads', article_id=a.id) }}"
-                      style="margin: 0;" onsubmit="return confirm('Publier « {{ a.title|truncate(60)|e }} » sur Threads ?')">
-                    <button type="submit" class="btn btn-sm"
-                            style="border-radius:50px; padding:6px 14px; background:#000; color:#fff; border:none;">
-                        <i class="fa-brands fa-threads"></i> Threads
-                    </button>
-                </form>
-                {% endif %}
-                {# Facebook (profil personnel) : l'API ne peut pas publier sur un
-                   profil, seulement sur une Page. On prépare le texte, Bernard
-                   le colle lui-même. Une fois qu'un post du profil a été rattaché
-                   par le relevé, le bouton s'éteint (grisé) sans disparaître :
-                   il reste réutilisable, comme le bouton d'envoi de la lettre. #}
-                <button type="button" class="btn btn-sm"
-                        style="border-radius:50px; padding:6px 14px;
-                               {% if a.fb_profile_post_url %}background: none; border: 1px solid #e0e0e0; color: var(--gris);{% else %}background:#1877F2; color:#fff; border:none;{% endif %}"
-                        onclick="openFbModal(this)"
-                        data-title="{{ a.title }}"
-                        data-text="{{ fb_prepared_by_article.get(a.id, '') }}">
-                    <i class="fa-brands fa-facebook"></i> Facebook (profil)
                 </button>
                 {% endif %}
                 <a href="{{ url_for('admin_articles.article_stats', article_id=a.id) }}"

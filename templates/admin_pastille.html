@@ -18,3 +18,31 @@
 </span>
 {% endif %}
 {% endmacro %}
+
+{% macro pastille_action(actif, icone, libelle, url=None, couleur='var(--vert-fonce)', action=None, confirm=None, onclick=None, data={}, disabled=False) %}
+{# Pastille qui agit. Trois états :
+   — faite : pleine, couleur du réseau, lien vers le post ;
+   — à faire et possible : fond clair, icône en couleur, cliquable (formulaire
+     POST, ou ouverture d'une fenêtre) — l'action du réseau se fait ici ;
+   — à faire mais impossible (réseau non connecté) : grise et inerte. #}
+{% set plein = 'display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:' ~ couleur ~ '; color:#fff; text-decoration:none; border:none;' %}
+{% set dispo = 'display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--gris-clair); color:' ~ couleur ~ '; cursor:pointer; border:1px solid #e5e5e5; text-decoration:none;' %}
+{% set inerte = 'display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--gris-clair); color:#ccc;' %}
+{% if actif and url %}
+<a href="{{ url }}" target="_blank" rel="noopener" title="{{ libelle }}" style="{{ plein }}"><i class="{{ icone }}"></i></a>
+{% elif actif %}
+<span title="{{ libelle }}" style="{{ plein }}"><i class="{{ icone }}"></i></span>
+{% elif disabled %}
+<span title="{{ libelle }}" style="{{ inerte }}"><i class="{{ icone }}"></i></span>
+{% elif action %}
+<form method="POST" action="{{ action }}" style="display:inline-flex; margin:0;"
+      {% if confirm %}onsubmit="return confirm('{{ confirm }}')"{% endif %}>
+    <button type="submit" title="{{ libelle }}" style="{{ dispo }}"><i class="{{ icone }}"></i></button>
+</form>
+{% elif onclick %}
+<button type="button" title="{{ libelle }}" style="{{ dispo }}" onclick="{{ onclick }}"
+        {% for k, v in data.items() %}data-{{ k }}="{{ v }}" {% endfor %}><i class="{{ icone }}"></i></button>
+{% else %}
+<span title="{{ libelle }}" style="{{ inerte }}"><i class="{{ icone }}"></i></span>
+{% endif %}
+{% endmacro %}
