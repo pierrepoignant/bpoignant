@@ -43,8 +43,9 @@ DIALOG = 'https://www.facebook.com/{v}/dialog/oauth'
 # la publication, les j'aime et les commentaires fonctionnent, mais les vues
 # Instagram restent à zéro.
 SCOPE = ('pages_show_list,pages_manage_posts,pages_read_engagement,'
+         'pages_read_user_content,pages_manage_engagement,'
          'business_management,instagram_basic,instagram_content_publish,'
-         'instagram_manage_insights')
+         'instagram_manage_insights,instagram_manage_comments')
 
 KEY_APP_ID = 'meta_app_id'
 KEY_APP_SECRET = 'meta_app_secret'
