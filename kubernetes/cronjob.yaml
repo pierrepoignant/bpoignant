@@ -486,3 +486,43 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Rattrapage Threads : deux articles de l'arriéré par jour (un par exécution,
+# 11h et 17h Paris) jusqu'à épuisement. Ignore le seuil d'activation. Un article
+# déjà sur Threads est sauté, donc inoffensif une fois l'arriéré vidé.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-threads-backfill
+  namespace: default
+spec:
+  schedule: "0 11,17 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: threads-backfill
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "threads_backfill.py", "--limit", "1"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "500m"
+                  memory: 512Mi

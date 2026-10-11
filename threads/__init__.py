@@ -298,6 +298,32 @@ def next_article_to_post():
             .order_by(Article.created_at.asc()).first())
 
 
+def backfill(limit=2, log_fn=print):
+    """Rattraper l'arriéré : publier sur Threads les `limit` plus anciens
+    articles publiés qui n'y sont pas encore, sans tenir compte du seuil
+    d'activation. Appelé par le CronJob deux fois par jour jusqu'à épuisement."""
+    from articles.models import Article
+    if not is_connected():
+        log_fn("Threads n'est pas connecté — rien à faire.")
+        return 0, 0
+    arts = (Article.query
+            .filter(Article.published == True,  # noqa: E712
+                    Article.threads_posted_at.is_(None))
+            .order_by(Article.created_at.asc()).limit(limit).all())
+    faits = 0
+    for a in arts:
+        ok, detail = post_article(a)
+        if ok:
+            faits += 1
+            log_fn(f"publié : {a.title[:50]} → {post_url(detail)}")
+        else:
+            log_fn(f"échec : {a.title[:50]} — {detail}")
+    reste = (Article.query.filter(Article.published == True,  # noqa: E712
+                                  Article.threads_posted_at.is_(None)).count())
+    log_fn(f"{faits} publié(s) ; {reste} encore à faire.")
+    return faits, reste
+
+
 def auto_post_article():
     if not article_autopost_enabled():
         return {'status': 'disabled'}
