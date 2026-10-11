@@ -248,6 +248,17 @@ def compose_article(article, url):
     return f"{accroche}\n{url}" if accroche else url
 
 
+def share_url(url, source='threads'):
+    """Taguer un lien avec utm_source pour attribuer le trafic Threads."""
+    from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+    if not url:
+        return url
+    parts = urlparse(url)
+    q = dict(parse_qsl(parts.query))
+    q['utm_source'] = source
+    return urlunparse(parts._replace(query=urlencode(q)))
+
+
 def post_article(article):
     """Publier un article sur Threads. Renvoie (ok, id_ou_erreur)."""
     from flask import url_for
@@ -256,7 +267,7 @@ def post_article(article):
         return False, "déjà publié"
     if not is_connected():
         return False, "Threads n'est pas connecté"
-    url = url_for('articles.public_show', slug=article.slug, _external=True)
+    url = share_url(url_for('articles.public_show', slug=article.slug, _external=True), 'threads')
     ok, detail = post_text(compose_article(article, url))
     if not ok:
         return False, str(detail)

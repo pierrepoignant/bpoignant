@@ -526,3 +526,44 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: 512Mi
+---
+# Lecture quotidienne des commentaires YouTube, Facebook et Instagram, et
+# rédaction des réponses proposées : prêtes chaque matin. 07:00 Paris, avant
+# que Bernard ne regarde. Lecture par API (gratuit) ; rien n'est publié seul.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-social-comments-daily
+  namespace: default
+spec:
+  schedule: "0 7 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # La rédaction des propositions par le moteur peut prendre quelques minutes.
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: social-comments-daily
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "social_comments_daily.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 768Mi

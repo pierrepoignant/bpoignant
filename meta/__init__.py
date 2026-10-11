@@ -408,6 +408,17 @@ def compose_article_page_post(article, url):
     return accroche or (article.title or '')
 
 
+def share_url(url, source='facebook'):
+    """Taguer un lien avec utm_source pour attribuer le trafic qu'il ramène."""
+    from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+    if not url:
+        return url
+    parts = urlparse(url)
+    q = dict(parse_qsl(parts.query))
+    q['utm_source'] = source
+    return urlunparse(parts._replace(query=urlencode(q)))
+
+
 def fb_post_article(article):
     """Publier un article sur la Page. Renvoie (ok, id_ou_erreur)."""
     from flask import url_for
@@ -416,7 +427,7 @@ def fb_post_article(article):
         return False, "déjà publié"
     if not is_connected():
         return False, "Facebook n'est pas connecté"
-    url = url_for('articles.public_show', slug=article.slug, _external=True)
+    url = share_url(url_for('articles.public_show', slug=article.slug, _external=True), 'facebook')
     ok, detail = post_link_to_page(url, compose_article_page_post(article, url))
     if not ok:
         return False, str(detail)

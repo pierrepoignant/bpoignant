@@ -399,7 +399,8 @@ def list_articles():
     fb_prepared_by_article = {}
     for a in articles:
         if a.published:
-            lien = url_for('articles.public_show', slug=a.slug, _external=True)
+            lien = __import__('meta').share_url(
+                url_for('articles.public_show', slug=a.slug, _external=True), 'facebook-profil')
             accroche = (a.social_summary or '').strip() or (a.summary or '').strip()
             fb_prepared_by_article[a.id] = (
                 f"{accroche}\n\n{lien}" if accroche else f"{a.title}\n\n{lien}")

@@ -72,6 +72,13 @@ def _log_view(response):
         # "top referrers" list.
         if ref and request.host_url and ref.startswith(request.host_url):
             ref = None
+        # Un lien que nous avons tagué (utm_source) l'emporte sur le référent
+        # HTTP : c'est l'attribution qu'on a posée nous-mêmes en partageant, et
+        # elle apparaît telle quelle dans la liste des sources (« facebook »,
+        # « threads », « x »…).
+        utm = (request.args.get('utm_source') or '').strip()
+        if utm:
+            ref = utm[:120]
 
         view = PageView(
             path=request.path[:512],
