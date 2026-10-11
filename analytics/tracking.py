@@ -355,3 +355,96 @@ def dashboard():
         empty_searches=empty_searches,
         total_searches=total_searches,
     )
+
+
+# ─── Statistiques agrégées par réseau ───────────────────────
+#
+# YouTube, Facebook, Instagram et Threads ne donnent qu'un total courant, sans
+# historique (contrairement au site, dont on garde chaque lecture). On présente
+# donc des totaux et un classement des publications, pas une courbe dans le
+# temps — c'est tout ce que les API offrent sans relevés quotidiens conservés.
+
+def _reseau_data(reseau):
+    from tiktok.models import TikTokPost
+    from articles.models import Article
+
+    def somme(rows, attr):
+        return sum((getattr(r, attr) or 0) for r in rows)
+
+    if reseau == 'youtube':
+        vids = TikTokPost.query.filter(TikTokPost.youtube_video_id.isnot(None)).all()
+        items = sorted(vids, key=lambda v: (v.youtube_views or 0), reverse=True)
+        return {
+            'titre': 'YouTube', 'icone': 'fa-brands fa-youtube', 'couleur': '#FF0000',
+            'totaux': [{'label': 'vidéos', 'valeur': len(vids)},
+                       {'label': 'vues', 'valeur': somme(vids, 'youtube_views')},
+                       {'label': "j'aime", 'valeur': somme(vids, 'youtube_likes')},
+                       {'label': 'commentaires', 'valeur': somme(vids, 'youtube_comments')}],
+            'posts': [{'titre': v.title, 'url': v.youtube_url, 'date': v.youtube_posted_at,
+                       'metriques': [{'label': 'vues', 'valeur': v.youtube_views},
+                                     {'label': "j'aime", 'valeur': v.youtube_likes},
+                                     {'label': 'comm.', 'valeur': v.youtube_comments}]} for v in items],
+        }
+    if reseau == 'instagram':
+        vids = TikTokPost.query.filter(TikTokPost.instagram_media_id.isnot(None)).all()
+        items = sorted(vids, key=lambda v: (v.instagram_views or 0), reverse=True)
+        return {
+            'titre': 'Instagram', 'icone': 'fa-brands fa-instagram', 'couleur': '#E4405F',
+            'totaux': [{'label': 'Reels', 'valeur': len(vids)},
+                       {'label': 'vues', 'valeur': somme(vids, 'instagram_views')},
+                       {'label': "j'aime", 'valeur': somme(vids, 'instagram_likes')},
+                       {'label': 'commentaires', 'valeur': somme(vids, 'instagram_comments')}],
+            'posts': [{'titre': v.title, 'url': v.instagram_url, 'date': v.instagram_posted_at,
+                       'metriques': [{'label': 'vues', 'valeur': v.instagram_views},
+                                     {'label': "j'aime", 'valeur': v.instagram_likes},
+                                     {'label': 'comm.', 'valeur': v.instagram_comments}]} for v in items],
+        }
+    if reseau == 'threads':
+        arts = Article.query.filter(Article.threads_post_id.isnot(None)).all()
+        items = sorted(arts, key=lambda a: (a.threads_views or 0), reverse=True)
+        return {
+            'titre': 'Threads', 'icone': 'fa-brands fa-threads', 'couleur': '#000',
+            'totaux': [{'label': 'articles', 'valeur': len(arts)},
+                       {'label': 'vues', 'valeur': somme(arts, 'threads_views')},
+                       {'label': "j'aime", 'valeur': somme(arts, 'threads_likes')},
+                       {'label': 'réponses', 'valeur': somme(arts, 'threads_replies')},
+                       {'label': 'reposts', 'valeur': somme(arts, 'threads_reposts')}],
+            'posts': [{'titre': a.title, 'url': a.threads_post_url, 'date': a.threads_posted_at,
+                       'metriques': [{'label': 'vues', 'valeur': a.threads_views},
+                                     {'label': "j'aime", 'valeur': a.threads_likes},
+                                     {'label': 'réponses', 'valeur': a.threads_replies},
+                                     {'label': 'reposts', 'valeur': a.threads_reposts}]} for a in items],
+        }
+    if reseau == 'facebook':
+        # Facebook mêle deux choses : les vidéos de la Page (vues) et les
+        # publications de lien des articles (j'aime, commentaires).
+        vids = TikTokPost.query.filter(TikTokPost.fb_post_id.isnot(None)).all()
+        arts = Article.query.filter(Article.fb_page_post_id.isnot(None)).all()
+        items = ([{'titre': v.title, 'url': v.facebook_url, 'date': v.fb_posted_at, 'genre': 'vidéo',
+                   'metriques': [{'label': 'vues', 'valeur': v.fb_views}]} for v in vids]
+                 + [{'titre': a.title, 'url': a.fb_page_post_url, 'date': a.fb_page_posted_at, 'genre': 'article',
+                     'metriques': [{'label': "j'aime", 'valeur': a.fb_page_likes},
+                                   {'label': 'commentaires', 'valeur': a.fb_page_comments},
+                                   {'label': 'partages', 'valeur': a.fb_page_shares}]} for a in arts])
+        items.sort(key=lambda i: i['date'] or datetime.min, reverse=True)
+        return {
+            'titre': 'Facebook (Page)', 'icone': 'fa-brands fa-facebook', 'couleur': '#1877F2',
+            'totaux': [{'label': 'vidéos', 'valeur': len(vids)},
+                       {'label': 'vues vidéos', 'valeur': somme(vids, 'fb_views')},
+                       {'label': 'articles', 'valeur': len(arts)},
+                       {'label': "j'aime articles", 'valeur': somme(arts, 'fb_page_likes')},
+                       {'label': 'commentaires articles', 'valeur': somme(arts, 'fb_page_comments')}],
+            'posts': items,
+            'note': 'Le profil personnel de Bernard est suivi à part, sur la fiche de chaque article.',
+        }
+    return None
+
+
+@analytics_bp.route('/reseau/<reseau>')
+@admin_required
+def reseau_stats(reseau):
+    from flask import abort
+    data = _reseau_data((reseau or '').lower())
+    if data is None:
+        abort(404)
+    return render_template('reseau_stats.html', reseau=reseau.lower(), data=data)

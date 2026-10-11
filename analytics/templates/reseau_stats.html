@@ -1,0 +1,48 @@
+{% extends 'admin_base.html' %}
+{% block title %}Stats {{ data.titre }}{% endblock %}
+
+{% block admin_title %}<i class="{{ data.icone }}" style="color: {{ data.couleur }};"></i> {{ data.titre }}{% endblock %}
+{% block admin_subtitle %}<p>Totaux actuels et classement des publications. {{ data.note or '' }}</p>{% endblock %}
+
+{% block admin_content %}
+    {# Totaux #}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.8rem;">
+        {% for t in data.totaux %}
+        <div style="background: white; padding: 1.2rem 1.3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">{{ t.label }}</div>
+            <div style="font-size: 1.9rem; font-weight: 800; color: {{ loop.first and 'var(--noir)' or data.couleur }};">
+                {{ '{:,}'.format(t.valeur).replace(',', ' ') if t.valeur is not none else '—' }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Classement des publications #}
+    <div style="background: white; padding: 1.3rem 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.05rem; margin: 0 0 1rem;">Publications</h2>
+        {% if not data['posts'] %}
+        <p style="color: var(--gris); font-size: 0.9rem; margin: 0;">Rien de publié sur {{ data.titre }} pour l'instant.</p>
+        {% else %}
+        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+            {% for it in data['posts'] %}
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--gris-clair); flex-wrap: wrap;">
+                <div style="min-width: 0; flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {% if it.url %}<a href="{{ it.url }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ it.titre }}</a>{% else %}{{ it.titre }}{% endif %}
+                    </div>
+                    <div style="font-size: 0.76rem; color: var(--gris);">
+                        {% if it.genre %}{{ it.genre }} · {% endif %}{{ it.date.strftime('%d/%m/%Y') if it.date else '—' }}
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; font-size: 0.9rem; flex-wrap: wrap;">
+                    {% for m in it['metriques'] %}
+                    <span><strong>{{ m.valeur if m.valeur is not none else '—' }}</strong>
+                          <span style="color: var(--gris); font-size: 0.76rem;">{{ m.label }}</span></span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+{% endblock %}

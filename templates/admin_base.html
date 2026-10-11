@@ -209,6 +209,22 @@
            class="btn btn-sm {% if _p.startswith('/admin/linkedin/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             LinkedIn
         </a>
+        <a href="{{ url_for('analytics.reseau_stats', reseau='youtube') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/reseau/youtube' %}btn-vert{% else %}btn-outline{% endif %}">
+            YouTube
+        </a>
+        <a href="{{ url_for('analytics.reseau_stats', reseau='facebook') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/reseau/facebook' %}btn-vert{% else %}btn-outline{% endif %}">
+            Facebook
+        </a>
+        <a href="{{ url_for('analytics.reseau_stats', reseau='instagram') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/reseau/instagram' %}btn-vert{% else %}btn-outline{% endif %}">
+            Instagram
+        </a>
+        <a href="{{ url_for('analytics.reseau_stats', reseau='threads') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/reseau/threads' %}btn-vert{% else %}btn-outline{% endif %}">
+            Threads
+        </a>
         <a href="{{ url_for('admin_sends.newsletter_stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             Newsletter
