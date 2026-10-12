@@ -83,6 +83,12 @@
                             url=c.instagram_url, couleur='#E4405F',
                             action=url_for('admin_tiktok.post_to_instagram', post_id=c.id), confirm='Publier ce Reel sur Instagram ?',
                             disabled=(not c.has_video or not ig_ok)) }}
+                {# Profil Facebook personnel : l'API ne publie pas dessus. On
+                   prépare la légende et le fichier, Bernard téléverse à la main. #}
+                {{ pastille_action(false, 'fas fa-user', 'Préparer pour le profil Facebook',
+                            couleur='#1877F2', onclick='ouvrirProfilFb(this)',
+                            data={'caption': (c.caption or c.title or ''), 'video': c.video_url or '', 'titre': c.title},
+                            disabled=(not c.has_video)) }}
                 {% set envoi = minute_sends.get(c.id) %}
                 {{ pastille(envoi, 'far fa-envelope',
                             'La Minute — %s destinataires le %s'|format(envoi.success_count, envoi.sent_at.strftime('%d/%m/%Y')) if envoi else 'Pas encore envoyé dans La Minute',
@@ -130,4 +136,42 @@
     {% endif %}
 
 {% include 'admin_envoi_overlay.html' %}
+
+{# Préparer une publication pour le profil Facebook personnel (copier-coller) #}
+<div id="profil-fb-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; z-index:1000; padding:16px;">
+    <div style="background:white; border-radius:14px; padding:1.3rem; width:100%; max-width:540px;">
+        <h3 style="margin:0 0 0.3rem; font-size:1.15rem;"><i class="fa-brands fa-facebook" style="color:#1877F2;"></i> Facebook — profil</h3>
+        <div style="font-size:0.82rem; color:var(--gris); margin-bottom:0.7rem; line-height:1.5;">
+            Le profil personnel ne se publie pas depuis le site. Téléchargez la vidéo,
+            ouvrez Facebook, créez une publication, déposez la vidéo et collez la légende.
+        </div>
+        <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">Légende</label>
+        <textarea id="profil-fb-caption" rows="5" style="width:100%; padding:10px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit; font-size:0.95rem;"></textarea>
+        <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;" onclick="fermerProfilFb()">Fermer</button>
+            <button type="button" id="profil-fb-copy" class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;" onclick="copierProfilFb(this)"><i class="far fa-copy"></i> Copier la légende</button>
+            <a id="profil-fb-video" href="#" download target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;"><i class="fas fa-download"></i> Télécharger la vidéo</a>
+            <a href="https://www.facebook.com/" target="_blank" rel="noopener" class="btn btn-sm" style="background:#1877F2; color:#fff; border:none;"><i class="fa-brands fa-facebook"></i> Ouvrir Facebook</a>
+        </div>
+    </div>
+</div>
+<script>
+    function ouvrirProfilFb(btn) {
+        document.getElementById('profil-fb-caption').value = (btn.dataset.caption || '').trim();
+        var v = document.getElementById('profil-fb-video');
+        if (btn.dataset.video) { v.href = btn.dataset.video; v.style.display = ''; } else { v.style.display = 'none'; }
+        document.getElementById('profil-fb-copy').innerHTML = '<i class="far fa-copy"></i> Copier la légende';
+        document.getElementById('profil-fb-modal').style.display = 'flex';
+    }
+    function fermerProfilFb() { document.getElementById('profil-fb-modal').style.display = 'none'; }
+    function copierProfilFb(btn) {
+        var z = document.getElementById('profil-fb-caption'); z.select();
+        var done = function () { btn.innerHTML = '<i class="fas fa-check"></i> Copié'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(z.value).then(done, function () { document.execCommand('copy'); done(); });
+        } else { document.execCommand('copy'); done(); }
+    }
+    document.getElementById('profil-fb-modal').addEventListener('click', function (e) { if (e.target === this) fermerProfilFb(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fermerProfilFb(); });
+</script>
 {% endblock %}
