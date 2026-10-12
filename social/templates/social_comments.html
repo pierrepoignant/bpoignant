@@ -93,7 +93,7 @@
                 <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-paper-plane"></i> Répondre</button>
             </form>
             <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
-                    onclick="ouvrirEdition({{ c.id }}, {{ c.network_label|tojson }})">
+                    onclick='ouvrirEdition({{ c.id }}, {{ c.network_label|tojson }})'>
                 <i class="fas fa-pen"></i> Modifier et répondre
             </button>
             <form method="POST" action="{{ url_for('admin_social.discard', comment_id=c.id) }}" style="margin:0;"
