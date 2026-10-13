@@ -56,6 +56,13 @@
         {{ stat_reseau('fa-brands fa-facebook', 'Facebook', '#1877F2',
             poste_le=p.fb_posted_at, url=p.facebook_url, releve_le=p.meta_metrics_at, absent='Pas publié sur Facebook.',
             metriques=[{'label': 'vues', 'valeur': p.fb_views}]) }}
+        {{ stat_reseau('fas fa-user', 'Profil Facebook', '#1877F2',
+            fait=(p.fb_profile_post_url is not none),
+            poste_le=p.fb_profile_posted_at, url=p.fb_profile_post_url, releve_le=p.fb_profile_metrics_at,
+            absent='Aucun post du profil rattaché.', note='Profil personnel : relevé par lecture publique, rattaché par la légende.',
+            metriques=[{'label': "j'aime", 'valeur': p.fb_profile_likes},
+                       {'label': 'commentaires', 'valeur': p.fb_profile_comments},
+                       {'label': 'partages', 'valeur': p.fb_profile_shares}]) }}
         {{ stat_reseau('fa-brands fa-instagram', 'Instagram', '#E4405F',
             poste_le=p.instagram_posted_at, url=p.instagram_url, releve_le=p.meta_metrics_at, absent='Pas publié sur Instagram.',
             metriques=[{'label': 'vues', 'valeur': p.instagram_views}, {'label': "j'aime", 'valeur': p.instagram_likes},

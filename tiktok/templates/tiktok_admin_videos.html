@@ -85,8 +85,9 @@
                             disabled=(not c.has_video or not ig_ok)) }}
                 {# Profil Facebook personnel : l'API ne publie pas dessus. On
                    prépare la légende et le fichier, Bernard téléverse à la main. #}
-                {{ pastille_action(false, 'fas fa-user', 'Préparer pour le profil Facebook',
-                            couleur='#1877F2', onclick='ouvrirProfilFb(this)',
+                {{ pastille_action((c.fb_profile_post_url is not none), 'fas fa-user',
+                            ('Profil Facebook : %s j’aime, %s commentaires'|format(c.fb_profile_likes or 0, c.fb_profile_comments or 0)) if c.fb_profile_post_url else 'Préparer pour le profil Facebook',
+                            url=c.fb_profile_post_url, couleur='#1877F2', onclick='ouvrirProfilFb(this)',
                             data={'caption': (c.caption or c.title or ''), 'video': c.video_url or '', 'titre': c.title},
                             disabled=(not c.has_video)) }}
                 {% set envoi = minute_sends.get(c.id) %}

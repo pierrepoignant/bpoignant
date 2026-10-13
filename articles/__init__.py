@@ -603,10 +603,64 @@ def _fb_profile_slug(item):
     return None
 
 
+def _fb_profile_apply(obj, item, maintenant):
+    """Reporter les chiffres d'un post de profil sur un article ou une vidéo —
+    ils portent les mêmes champs fb_profile_*."""
+    def entier(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+    obj.fb_profile_post_url = (_fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl') or '')[:500] or None
+    obj.fb_profile_posted_at = _fb_profile_date(item) or obj.fb_profile_posted_at
+    likes = entier(_fb_profile_pick(item, 'likes', 'likesCount', 'reactionsCount', 'reactions', 'topReactionsCount'))
+    comm = entier(_fb_profile_pick(item, 'comments', 'commentsCount'))
+    shares = entier(_fb_profile_pick(item, 'shares', 'sharesCount'))
+    if likes is not None:
+        obj.fb_profile_likes = likes
+    if comm is not None:
+        obj.fb_profile_comments = comm
+    if shares is not None:
+        obj.fb_profile_shares = shares
+    obj.fb_profile_metrics_at = maintenant
+
+
+def _fb_norm(texte):
+    return re.sub(r'\s+', ' ', (texte or '').lower()).strip()
+
+
+def _fb_video_index():
+    """{texte normalisé → vidéo} pour retrouver une vidéo à partir du texte d'un
+    post de profil : Bernard colle notre légende, donc elle s'y retrouve. On
+    indexe légende et titre, et on ne garde que les textes assez longs pour que
+    la correspondance par sous-chaîne ne tombe pas sur un hasard."""
+    from tiktok.models import TikTokPost
+    paires = []
+    for v in TikTokPost.query.filter(TikTokPost.video_url.isnot(None)).all():
+        for champ in (v.caption, v.title):
+            norm = _fb_norm(champ)
+            if len(norm) >= 20:
+                paires.append((norm, v))
+    # Les plus longs d'abord : une correspondance spécifique prime sur une
+    # légende courte incluse par hasard dans une autre.
+    paires.sort(key=lambda t: len(t[0]), reverse=True)
+    return paires
+
+
+def _fb_match_video(poste_txt, paires):
+    if not poste_txt:
+        return None
+    for norm, v in paires:
+        if norm == poste_txt or norm in poste_txt:
+            return v
+    return None
+
+
 def refresh_facebook_profile(log_fn=print):
     """Relever les posts publics du profil Facebook de Bernard et reporter les
-    j'aime / commentaires sur les articles qu'ils citent. Renvoie le nombre
-    d'articles mis à jour."""
+    chiffres sur l'article cité (par son lien) ou sur la vidéo (par le texte de
+    la légende, que Bernard colle). Renvoie le nombre de publications mises à
+    jour."""
     import apify
     from flask import url_for  # noqa: F401  (contexte fourni par l'appelant)
     if not apify.is_configured():
@@ -618,35 +672,23 @@ def refresh_facebook_profile(log_fn=print):
         log_fn(f"Scraping Facebook impossible : {exc}")
         return 0
     maintenant = datetime.utcnow()
+    videos = _fb_video_index()
     n = 0
     for item in items or []:
         slug = _fb_profile_slug(item)
-        if not slug:
-            continue
-        article = Article.query.filter_by(slug=slug).first()
-        if article is None:
-            continue
-        article.fb_profile_post_url = (_fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl') or '')[:500] or None
-        article.fb_profile_posted_at = _fb_profile_date(item) or article.fb_profile_posted_at
-        likes = _fb_profile_pick(item, 'likes', 'likesCount', 'reactionsCount', 'reactions', 'topReactionsCount')
-        comm = _fb_profile_pick(item, 'comments', 'commentsCount')
-        shares = _fb_profile_pick(item, 'shares', 'sharesCount')
-        try:
-            article.fb_profile_likes = int(likes) if likes is not None else article.fb_profile_likes
-        except (TypeError, ValueError):
-            pass
-        try:
-            article.fb_profile_comments = int(comm) if comm is not None else article.fb_profile_comments
-        except (TypeError, ValueError):
-            pass
-        try:
-            article.fb_profile_shares = int(shares) if shares is not None else article.fb_profile_shares
-        except (TypeError, ValueError):
-            pass
-        article.fb_profile_metrics_at = maintenant
-        n += 1
+        if slug:
+            article = Article.query.filter_by(slug=slug).first()
+            if article is not None:
+                _fb_profile_apply(article, item, maintenant)
+                n += 1
+                continue
+        # Pas de lien d'article : c'est peut-être une vidéo, reconnue au texte.
+        video = _fb_match_video(_fb_norm(_fb_profile_pick(item, 'text', 'message', 'postText')), videos)
+        if video is not None:
+            _fb_profile_apply(video, item, maintenant)
+            n += 1
     db.session.commit()
-    log_fn(f"Facebook profil : {n} article(s) mis à jour sur {len(items or [])} post(s) lus.")
+    log_fn(f"Facebook profil : {n} publication(s) mise(s) à jour sur {len(items or [])} post(s) lus.")
     return n
 
 

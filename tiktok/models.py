@@ -85,6 +85,15 @@ class TikTokPost(db.Model):
     instagram_likes = db.Column(db.Integer, nullable=True)
     instagram_comments = db.Column(db.Integer, nullable=True)
     meta_metrics_at = db.Column(db.DateTime, nullable=True)
+    # Profil Facebook personnel : pas d'API, chiffres relevés par scraping du
+    # profil public et rattachés à la vidéo par le texte de la légende (Bernard
+    # colle la nôtre). Fragile, donc tout nullable.
+    fb_profile_post_url = db.Column(db.String(500), nullable=True)
+    fb_profile_posted_at = db.Column(db.DateTime, nullable=True)
+    fb_profile_likes = db.Column(db.Integer, nullable=True)
+    fb_profile_comments = db.Column(db.Integer, nullable=True)
+    fb_profile_shares = db.Column(db.Integer, nullable=True)
+    fb_profile_metrics_at = db.Column(db.DateTime, nullable=True)
     # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
     # publication d'un membre, et aucun scrapeur n'atteint les impressions,
     # qui ne figurent pas sur la page publique.

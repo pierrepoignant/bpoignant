@@ -437,6 +437,12 @@ def _migrate_schema():
                       'meta_metrics_at DATETIME NULL'):
                 db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
             db.session.commit()
+        if 'fb_profile_post_url' not in cols:
+            for c in ('fb_profile_post_url VARCHAR(500) NULL', 'fb_profile_posted_at DATETIME NULL',
+                      'fb_profile_likes INTEGER NULL', 'fb_profile_comments INTEGER NULL',
+                      'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL'):
+                db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
+            db.session.commit()
 
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}
