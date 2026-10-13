@@ -809,6 +809,106 @@ def preface_autosave():
     return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'))
 
 
+# ─── Correction (relecture) ─────────────────────────────────
+
+_CORR = {'en_cours': False, 'fini': None, 'message': '', 'faits': 0, 'total': 0}
+
+
+def _docs_du_livre():
+    return (BookDoc.query
+            .filter(BookDoc.status == 'classe', BookDoc.in_book.is_(True),
+                    BookDoc.content_html.isnot(None))
+            .order_by(db.func.coalesce(BookDoc.book_position, 9999), BookDoc.id).all())
+
+
+def corriger_tout(app, ia=True):
+    if _CORR['en_cours']:
+        return False
+    _CORR.update(en_cours=True, fini=None, message='Préparation…', faits=0, total=0)
+
+    def _travail():
+        from livre import correction
+        with app.app_context():
+            try:
+                ids = [d.id for d in _docs_du_livre() if d.corrige_at is None]
+                _CORR['total'] = len(ids)
+                for i, did in enumerate(ids, 1):
+                    doc = db.session.get(BookDoc, did)
+                    if doc is None:
+                        continue
+                    _CORR['message'] = f"Correction {i}/{len(ids)} : {(doc.title or doc.name or '')[:50]}"
+                    try:
+                        correction.corriger_doc(doc, ia=ia)
+                    except Exception as exc:  # noqa: BLE001
+                        log.exception('correction du doc %s', did)
+                        db.session.rollback()
+                        _CORR['message'] = f"Erreur sur « {(doc.title or '')[:40]} » : {exc}"
+                    _CORR['faits'] = i
+                _CORR['message'] = f"{_CORR['faits']} chronique(s) corrigée(s)."
+            except Exception as exc:  # noqa: BLE001
+                log.exception('corriger_tout')
+                _CORR['message'] = f"Échec : {exc}"
+            finally:
+                _CORR.update(en_cours=False, fini=datetime.utcnow().isoformat())
+
+    import threading
+    threading.Thread(target=_travail, daemon=True).start()
+    return True
+
+
+@admin_livre_bp.route('/correction')
+@admin_required
+def correction():
+    docs = _docs_du_livre()
+    return render_template('livre_correction.html', compte=_compte(), docs=docs,
+                           etat=dict(_CORR),
+                           corriges=sum(1 for d in docs if d.corrige_at),
+                           a_faire=sum(1 for d in docs if not d.corrige_at))
+
+
+@admin_livre_bp.route('/corriger-tout', methods=['POST'])
+@admin_required
+def corriger_tout_route():
+    from flask import current_app
+    if not corriger_tout(current_app._get_current_object()):
+        flash("Une correction est déjà en cours.", 'info')
+    else:
+        flash("Correction lancée. La page se met à jour toute seule.", 'info')
+    return redirect(url_for('admin_livre.correction'))
+
+
+@admin_livre_bp.route('/correction/etat')
+@admin_required
+def correction_etat():
+    return jsonify(dict(_CORR))
+
+
+@admin_livre_bp.route('/doc/<int:doc_id>/corriger', methods=['POST'])
+@admin_required
+def doc_corriger(doc_id):
+    from livre import correction
+    doc = db.session.get(BookDoc, doc_id) or abort(404)
+    try:
+        note = correction.corriger_doc(doc, ia=True)
+        flash(f"« {(doc.title or '')[:50]} » corrigée — {note}.", 'success')
+    except Exception as exc:  # noqa: BLE001
+        db.session.rollback()
+        flash(f"Correction impossible : {exc}", 'danger')
+    return redirect(request.referrer or url_for('admin_livre.correction'))
+
+
+@admin_livre_bp.route('/doc/<int:doc_id>/corriger/annuler', methods=['POST'])
+@admin_required
+def doc_corriger_annuler(doc_id):
+    from livre import correction
+    doc = db.session.get(BookDoc, doc_id) or abort(404)
+    if correction.annuler(doc):
+        flash("Correction annulée — texte d'origine rétabli.", 'info')
+    else:
+        flash("Rien à annuler.", 'info')
+    return redirect(request.referrer or url_for('admin_livre.correction'))
+
+
 @admin_livre_bp.route('/pdf/reglages', methods=['POST'])
 @admin_required
 def livre_pdf_reglages():

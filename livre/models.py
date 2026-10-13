@@ -56,6 +56,12 @@ class BookDoc(db.Model):
     content_fetched_at = db.Column(db.DateTime, nullable=True)
     word_count = db.Column(db.Integer, nullable=True)
 
+    # Correction (relecture) : on garde le titre et le texte d'avant pour
+    # pouvoir annuler d'un clic.
+    corrige_at = db.Column(db.DateTime, nullable=True)
+    titre_avant_correction = db.Column(db.String(300), nullable=True)
+    content_avant_correction = db.Column(db.Text(16777215), nullable=True)
+
     status = db.Column(db.String(12), default='a_classer', nullable=False, index=True)
     theme_id = db.Column(db.Integer, db.ForeignKey('book_themes.id'), nullable=True, index=True)
     decided_at = db.Column(db.DateTime, nullable=True)

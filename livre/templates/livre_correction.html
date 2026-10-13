@@ -1,0 +1,80 @@
+{% extends 'admin_base.html' %}
+{% block title %}Le Livre — correction{% endblock %}
+
+{% block admin_title %}<i class="fas fa-book" style="color: var(--vert);"></i> Le Livre{% endblock %}
+{% block admin_subtitle %}<p>Relecture : typographie française, casse des titres, orthographe et grammaire. L'original de chaque chronique est gardé — la correction s'annule d'un clic.</p>{% endblock %}
+
+{% block admin_content %}
+    {% include '_livre_nav.html' %}
+
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1rem 0 1.2rem;">
+        <p style="margin: 0; font-size: 0.9rem;">
+            <strong>{{ docs|length }}</strong> chronique{{ 's' if docs|length > 1 }} dans le livre ·
+            <span style="color: var(--vert);">{{ corriges }} corrigée{{ 's' if corriges > 1 }}</span> ·
+            <span style="color: var(--rouge);">{{ a_faire }} à corriger</span>
+        </p>
+        <form method="POST" action="{{ url_for('admin_livre.corriger_tout_route') }}" style="margin: 0;"
+              onsubmit="if(!confirm('Corriger les {{ a_faire }} chronique(s) pas encore corrigées ? Chacune garde son original, et vous pourrez annuler.')) return false;
+                        const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Correction…';">
+            <button type="submit" class="btn btn-sm btn-primary" style="min-height: 40px;" {% if etat.en_cours or not a_faire %}disabled{% endif %}>
+                <i class="fas fa-spell-check"></i> Tout corriger
+            </button>
+        </form>
+    </div>
+
+    <div id="corr-etat" role="status" style="{% if not etat.en_cours and not etat.fini %}display:none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 1.2rem;">
+        {{ etat.message }}
+    </div>
+
+    {% for d in docs %}
+    <div class="fiche">
+        <div class="fiche-corps">
+            <a href="{{ url_for('admin_livre.doc_edit', doc_id=d.id) }}" class="fiche-titre">{{ d.title or d.name }}</a>
+            <div class="fiche-meta">
+                {% if d.corrige_at %}<i class="fas fa-circle-check" style="color: var(--vert);"></i> Corrigée le {{ d.corrige_at.strftime('%d/%m/%Y') }}
+                {% else %}<i class="far fa-circle"></i> Pas encore corrigée{% endif %}
+                {% if d.word_count %} · {{ d.word_count }} mots{% endif %}
+            </div>
+        </div>
+        <div class="fiche-actions">
+            <button type="button" class="btn btn-sm btn-outline" style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;"
+                    onclick='ouvrirLecture({{ d.id }}, {{ (d.title or d.name)|tojson }}, {{ (d.corrige_at.strftime("corrigée le %d/%m/%Y") if d.corrige_at else "non corrigée")|tojson }})'>
+                <i class="fas fa-book-open"></i> Lire
+            </button>
+            {% if d.corrige_at %}
+            <form method="POST" action="{{ url_for('admin_livre.doc_corriger_annuler', doc_id=d.id) }}" style="margin:0;"
+                  onsubmit="return confirm('Rétablir le texte d’origine de cette chronique ?')">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--gris); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                    <i class="fas fa-rotate-left"></i> Annuler
+                </button>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('admin_livre.doc_corriger', doc_id=d.id) }}" style="margin:0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> …';">
+                <button type="submit" class="btn btn-sm" style="background:var(--vert); color:#fff; border:none; border-radius:50px; padding:6px 14px;">
+                    <i class="fas fa-spell-check"></i> Corriger
+                </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('admin_livre.doc_edit', doc_id=d.id) }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color:#e0e0e0; border-radius:50px; padding:6px 14px;">
+                <i class="fas fa-pen"></i> Modifier
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if etat.en_cours %}
+    <script>
+    (function () {
+        var t = setInterval(function () {
+            fetch("{{ url_for('admin_livre.correction_etat') }}").then(r => r.json()).then(function (e) {
+                var box = document.getElementById('corr-etat');
+                box.style.display = ''; box.textContent = e.message || '';
+                if (!e.en_cours) { clearInterval(t); setTimeout(function () { location.reload(); }, 1500); }
+            });
+        }, 3000);
+    })();
+    {% endif %}
+    {% if etat.en_cours %}</script>{% endif %}
+{% endblock %}
