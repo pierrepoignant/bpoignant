@@ -43,6 +43,20 @@ def _espaces_apres_ponctuation(t):
     return t
 
 
+def _degraisser(html):
+    """Retirer le bruit HTML de l'import (style="" vides, <span> sans attribut) :
+    il alourdit le texte envoyé au modèle sans rien porter, et fait dépasser la
+    limite de sortie sur les longues chroniques."""
+    soup = BeautifulSoup(html or '', 'html.parser')
+    for tag in soup.find_all(True):
+        if 'style' in tag.attrs and not (tag.get('style') or '').strip():
+            del tag['style']
+    for span in soup.find_all('span'):
+        if not span.attrs:
+            span.unwrap()
+    return str(soup)
+
+
 def typographie_html(html):
     """Appliquer la typographie française au texte d'un HTML, sans toucher aux
     balises."""
@@ -85,11 +99,11 @@ def proofread_ia(titre, html):
     if not key:
         return None
     import anthropic
-    client = anthropic.Anthropic(api_key=key, timeout=120.0, max_retries=1)
+    client = anthropic.Anthropic(api_key=key, timeout=240.0, max_retries=1)
     demande = f"Titre : {titre}\n\nCorps HTML :\n{html}"
     try:
         rep = client.messages.create(
-            model=MODEL, max_tokens=8000,
+            model=MODEL, max_tokens=16000,
             system=[{'type': 'text', 'text': _SYSTEME, 'cache_control': {'type': 'ephemeral'}}],
             messages=[{'role': 'user', 'content': demande}])
         texte = ''.join(b.text for b in rep.content if b.type == 'text')
@@ -121,7 +135,7 @@ def corriger_doc(doc, ia=True):
         doc.titre_avant_correction = doc.title
 
     titre = doc.title or doc.name or ''
-    corps = doc.content_html
+    corps = _degraisser(doc.content_html)
     note = []
 
     # 1) IA : orthographe, grammaire, ponctuation, casse du titre.
