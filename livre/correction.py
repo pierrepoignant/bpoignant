@@ -99,14 +99,21 @@ def proofread_ia(titre, html):
     if not key:
         return None
     import anthropic
-    client = anthropic.Anthropic(api_key=key, timeout=240.0, max_retries=1)
+    client = anthropic.Anthropic(api_key=key, timeout=600.0, max_retries=1)
     demande = f"Titre : {titre}\n\nCorps HTML :\n{html}"
     try:
-        rep = client.messages.create(
-            model=MODEL, max_tokens=16000,
+        # En flux : une longue chronique rend 15 000 jetons ou plus, ce qu'une
+        # requête unique n'a pas le temps de produire avant le délai. Le flux
+        # tient la connexion ouverte tout du long.
+        with client.messages.stream(
+            model=MODEL, max_tokens=32000,
             system=[{'type': 'text', 'text': _SYSTEME, 'cache_control': {'type': 'ephemeral'}}],
-            messages=[{'role': 'user', 'content': demande}])
+            messages=[{'role': 'user', 'content': demande}]) as flux:
+            rep = flux.get_final_message()
         texte = ''.join(b.text for b in rep.content if b.type == 'text')
+        if rep.stop_reason == 'max_tokens':
+            log.warning('correction IA tronquée (max_tokens) : %s', titre)
+            return None
         debut, fin = texte.find('{'), texte.rfind('}')
         if debut < 0 or fin <= debut:
             return None
