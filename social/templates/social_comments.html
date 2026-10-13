@@ -55,6 +55,21 @@
         Le moteur propose une réponse quand il y a quelque chose à répondre — pas aux compliments,
         ni aux insultes, ni aux polémiques. Trois gestes : écarter, répondre, ou modifier avant de répondre.
     </p>
+    {# Ce qui a été lu par réseau — pour voir qu'un réseau est bien relevé même
+       quand rien n'appelle de réponse (commentaires écartés, haineux ou vides). #}
+    {% if resume %}
+    <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        {% for r in resume %}
+        <div style="background: white; border: 1px solid var(--gris-clair); border-radius: 10px; padding: 0.5rem 0.8rem; font-size: 0.82rem;">
+            <strong>{{ r.reseau }}</strong> · {{ r.lus }} lu{{ 's' if r.lus > 1 }}
+            {% if r.a_traiter %} · <span style="color: var(--rouge);">{{ r.a_traiter }} à traiter</span>{% endif %}
+            {% if r.ecartes %} · <span style="color: var(--gris);">{{ r.ecartes }} écarté{{ 's' if r.ecartes > 1 }}</span>{% endif %}
+            {% if r.repondus %} · <span style="color: var(--vert);">{{ r.repondus }} répondu{{ 's' if r.repondus > 1 }}</span>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div id="etat" role="status" style="{% if not etat.en_cours and not etat.fini %}display:none;{% endif %} background: var(--gris-clair); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 1rem;">
         {{ etat.message }}
     </div>

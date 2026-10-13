@@ -283,6 +283,26 @@ def _titre(comment):
 
 # ─── Écran ──────────────────────────────────────────────────
 
+def _resume_reseaux():
+    """Par réseau : combien lus, combien à traiter (réponse proposée), combien
+    écartés par le moteur, combien déjà répondus. Pour montrer qu'un réseau est
+    bien lu même quand rien n'appelle de réponse."""
+    from sqlalchemy import func, case
+    lignes = (db.session.query(
+        SocialComment.network,
+        func.count(SocialComment.id),
+        func.sum(case((db.and_(SocialComment.status == 'new',
+                               SocialComment.suggested_reply.isnot(None)), 1), else_=0)),
+        func.sum(case((db.and_(SocialComment.status == 'new',
+                               SocialComment.suggested_reply.is_(None)), 1), else_=0)),
+        func.sum(case((SocialComment.status == 'replied', 1), else_=0)),
+    ).group_by(SocialComment.network).all())
+    etiquettes = {'youtube': 'YouTube', 'facebook': 'Facebook', 'instagram': 'Instagram'}
+    return [{'reseau': etiquettes.get(r[0], r[0]), 'lus': r[1],
+             'a_traiter': int(r[2] or 0), 'ecartes': int(r[3] or 0),
+             'repondus': int(r[4] or 0)} for r in lignes]
+
+
 @admin_social_bp.route('/')
 @admin_required
 def index():
@@ -294,6 +314,7 @@ def index():
         publications=a_traiter(),
         etat=etat_global(),
         total_neufs=en_attente,
+        resume=_resume_reseaux(),
         repondus=SocialComment.query.filter_by(status='replied').count(),
         youtube_ok=youtube.is_connected(),
         meta_ok=meta.is_connected(),
