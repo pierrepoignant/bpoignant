@@ -150,7 +150,7 @@
             <div class="admin-table-wrap"><table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                 {% for r in top_referrers %}
                 <tr style="border-top: 1px solid var(--gris-clair);">
-                    <td style="padding: 0.5rem 0; word-break: break-all;"><a href="{{ r.referrer }}" target="_blank" rel="noopener" style="color: var(--noir);">{{ r.referrer }}</a></td>
+                    <td style="padding: 0.5rem 0;">{{ r.source }}</td>
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: 600;">{{ r.n }}</td>
                 </tr>
                 {% endfor %}
@@ -239,7 +239,7 @@
                 <tr style="border-top: 1px solid var(--gris-clair);">
                     <td style="padding: 0.4rem 0; color: var(--gris); white-space: nowrap;">{{ v.created_at.strftime('%d/%m %H:%M') }}</td>
                     <td style="padding: 0.4rem 0; word-break: break-all;"><code style="background: var(--gris-clair); padding: 1px 6px; border-radius: 4px;">{{ v.path }}</code></td>
-                    <td style="padding: 0.4rem 0; color: var(--gris); word-break: break-all;">{{ v.referrer or '—' }}</td>
+                    <td style="padding: 0.4rem 0; color: var(--gris); word-break: break-all;">{{ v.referrer | source_trafic }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

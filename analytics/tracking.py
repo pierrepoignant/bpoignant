@@ -227,6 +227,60 @@ def _parse_group(days):
     return group
 
 
+# Ramener un référent (URL complète ou jeton utm que nous avons posé) à un nom
+# de source propre, pour que « X », « Threads », « Facebook »… se regroupent au
+# lieu de s'éparpiller en t.co, lnkd.in, l.facebook.com, etc.
+# Jetons utm que nous posons nous-mêmes : correspondance EXACTE (le référent
+# vaut « x », « threads »…), jamais une sous-chaîne — sinon « x » attraperait
+# n'importe quelle URL contenant la lettre x.
+_SOURCES_UTM = {
+    'x': 'X', 'twitter': 'X',
+    'threads': 'Threads',
+    'facebook': 'Facebook', 'facebook-profil': 'Facebook (profil)',
+    'instagram': 'Instagram', 'linkedin': 'LinkedIn',
+    'youtube': 'YouTube', 'tiktok': 'TikTok',
+}
+# Hôtes (sous-chaîne du domaine) : correspondance par morceau de nom de domaine.
+_SOURCES_HOTE = [
+    (('t.co', 'twitter.com', 'x.com'), 'X'),
+    (('threads.net', 'threads.com'), 'Threads'),
+    (('l.facebook', 'lm.facebook', 'm.facebook', 'facebook.com', 'fb.me', 'fb.com'), 'Facebook'),
+    (('l.instagram', 'instagram.com'), 'Instagram'),
+    (('linkedin.com', 'lnkd.in'), 'LinkedIn'),
+    (('youtube.com', 'youtu.be'), 'YouTube'),
+    (('tiktok.com',), 'TikTok'),
+    (('google.',), 'Google'),
+    (('bing.com',), 'Bing'),
+    (('duckduckgo',), 'DuckDuckGo'),
+    (('yahoo.',), 'Yahoo'),
+    (('t.me',), 'Telegram'),
+    (('mail.', 'webmail', 'outlook.', 'gmail.'), 'E-mail'),
+]
+
+
+def source_name(referrer):
+    """Nom de source lisible pour un référent, ou « Direct » s'il n'y en a pas."""
+    r = (referrer or '').strip().lower()
+    if not r:
+        return 'Direct'
+    # Jeton utm posé par nous : égalité stricte.
+    if r in _SOURCES_UTM:
+        return _SOURCES_UTM[r]
+    # URL : on regarde le domaine.
+    from urllib.parse import urlparse
+    hote = urlparse(r if '//' in r else '//' + r).netloc.lower()
+    cible = hote or r
+    for cles, nom in _SOURCES_HOTE:
+        if any(c in cible for c in cles):
+            return nom
+    return hote[4:] if hote.startswith('www.') else (hote or 'Autre')
+
+
+@analytics_bp.app_template_filter('source_trafic')
+def _source_trafic(referrer):
+    return source_name(referrer)
+
+
 @analytics_bp.route('/')
 @admin_required
 def dashboard():
@@ -265,13 +319,18 @@ def dashboard():
         func.count(PageView.id).desc()
     ).limit(15).all()
 
-    top_referrers = db.session.query(
+    # Toutes les visites de la fenêtre, regroupées par référent brut, puis
+    # repliées sur un nom de source propre (X, Threads, Facebook…). « Direct »
+    # — sans référent — est compté aussi : c'est une source à part entière.
+    refs_bruts = db.session.query(
         PageView.referrer, func.count(PageView.id).label('n')
-    ).filter(
-        *window, PageView.referrer.isnot(None)
-    ).group_by(PageView.referrer).order_by(
-        func.count(PageView.id).desc()
-    ).limit(10).all()
+    ).filter(*window).group_by(PageView.referrer).all()
+    _par_source = {}
+    for ref, n in refs_bruts:
+        nom = source_name(ref)
+        _par_source[nom] = _par_source.get(nom, 0) + n
+    top_referrers = [{'source': nom, 'n': n}
+                     for nom, n in sorted(_par_source.items(), key=lambda kv: kv[1], reverse=True)[:12]]
 
     # Searches over the same window. Two lists on purpose: the popular terms
     # say what readers come for, the empty-handed ones say what the archive is
