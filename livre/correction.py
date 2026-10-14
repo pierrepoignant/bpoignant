@@ -85,7 +85,8 @@ paragraphes, dans le même ordre. Tu ne touches qu'au texte à l'intérieur.
 - Garde les noms propres, les sigles (RN, UE, PS, ONU…) et les citations tels quels.
 - Le titre : corrige sa casse en capitalisation française normale (pas de TOUT \
 EN CAPITALES, pas de Capitale À Chaque Mot) ; première lettre en majuscule, \
-noms propres et sigles préservés.
+noms propres et sigles préservés. Le titre est du TEXTE SIMPLE : aucune balise HTML \
+(pas de <sup>, pas de <i>…), écris « 1re », « 2e » en toutes lettres simples.
 
 Tu réponds UNIQUEMENT par un objet JSON, sans texte autour :
 {"titre": "...", "html": "...", "corrections": <nombre de corrections faites>}"""
@@ -159,7 +160,7 @@ def corriger_doc(doc, ia=True):
 
     # 3) Casse du titre : l'IA l'a faite ; sinon, repli déterministe sur les
     #    titres tout en capitales.
-    titre = clean_text(titre).strip()
+    titre = clean_text(re.sub(r'<[^>]+>', '', titre)).strip()
     if not ia and _tout_en_capitales(titre):
         texte_corps = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', corps)).strip()
         titre = casse_de_titre(titre, texte_corps)
