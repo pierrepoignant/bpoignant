@@ -215,6 +215,15 @@ def post_reply(comment, texte=None):
         if texte != (comment.suggested_reply or ''):
             comment.suggested_reply = texte
         db.session.commit()
+        return ok, detail
+    # Le commentaire n'existe plus (supprimé par son auteur ou par la modération) :
+    # on ne peut pas y répondre. On le sort de la file plutôt que de buter dessus.
+    bas = str(detail).lower()
+    if ('does not exist' in bas or 'cannot be loaded' in bas or 'supprimé' in bas
+            or "n'existe plus" in bas or 'deleted' in bas):
+        comment.status = 'discarded'
+        db.session.commit()
+        return False, "Ce commentaire n'existe plus (supprimé) — il a été retiré de la liste."
     return ok, detail
 
 
