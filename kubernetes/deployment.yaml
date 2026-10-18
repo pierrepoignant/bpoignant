@@ -72,7 +72,10 @@ metadata:
   namespace: default
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # 300m / 5 min: the clips HyperFrame pushes to /api/v1/videos (a 2–3 min vertical video is 40–80 MB)
+    nginx.ingress.kubernetes.io/proxy-body-size: "300m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
   tls:
