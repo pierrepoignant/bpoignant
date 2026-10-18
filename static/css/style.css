@@ -1251,19 +1251,19 @@ a:hover { color: var(--rouge-fonce); }
 /* La cible tactile fait 52 px : au pouce, une pastille plus petite se rate. */
 .minute-play {
     position: absolute;
-    left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
-    width: 52px; height: 52px;
+    left: 12px; bottom: 12px;                /* dans le coin, pas sur le visage de Bernard */
+    width: 48px; height: 48px;
     border: none; border-radius: 50%;
     background: rgba(255, 255, 255, 0.92);
     color: var(--noir);
-    font-size: 1.05rem;
+    font-size: 1rem;
     display: flex; align-items: center; justify-content: center;
     padding-left: 4px;                       /* le triangle n'est pas centré optiquement */
     cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: transform 0.2s, background 0.2s;
 }
-.minute-item:hover .minute-play { transform: translate(-50%, -50%) scale(1.08); background: #fff; }
+.minute-item:hover .minute-play { transform: scale(1.08); background: #fff; }
 
 .minute-duree {
     position: absolute;
