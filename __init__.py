@@ -159,6 +159,11 @@ def create_app(db_name='ovh'):
     except Exception:
         app.logger.exception("veilleur de publication automatique non démarré")
 
+    # HyperFrame pushes the clips it edits here, to be published on the networks (see hyperframe/).
+    from hyperframe import admin_hyperframe_bp, api_hyperframe_bp
+    app.register_blueprint(api_hyperframe_bp)
+    app.register_blueprint(admin_hyperframe_bp)
+
     # Video tooling: development machine only. Its dependencies weigh close to
     # a gigabyte, so the blueprint is not registered unless VIDEO_TOOLS is set
     # — production never sets it, and the import itself is skipped there.
