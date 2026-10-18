@@ -482,6 +482,11 @@ def post_tweet(text: str, media_ids=None):
 
     if 200 <= resp.status_code < 300:
         tweet_id = (resp.json().get('data') or {}).get('id')
+        try:
+            import alerts
+            alerts.clear('x')
+        except Exception:
+            pass
         return True, tweet_id
 
     log.error("post_tweet failed: status=%s body=%s", resp.status_code, resp.text[:300])
@@ -491,4 +496,20 @@ def post_tweet(text: str, media_ids=None):
         detail = body.get('detail') or body.get('title') or detail
     except ValueError:
         pass
+    # Plafond d'usage atteint ou crédit épuisé : on alerte les admins une fois.
+    # (429 = trop de requêtes / cap mensuel ; 403 avec « cap »/« usage ».)
+    bas = (detail or '').lower()
+    if resp.status_code == 429 or 'usage cap' in bas or 'usage-cap' in bas \
+            or 'payment' in bas or 'quota' in bas or ('403' == str(resp.status_code) and 'cap' in bas):
+        try:
+            import alerts
+            alerts.notify_once('x',
+                               "X (Twitter) : publication bloquée",
+                               "La publication sur X a échoué, probablement faute de "
+                               f"crédit ou par dépassement du plafond mensuel :\n{resp.status_code} — {detail}\n\n"
+                               "Les vidéos et articles ne partiront plus sur X tant que "
+                               "ce n'est pas réglé (crédit / plan de l'API X).",
+                               action_label="Voir le compte X")
+        except Exception:
+            pass
     return False, f"{resp.status_code} — {detail}"

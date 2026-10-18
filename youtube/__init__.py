@@ -96,6 +96,18 @@ def _note_auth_error(message):
     try:
         if (get_config(KEY_AUTH_ERROR) or '') != message:
             set_config(KEY_AUTH_ERROR, message)
+        import alerts
+        from flask import url_for
+        try:
+            lien = url_for('admin_settings.index', _external=True) + '#youtube'
+        except Exception:
+            lien = None
+        alerts.notify_once('youtube',
+                           "YouTube déconnecté — reconnexion nécessaire",
+                           "La connexion YouTube a expiré ou été révoquée : "
+                           f"{message}\n\nLes vidéos ne partiront plus sur YouTube "
+                           "tant que la chaîne n'est pas reconnectée.",
+                           action_url=lien, action_label="Reconnecter YouTube")
     except Exception:
         log.exception("YouTube : impossible de noter la panne d'autorisation")
 
@@ -104,6 +116,8 @@ def _clear_auth_error():
     try:
         if get_config(KEY_AUTH_ERROR):
             delete_config(KEY_AUTH_ERROR)
+        import alerts
+        alerts.clear('youtube')
     except Exception:
         log.exception("YouTube : impossible d'effacer la panne d'autorisation")
 
