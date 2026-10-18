@@ -109,6 +109,9 @@ def push_video():
         post.duration_seconds = float(request.form.get('duration') or 0) or None
     except ValueError:
         post.duration_seconds = None
+    # published now (on the other networks): the date La Minute (/minute) lists it by; TikTok, posted by hand
+    # later, is attached to this row by the TikTok sync (tiktok._waiting_match)
+    post.posted_at = datetime.utcnow()
     db.session.add(post)
     db.session.flush()
     try:

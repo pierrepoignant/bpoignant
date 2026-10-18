@@ -168,6 +168,11 @@ def _upsert(items, full=False):
     created = updated = skipped = 0
     now = datetime.utcnow()
     cutoff = now - timedelta(days=RECENT_DAYS)
+    # Clips edited in HyperFrame arrive here before TikTok has them (TikTok is posted by hand, after): their row
+    # waits with the video and no tiktok_id. The scraped clip is matched to it instead of becoming a second row.
+    waiting = [post for post in TikTokPost.query.filter(TikTokPost.tiktok_id.is_(None),
+                                                         TikTokPost.video_url.isnot(None),
+                                                         TikTokPost.created_at >= now - timedelta(days=14))]
 
     for raw in items:
         item = apify.normalise(raw)
@@ -180,6 +185,11 @@ def _upsert(items, full=False):
         if post is None and url:
             post = by_url.get(url)
 
+        if post is None:
+            post = _waiting_match(waiting, item)
+            if post is not None:
+                waiting.remove(post)
+                updated += 1
         if post is None:
             post = TikTokPost(title=_title_from_caption(item.get('text')) or 'Clip TikTok',
                               tiktok_id=tiktok_id)
@@ -220,6 +230,30 @@ def _upsert(items, full=False):
     db.session.commit()
     return {'created': created, 'updated': updated, 'skipped': skipped,
             'seen': len(items)}
+
+
+def _norm(text):
+    import unicodedata
+    text = unicodedata.normalize('NFKD', (text or '').lower())
+    return ' '.join(''.join(c if c.isalnum() else ' ' for c in text if not unicodedata.combining(c)).split())
+
+
+def _waiting_match(waiting, item):
+    """The HyperFrame row a freshly scraped TikTok clip is, if any.
+
+    Same first line as the post text (Bernard pastes the text HyperFrame gives him), or else the same title; and
+    when neither matches but a single clip waits and TikTok dates this one after it, that one."""
+    if not waiting:
+        return None
+    first = _norm(_title_from_caption(item.get('text')))
+    if first:
+        for post in waiting:
+            if first in (_norm(_title_from_caption(post.caption)), _norm(post.title)):
+                return post
+    when = _parse_time(item.get('created_at'))
+    if len(waiting) == 1 and when and timedelta(0) <= when - waiting[0].created_at <= timedelta(days=3):
+        return waiting[0]
+    return None
 
 
 def _title_from_caption(text, limit=200):
