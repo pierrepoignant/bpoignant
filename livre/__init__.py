@@ -827,7 +827,7 @@ def corriger_tout(app, ia=True):
     _CORR.update(en_cours=True, fini=None, message='Préparation…', faits=0, total=0)
 
     def _travail():
-        from livre import correction
+        import livre.correction as correction
         with app.app_context():
             try:
                 ids = [d.id for d in _docs_du_livre() if d.corrige_at is None]
@@ -886,7 +886,7 @@ def correction_etat():
 @admin_livre_bp.route('/doc/<int:doc_id>/corriger', methods=['POST'])
 @admin_required
 def doc_corriger(doc_id):
-    from livre import correction
+    import livre.correction as correction
     doc = db.session.get(BookDoc, doc_id) or abort(404)
     try:
         note = correction.corriger_doc(doc, ia=True)
@@ -900,7 +900,7 @@ def doc_corriger(doc_id):
 @admin_livre_bp.route('/doc/<int:doc_id>/corriger/annuler', methods=['POST'])
 @admin_required
 def doc_corriger_annuler(doc_id):
-    from livre import correction
+    import livre.correction as correction
     doc = db.session.get(BookDoc, doc_id) or abort(404)
     if correction.annuler(doc):
         flash("Correction annulée — texte d'origine rétabli.", 'info')
