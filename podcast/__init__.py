@@ -137,7 +137,7 @@ def generer_article(article):
     article.audio_url = url
     article.audio_bytes = len(mp3)
     # Durée estimée à 150 mots/minute — suffisant pour l'affichage et le flux.
-    mots = len((article.content_text or '').split()) or len(texte.split())
+    mots = len(texte.split())
     article.audio_duration = max(1, round(mots / 150 * 60))
     article.audio_generated_at = datetime.utcnow()
     db.session.commit()
