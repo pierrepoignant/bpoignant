@@ -44,11 +44,13 @@ public_podcast_bp = Blueprint('podcast', __name__)
 # ─── Réglages ───────────────────────────────────────────────
 
 def api_key():
-    return (get_config(KEY_API) or '').strip()
+    import os
+    return (get_config(KEY_API) or os.environ.get('ELEVENLABS_API_KEY') or '').strip()
 
 
 def voice_id():
-    return (get_config(KEY_VOICE) or '').strip()
+    import os
+    return (get_config(KEY_VOICE) or os.environ.get('ELEVENLABS_VOICE_ID') or '').strip()
 
 
 def is_configured():
