@@ -1,0 +1,95 @@
+{% extends 'admin_base.html' %}
+{% block title %}Podcast{% endblock %}
+{% block admin_title %}<i class="fas fa-podcast" style="color: var(--vert);"></i> Podcast{% endblock %}
+{% block admin_subtitle %}<p>Chaque article lu par la voix de Bernard (ElevenLabs), diffusé par un flux RSS.</p>{% endblock %}
+
+{% block admin_content %}
+    {# Réglages #}
+    <section style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05); padding:1.4rem 1.6rem; margin-bottom:1.5rem;">
+        <h2 style="font-size:1.05rem; margin:0 0 0.8rem;">Réglages</h2>
+        {% if not configure %}
+        <p style="font-size:0.9rem; color:#8a6d00; background:rgba(255,165,0,0.12); border-radius:10px; padding:10px 14px; margin:0 0 1rem;">
+            Renseignez la clé API ElevenLabs et l'identifiant de voix pour activer la génération.
+        </p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin_podcast.reglages') }}" style="display:grid; gap:0.7rem; max-width:640px;">
+            <label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Clé API ElevenLabs</label>
+            <input type="password" name="api_key" placeholder="{% if configure %}•••••••• (inchangée){% else %}xi-...{% endif %}"
+                   style="padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;">
+            <label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Identifiant de la voix (voice_id)</label>
+            <input type="text" name="voice_id" value="{{ voice_id }}" placeholder="la voix clonée de Bernard"
+                   style="padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;">
+            <label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Titre du podcast</label>
+            <input type="text" name="titre" value="{{ meta.titre }}" style="padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;">
+            <label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Description</label>
+            <textarea name="description" rows="2" style="padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;">{{ meta.description }}</textarea>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.7rem;">
+                <div><label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Auteur</label>
+                     <input type="text" name="auteur" value="{{ meta.auteur }}" style="width:100%; padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;"></div>
+                <div><label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">E-mail (requis par Apple)</label>
+                     <input type="email" name="email" value="{{ meta.email }}" style="width:100%; padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;"></div>
+            </div>
+            <label style="font-size:0.78rem; color:var(--gris); text-transform:uppercase;">Image de couverture (URL carrée, 1400px+)</label>
+            <input type="url" name="image_url" value="{{ meta.image }}" style="padding:9px 12px; border:1px solid #e0e0e0; border-radius:8px; font-family:inherit;">
+            <button type="submit" class="btn btn-sm btn-primary" style="justify-self:start;">Enregistrer</button>
+        </form>
+        <div style="margin-top:1rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <span style="font-size:0.82rem; color:var(--gris);">Flux RSS à soumettre à Apple Podcasts et Spotify :</span>
+            <code id="feed-url" style="background:var(--gris-clair); padding:6px 10px; border-radius:8px; font-size:0.82rem; word-break:break-all;">{{ feed_url }}</code>
+            <button type="button" class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;"
+                    onclick="navigator.clipboard.writeText('{{ feed_url }}'); this.textContent='Copié';">Copier</button>
+        </div>
+    </section>
+
+    {# Génération #}
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <p style="margin:0; font-size:0.9rem;">
+            {{ articles|selectattr('audio_url')|list|length }} épisode(s) ·
+            <span style="color:var(--rouge);">{{ a_generer }} à générer</span>
+        </p>
+        <form method="POST" action="{{ url_for('admin_podcast.tout_generer') }}" style="margin:0;"
+              onsubmit="if(!confirm('Générer l’audio des {{ a_generer }} articles sans épisode ? (coût ElevenLabs au caractère)')) return false;
+                        const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> Génération…';">
+            <button type="submit" class="btn btn-sm btn-primary" {% if etat.en_cours or not configure or not a_generer %}disabled{% endif %}>
+                <i class="fas fa-wand-magic-sparkles"></i> Tout générer
+            </button>
+        </form>
+    </div>
+    <div id="pod-etat" role="status" style="{% if not etat.en_cours and not etat.fini %}display:none;{% endif %} background:var(--gris-clair); border-radius:10px; padding:10px 14px; font-size:0.85rem; margin-bottom:1.2rem;">{{ etat.message }}</div>
+
+    {% for a in articles %}
+    <div class="fiche">
+        <div class="fiche-corps">
+            <a href="{{ url_for('admin_articles.edit_article', article_id=a.id) }}" class="fiche-titre">{{ a.title }}</a>
+            <div class="fiche-meta">
+                {% if a.audio_url %}<i class="fas fa-circle-check" style="color:var(--vert);"></i> Épisode — {{ (a.audio_duration or 0)//60 }} min
+                {% else %}<i class="far fa-circle"></i> Pas encore d'audio{% endif %}
+            </div>
+        </div>
+        <div class="fiche-actions">
+            {% if a.audio_url %}
+            <audio controls preload="none" src="{{ a.audio_url }}" style="height:34px; max-width:220px;"></audio>
+            {% endif %}
+            <form method="POST" action="{{ url_for('admin_podcast.generer', article_id=a.id) }}" style="margin:0;"
+                  onsubmit="const b=this.querySelector('button'); b.disabled=true; b.innerHTML='<i class=\'fas fa-rotate fa-spin\'></i> …';">
+                <button type="submit" class="btn btn-sm {{ 'btn-outline' if a.audio_url else 'btn-primary' }}"
+                        style="{% if a.audio_url %}color:var(--noir); border-color:#e0e0e0;{% endif %} border-radius:50px; padding:6px 14px;"
+                        {% if not configure %}disabled{% endif %}>
+                    <i class="fas fa-microphone"></i> {{ 'Régénérer' if a.audio_url else 'Générer' }}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if etat.en_cours %}
+    <script>
+    (function(){ var t=setInterval(function(){
+        fetch("{{ url_for('admin_podcast.etat_route') }}").then(r=>r.json()).then(function(e){
+            var b=document.getElementById('pod-etat'); b.style.display=''; b.textContent=e.message||'';
+            if(!e.en_cours){ clearInterval(t); setTimeout(function(){location.reload();},1500); }
+        });
+    },3000); })();
+    </script>
+    {% endif %}
+{% endblock %}

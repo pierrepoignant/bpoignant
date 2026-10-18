@@ -567,3 +567,39 @@ spec:
                 limits:
                   cpu: "1"
                   memory: 768Mi
+---
+# Podcast : générer l'audio des nouveaux articles publiés (fenêtre récente,
+# quelques-uns par jour). 10:30 Paris. L'arriéré complet se fait à la main
+# depuis Admin → Podcast (coût ElevenLabs au caractère).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-podcast-backfill
+  namespace: default
+spec:
+  schedule: "30 10 * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: podcast-backfill
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "podcast_backfill.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests: { cpu: 50m, memory: 256Mi }
+                limits: { cpu: "1", memory: 768Mi }

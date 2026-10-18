@@ -151,6 +151,10 @@ def create_app(db_name='ovh'):
     from social import admin_social_bp
     app.register_blueprint(admin_social_bp)
 
+    from podcast import admin_podcast_bp, public_podcast_bp
+    app.register_blueprint(admin_podcast_bp)
+    app.register_blueprint(public_podcast_bp)
+
     # Veilleur d'enchaînement après montage : uniquement là où les fichiers
     # sont, c'est-à-dire sur la machine de développement.
     try:
@@ -466,6 +470,11 @@ def _migrate_schema():
         if 'threads_post_id' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_post_id VARCHAR(60) NULL"))
             db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_posted_at DATETIME NULL"))
+            db.session.commit()
+        if 'audio_url' not in cols:
+            for c in ('audio_url VARCHAR(500) NULL', 'audio_bytes INTEGER NULL',
+                      'audio_duration INTEGER NULL', 'audio_generated_at DATETIME NULL'):
+                db.session.execute(text(f"ALTER TABLE articles ADD COLUMN {c}"))
             db.session.commit()
         if 'threads_views' not in cols:
             for c in ('threads_views INTEGER NULL', 'threads_likes INTEGER NULL',

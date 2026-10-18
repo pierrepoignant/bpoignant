@@ -181,6 +181,21 @@ def put_file(key, data, content_type='application/octet-stream'):
     return key
 
 
+def put_public_file(key, data, content_type='application/octet-stream'):
+    """Comme put_file, mais lisible publiquement (les plateformes de podcast et
+    les lecteurs récupèrent le MP3 sans authentification). Renvoie l'URL publique."""
+    if not is_configured():
+        raise StorageError("Le stockage n'est pas configuré (OVH__…).")
+    c = _config()
+    try:
+        _client().put_object(Bucket=c['bucket'], Key=key, Body=data,
+                             ContentType=content_type, ACL='public-read',
+                             CacheControl='public, max-age=86400')
+    except Exception as exc:
+        raise StorageError(f"Envoi vers le stockage impossible : {exc}") from exc
+    return public_url(key)
+
+
 def get_file(key):
     """Return the object's bytes, or None when it isn't there."""
     if not is_configured():

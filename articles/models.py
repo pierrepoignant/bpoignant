@@ -109,6 +109,12 @@ class Article(db.Model):
     fb_page_shares = db.Column(db.Integer, nullable=True)
     fb_page_metrics_at = db.Column(db.DateTime, nullable=True)
 
+    # Podcast : l'article lu par la voix (ElevenLabs), hébergé en MP3 public.
+    audio_url = db.Column(db.String(500), nullable=True)
+    audio_bytes = db.Column(db.Integer, nullable=True)
+    audio_duration = db.Column(db.Integer, nullable=True)   # secondes, estimé
+    audio_generated_at = db.Column(db.DateTime, nullable=True)
+
     # LinkedIn : la date et l'identifiant du post, rien d'autre. LinkedIn
     # n'expose aucune statistique pour la publication d'un membre, donc il n'y
     # a ni vues ni réactions à stocker.

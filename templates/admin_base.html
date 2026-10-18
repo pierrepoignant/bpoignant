@@ -110,6 +110,10 @@
            class="btn btn-sm {% if _p.startswith('/admin/livre') %}btn-primary{% else %}btn-outline{% endif %}">
             <i class="fas fa-book"></i> Le Livre
         </a>
+        <a href="{{ url_for('admin_podcast.index') }}"
+           class="btn btn-sm {% if _p.startswith('/admin/podcast') %}btn-primary{% else %}btn-outline{% endif %}">
+            <i class="fas fa-podcast"></i> Podcast
+        </a>
 
         {# 4. Mesurer #}
         <a href="{{ url_for('analytics.dashboard') }}"
