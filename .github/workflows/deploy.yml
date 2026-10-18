@@ -69,3 +69,12 @@ jobs:
         run: |
           kubectl rollout restart deployment/bpoignant
           kubectl rollout status deployment/bpoignant --timeout=5m
+
+      - name: Diagnose on failure
+        if: failure()
+        run: |
+          echo "=== pods ==="; kubectl get pods -l app=bpoignant -o wide || true
+          echo "=== describe ==="; kubectl describe pods -l app=bpoignant || true
+          echo "=== logs (current) ==="; kubectl logs -l app=bpoignant --tail=150 --all-containers --prefix || true
+          echo "=== logs (previous crash) ==="; kubectl logs -l app=bpoignant --tail=150 --all-containers --previous --prefix || true
+          echo "=== recent events ==="; kubectl get events --sort-by=.lastTimestamp | tail -50 || true
