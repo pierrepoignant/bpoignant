@@ -735,6 +735,16 @@ def refresh_facebook_profile_route():
     return redirect(url_for('admin_articles.list_articles'))
 
 
+_MIN_CORPS = 100  # caractères : en deçà, l'article est vide ou presque, on bloque l'envoi
+
+
+def _corps_trop_court(article):
+    """True si le texte de l'article (sans balises) fait moins de _MIN_CORPS
+    caractères — garde-fou contre l'envoi d'une lettre vide."""
+    txt = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', article.content_html or '')).strip()
+    return len(txt) < _MIN_CORPS
+
+
 @admin_articles_bp.route('/<int:article_id>/send-newsletter/test', methods=['POST'])
 @admin_required
 def send_newsletter_test(article_id):
@@ -749,6 +759,9 @@ def send_newsletter_test(article_id):
         return redirect(url_for('admin_articles.list_articles'))
     if not mail_is_configured():
         flash("SendGrid n'est pas configuré — envoi impossible.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if _corps_trop_court(article):
+        flash("Article trop court (moins de 100 caractères) — envoi bloqué pour éviter une lettre vide.", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
     ok = send_article_test(article, to, intro=(request.form.get('intro') or '').strip() or None)
@@ -771,6 +784,9 @@ def send_newsletter(article_id):
         return redirect(url_for('admin_articles.list_articles'))
     if not is_configured():
         flash("SendGrid n'est pas configuré (SENDGRID__API_KEY manquant).", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
+    if _corps_trop_court(article):
+        flash("Article trop court (moins de 100 caractères) — envoi bloqué pour éviter d'envoyer une lettre vide comme la dernière fois.", 'danger')
         return redirect(url_for('admin_articles.list_articles'))
 
     # Optional "petit mot" — saved so it re-appears next time this article is
