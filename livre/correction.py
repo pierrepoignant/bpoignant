@@ -125,6 +125,39 @@ def proofread_ia(titre, html):
     return (obj.get('titre') or titre, obj.get('html') or html, int(obj.get('corrections') or 0))
 
 
+def corriger_typo_texte(t):
+    """Typographie française sur un texte simple (préface de livre ou de
+    chapitre) : guillemets, espaces, ponctuation — les mêmes règles que pour
+    les articles, mais sans balises."""
+    return _espaces_apres_ponctuation(_guillemets(_typographie(t or ''))).strip()
+
+
+_SYSTEME_TEXTE = """Tu es correcteur de français. On te donne un court texte (une préface). Tu corriges UNIQUEMENT les fautes : orthographe, grammaire, accords, ponctuation, accents (États-Unis, et non Etats-Unis) et typographie. Tu ne réécris pas, tu ne changes ni le sens, ni le ton, ni le choix des mots, ni le nombre de phrases. Tu réponds par le texte corrigé seul, sans guillemets autour, sans commentaire."""
+
+
+def proofread_texte(texte):
+    """Relecture IA d'un texte simple. Renvoie le texte corrigé, ou None."""
+    from articles.ai_summary import _api_key, MODEL
+    key = _api_key()
+    if not (key and (texte or '').strip()):
+        return None
+    import anthropic
+    client = anthropic.Anthropic(api_key=key, timeout=120.0, max_retries=1)
+    try:
+        with client.messages.stream(
+            model=MODEL, max_tokens=4000,
+            system=[{'type': 'text', 'text': _SYSTEME_TEXTE}],
+            messages=[{'role': 'user', 'content': texte}]) as flux:
+            rep = flux.get_final_message()
+        if rep.stop_reason == 'max_tokens':
+            return None
+        out = ''.join(b.text for b in rep.content if b.type == 'text').strip()
+        return out or None
+    except Exception as exc:  # noqa: BLE001
+        log.warning('relecture préface échouée : %s', exc)
+        return None
+
+
 # ─── Application ────────────────────────────────────────────
 
 def corriger_doc(doc, ia=True):
