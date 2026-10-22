@@ -603,3 +603,39 @@ spec:
               resources:
                 requests: { cpu: 50m, memory: 256Mi }
                 limits: { cpu: "1", memory: 768Mi }
+---
+# Rattrapage horaire des champs IA des articles (résumé, accroche X, thèmes) :
+# le pipeline IA à l'enregistrement est « au mieux » et un échec passager laisse
+# des champs vides. Ce cron les complète chaque heure.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-articles-ai-backfill
+  namespace: default
+spec:
+  schedule: "17 * * * *"
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: articles-ai-backfill
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "articles_ai_backfill.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests: { cpu: 50m, memory: 256Mi }
+                limits: { cpu: "1", memory: 768Mi }

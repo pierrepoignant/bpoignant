@@ -1295,82 +1295,83 @@ def cleanup_all():
     return redirect(url_for('admin_articles.list_articles'))
 
 
-@admin_articles_bp.route('/propose-missing', methods=['POST'])
-@admin_required
-def propose_missing():
-    """Fill in whatever an article is missing — résumé, accroche X, thèmes —
-    in one pass, with the AI, leaving anything already written untouched.
-
-    Bounded by *articles* rather than by field: each one costs up to three
-    sequential API calls, and capping the field count instead would make the
-    run time depend on which fields happen to be blank. Re-run to continue.
-    """
+def backfill_missing_ai(limit=8, log_fn=None):
+    """Compléter par IA les champs manquants (résumé, accroche X, thèmes) des
+    articles qui en manquent, du plus récent au plus ancien, jusqu'à `limit`.
+    Partagé par le bouton d'admin et par le cron horaire qui rattrape les
+    échecs d'IA au moment de l'enregistrement. Renvoie un compte rendu."""
     from flask import current_app
     from articles.ai_summary import (
         generate_summary, generate_social_summary, generate_themes, is_configured,
     )
-
-    MAX_ARTICLES_PER_RUN = 8
-
     if not is_configured():
-        flash("IA non configurée — définissez ANTHROPIC__API_KEY.", 'danger')
-        return redirect(url_for('admin_articles.list_articles'))
+        return {'ok': False, 'raison': 'IA non configurée',
+                'summary': 0, 'social': 0, 'themes': 0, 'failed': 0, 'pending': 0}
 
-    def missing(a):
-        return {
-            'summary': not (a.summary or '').strip(),
-            'social': not (a.social_summary or '').strip(),
-            'themes': not a.themes,
-        }
+    def manquant(a):
+        return {'summary': not (a.summary or '').strip(),
+                'social': not (a.social_summary or '').strip(),
+                'themes': not a.themes}
 
     pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
-               if (a.content_html or '').strip() and any(missing(a).values())]
-
-    filled = {'summary': 0, 'social': 0, 'themes': 0}
+               if (a.content_html or '').strip() and any(manquant(a).values())]
+    rempli = {'summary': 0, 'social': 0, 'themes': 0}
     failed = 0
-
-    for article in pending[:MAX_ARTICLES_PER_RUN]:
-        gaps = missing(article)
+    for article in pending[:limit]:
+        trous = manquant(article)
         body = article.content_html or ''
         try:
-            if gaps['summary']:
-                value = generate_summary(article.title, body)
-                # Extraction is a usable fallback for the résumé; the accroche
-                # and the themes are only worth having if the AI produced them.
-                article.summary = value or summarize_html(body)
-                filled['summary'] += 1
-            if gaps['social']:
-                value = generate_social_summary(article.title, body)
-                if value:
-                    article.social_summary = value
-                    filled['social'] += 1
-            if gaps['themes']:
+            if trous['summary']:
+                article.summary = generate_summary(article.title, body) or summarize_html(body)
+                rempli['summary'] += 1
+            if trous['social']:
+                v = generate_social_summary(article.title, body)
+                if v:
+                    article.social_summary = v
+                    rempli['social'] += 1
+            if trous['themes']:
                 names = generate_themes(article.title, body)
                 if names:
                     article.themes = [_theme_by_name(n) for n in names]
-                    filled['themes'] += 1
-        except Exception as exc:
-            current_app.logger.warning(
-                f"AI backfill failed for article {article.id}: {exc}")
+                    rempli['themes'] += 1
+            if log_fn:
+                log_fn(f"#{article.id} {(article.title or '')[:45]} — "
+                       + ', '.join(k for k, v in trous.items() if v))
+        except Exception as exc:  # noqa: BLE001
+            try:
+                current_app.logger.warning(f"AI backfill failed for article {article.id}: {exc}")
+            except Exception:
+                pass
             failed += 1
             continue
-
     db.session.commit()
+    return {'ok': True, 'summary': rempli['summary'], 'social': rempli['social'],
+            'themes': rempli['themes'], 'failed': failed, 'pending': len(pending)}
 
+
+@admin_articles_bp.route('/propose-missing', methods=['POST'])
+@admin_required
+def propose_missing():
+    """Bouton d'admin : compléter les champs IA manquants, huit articles au
+    plus par passage (chaque article coûte jusqu'à trois appels)."""
+    MAX = 8
+    r = backfill_missing_ai(limit=MAX)
+    if not r['ok']:
+        flash("IA non configurée — définissez ANTHROPIC__API_KEY.", 'danger')
+        return redirect(url_for('admin_articles.list_articles'))
     done = [f"{n} {label}" for label, n in (
-        ("résumé(s)", filled['summary']),
-        ("accroche(s) X", filled['social']),
-        ("classement(s) par thème", filled['themes'])) if n]
-
+        ("résumé(s)", r['summary']),
+        ("accroche(s) X", r['social']),
+        ("classement(s) par thème", r['themes'])) if n]
     if not done:
-        flash("Rien à compléter — tous les articles sont à jour." if not failed
-              else f"Rien complété ({failed} échec(s) côté IA).",
-              'info' if not failed else 'danger')
+        flash("Rien à compléter — tous les articles sont à jour." if not r['failed']
+              else f"Rien complété ({r['failed']} échec(s) côté IA).",
+              'info' if not r['failed'] else 'danger')
     else:
-        remaining = len(pending) - min(len(pending), MAX_ARTICLES_PER_RUN)
+        remaining = r['pending'] - min(r['pending'], MAX)
         msg = "Complété : " + ", ".join(done)
-        if failed:
-            msg += f" — {failed} échec(s)"
+        if r['failed']:
+            msg += f" — {r['failed']} échec(s)"
         if remaining > 0:
             msg += f". {remaining} article(s) restant(s), relancez pour continuer"
         flash(msg + ".", 'success')
