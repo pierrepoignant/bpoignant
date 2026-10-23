@@ -745,7 +745,7 @@ def generer_livre(app):
                 data, n_pages = pdfmod.construire(themes, meta)
                 GEN.update(etape="Enregistrement…", octets=len(data), pages=n_pages)
                 storage.put_file(S3_LIVRE, data, 'application/pdf')
-                couv = pdfmod.couverture(meta['titre'], meta['sous_titre'], meta['auteur'])
+                couv = pdfmod.couverture_complete(meta, n_pages)
                 storage.put_file(S3_COUVERTURE, couv, 'application/pdf')
                 infos = {'genere_le': datetime.utcnow().isoformat(timespec='seconds'),
                          'pages': n_pages, 'chroniques': n_chr, 'octets': len(data),

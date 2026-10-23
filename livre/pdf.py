@@ -462,3 +462,130 @@ def couverture(titre, sous_titre, auteur, portrait=None):
     pdf.set_font('garamond', '', 17)
     pdf.cell(L - 2 * (BLEED + 16), 10, _glyphes(auteur), align='C')
     return bytes(pdf.output())
+
+
+def _stylo(pdf, cx, cy, longueur, angle, encre=(22, 33, 62), plume=(201, 162, 77)):
+    """Un stylo-plume élégant, dessiné à l'horizontale puis incliné de `angle`
+    degrés autour de (cx, cy). Corps en encre, bec et bague dorés."""
+    h = longueur * 0.085
+    with pdf.rotation(angle, cx, cy):
+        gauche = cx - longueur / 2
+        corps_fin = cx + longueur * 0.22
+        # Corps.
+        pdf.set_fill_color(*encre)
+        pdf.rect(gauche, cy - h / 2, corps_fin - gauche, h, style='F', round_corners=True, corner_radius=h / 2)
+        # Bague dorée.
+        pdf.set_fill_color(*plume)
+        pdf.rect(corps_fin - h * 0.5, cy - h / 2, h * 0.6, h, style='F')
+        # Section (grip) vers le bec.
+        bec_base = cx + longueur * 0.30
+        pdf.set_fill_color(*encre)
+        pdf.polygon([(corps_fin, cy - h / 2), (bec_base, cy - h * 0.34),
+                     (bec_base, cy + h * 0.34), (corps_fin, cy + h / 2)], style='F')
+        # Bec doré, pointe à droite.
+        pointe = cx + longueur / 2
+        pdf.set_fill_color(*plume)
+        pdf.polygon([(bec_base, cy - h * 0.34), (pointe, cy),
+                     (bec_base, cy + h * 0.34)], style='F')
+        # Fente du bec.
+        pdf.set_draw_color(255, 255, 255)
+        pdf.set_line_width(0.4)
+        pdf.line(bec_base + h * 0.1, cy, pointe - h * 0.1, cy)
+
+
+def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None):
+    """La couverture d'impression complète (quatrième + dos + première), fond
+    blanc, pour un livre KDP 6×9. Photo de Bernard dans un rond, titre, et un
+    stylo-plume. Le dos est calculé d'après le nombre de pages."""
+    BLEED = 3.175
+    ENCRE = (22, 33, 62)
+    OR = (201, 162, 77)
+    GRIS = (90, 96, 110)
+    dos = max(6.0, pages * 0.0572)              # papier blanc KDP : 0,0572 mm/page
+    L = 2 * PAGE_L + dos + 2 * BLEED
+    H = PAGE_H + 2 * BLEED
+    x_dos = BLEED + PAGE_L                        # début du dos
+    x_front = x_dos + dos                         # début de la première
+    cx_front = x_front + PAGE_L / 2
+    cx_back = BLEED + PAGE_L / 2
+
+    pdf = FPDF(unit='mm', format=(L, H))
+    pdf.set_auto_page_break(False)
+    pdf.set_margins(0, 0, 0)
+    for style, f in (('', 'ebg-400-normal'), ('B', 'ebg-700-normal'), ('I', 'ebg-400-italic')):
+        pdf.add_font('garamond', style, os.path.join(POLICES, f'{f}.ttf'))
+    pdf.add_page()
+    # Fond blanc.
+    pdf.set_fill_color(255, 255, 255)
+    pdf.rect(0, 0, L, H, style='F')
+
+    # ─── Première de couverture (à droite) ───
+    port = portrait or (PORTRAIT_ROND if os.path.exists(PORTRAIT_ROND) else None)
+    if port and os.path.exists(port):
+        d = 60
+        pdf.image(port, x=cx_front - d / 2, y=BLEED + 24, w=d, h=d)
+        pdf.set_draw_color(*OR); pdf.set_line_width(0.6)
+        pdf.ellipse(cx_front - d / 2, BLEED + 24, d, d)
+
+    pdf.set_text_color(*ENCRE)
+    pdf.set_font('garamond', 'B', 44)
+    pdf.set_xy(x_front, BLEED + 100)
+    pdf.multi_cell(PAGE_L, 16, _glyphes(meta.get('auteur') or 'Bernard Poignant'), align='C')
+
+    yg = pdf.get_y() + 4
+    pdf.set_draw_color(*OR); pdf.set_line_width(0.5)
+    pdf.line(cx_front - 18, yg, cx_front + 18, yg)
+
+    pdf.set_xy(x_front, yg + 4)
+    pdf.set_text_color(*OR)
+    pdf.set_font('garamond', 'I', 22)
+    pdf.multi_cell(PAGE_L, 11, _glyphes(meta.get('titre') or 'Chroniques'), align='C')
+
+    if (meta.get('sous_titre') or '').strip():
+        pdf.set_xy(x_front, pdf.get_y() + 1)
+        pdf.set_text_color(*GRIS)
+        pdf.set_font('garamond', '', 13)
+        pdf.multi_cell(PAGE_L, 7, _glyphes(meta['sous_titre']), align='C')
+
+    _stylo(pdf, cx_front, H - BLEED - 34, 66, -18)
+
+    # ─── Dos ───
+    if dos >= 9:
+        with pdf.rotation(-90, x_dos + dos / 2, H / 2):
+            pdf.set_text_color(*ENCRE)
+            pdf.set_font('garamond', 'B', 13)
+            pdf.set_xy(x_dos + dos / 2 - PAGE_H * 0.40, H / 2 - 4)
+            pdf.cell(PAGE_H * 0.80, 8,
+                     _glyphes(f"{meta.get('auteur') or 'Bernard Poignant'}  ·  {meta.get('titre') or 'Chroniques'}"),
+                     align='C')
+
+    # ─── Quatrième de couverture (à gauche) ───
+    pdf.set_xy(BLEED + 20, BLEED + 40)
+    pdf.set_text_color(*ENCRE)
+    pdf.set_font('garamond', '', 13)
+    pdf.multi_cell(PAGE_L - 40, 7.4, _glyphes(blurb or _BLURB_DEFAUT), align='L')
+
+    pdf.ln(4)
+    pdf.set_x(BLEED + 20)
+    pdf.set_text_color(*GRIS)
+    pdf.set_font('garamond', 'I', 11)
+    pdf.multi_cell(PAGE_L - 40, 6, _glyphes(bio or _BIO_DEFAUT), align='L')
+
+    _stylo(pdf, cx_back, BLEED + 24, 40, -18)
+    # Emplacement du code-barres (laissé blanc, KDP l'ajoute) : rien à dessiner.
+
+    return bytes(pdf.output())
+
+
+_BLURB_DEFAUT = (
+    "Pendant dix ans, semaine après semaine, Bernard Poignant a tenu la chronique "
+    "de l'actualité française et européenne. L'Europe, la laïcité, les élections, "
+    "le socialisme, la Bretagne : cent cinquante-cinq de ces textes, choisis parmi "
+    "près d'un millier, composent ce livre.\n\n"
+    "Un livre singulier : conçu, classé, corrigé et mis au jour avec l'aide de "
+    "l'intelligence artificielle — mais écrit, lui, de la seule main de son auteur."
+)
+_BIO_DEFAUT = (
+    "Bernard Poignant, socialiste, ancien maire de Quimper, ancien député "
+    "européen, ancien conseiller de François Hollande."
+)
