@@ -553,8 +553,12 @@ def _reach_articles():
     return cols, lignes
 
 
-def _rendre_portee(titre, icone, cols, lignes):
-    lignes.sort(key=lambda r: r['total'], reverse=True)
+def _rendre_portee(titre, icone, cols, lignes, tri='total'):
+    from datetime import datetime as _dt
+    if tri == 'date':
+        lignes.sort(key=lambda r: r['date'] or _dt.min, reverse=True)
+    else:
+        lignes.sort(key=lambda r: r['total'], reverse=True)
     totaux = [sum(r['valeurs'][i] for r in lignes) for i in range(len(cols))]
     return render_template('portee.html', titre=titre, icone=icone, colonnes=cols,
                            lignes=lignes, totaux=totaux,
@@ -572,4 +576,4 @@ def portee_videos():
 @admin_required
 def portee_articles():
     cols, lignes = _reach_articles()
-    return _rendre_portee('Articles — portée totale', 'fas fa-newspaper', cols, lignes)
+    return _rendre_portee('Articles — portée totale', 'fas fa-newspaper', cols, lignes, tri='date')
