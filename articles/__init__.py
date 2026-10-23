@@ -39,6 +39,14 @@ ALLOWED_ATTRS = {
 }
 
 
+def _champ_texte(v):
+    """Nettoie une valeur de formulaire : chaîne vide pour None et pour les
+    chaînes parasites « None »/« null »/« undefined » qu'un gabarit a pu
+    sérialiser puis renvoyer. Évite qu'une accroche devienne le mot « None »."""
+    v = (v or '').strip()
+    return '' if v.lower() in ('none', 'null', 'undefined') else v
+
+
 def _clean_html(raw):
     return bleach.clean(
         raw or '',
@@ -870,9 +878,9 @@ def edit_article_autosave(article_id):
         if titre:
             article.title = titre
     if 'summary' in request.form:
-        article.summary = (request.form.get('summary') or '').strip()
+        article.summary = _champ_texte(request.form.get('summary'))
     if 'social_summary' in request.form:
-        article.social_summary = (request.form.get('social_summary') or '').strip() or None
+        article.social_summary = _champ_texte(request.form.get('social_summary')) or None
     if 'content_html' in request.form:
         article.content_html = clean_article_html(_clean_html(request.form.get('content_html') or ''))
     db.session.commit()
@@ -1176,8 +1184,8 @@ def _save_article(article):
     # Normalise the title's typography (space after commas, etc.) whatever its
     # source — typed, edited, or imported.
     title = clean_text((request.form.get('title') or '').strip())
-    summary = (request.form.get('summary') or '').strip()
-    social_summary = (request.form.get('social_summary') or '').strip()
+    summary = _champ_texte(request.form.get('summary'))
+    social_summary = _champ_texte(request.form.get('social_summary'))
     # Themes the admin ticked; empty means "let the AI decide" on first save.
     chosen_themes = request.form.getlist('themes')
     image_url = (request.form.get('image_url') or '').strip()
@@ -1309,8 +1317,8 @@ def backfill_missing_ai(limit=8, log_fn=None):
                 'summary': 0, 'social': 0, 'themes': 0, 'failed': 0, 'pending': 0}
 
     def manquant(a):
-        return {'summary': not (a.summary or '').strip(),
-                'social': not (a.social_summary or '').strip(),
+        return {'summary': not _champ_texte(a.summary),
+                'social': not _champ_texte(a.social_summary),
                 'themes': not a.themes}
 
     pending = [a for a in Article.query.order_by(Article.created_at.desc()).all()
