@@ -352,12 +352,17 @@ def instagram_stats(media_id):
     try:
         base = _get(f'{media_id}', {'fields': 'like_count,comments_count'}, token=_page_token())
         vues = 0
-        try:
-            ins = _get(f'{media_id}/insights', {'metric': 'plays'}, token=_page_token())
-            for m in ins.get('data') or []:
-                vues = (m.get('values') or [{}])[0].get('value') or 0
-        except MetaError:
-            pass
+        # « plays » a été retiré par Meta ; les Reels exposent désormais « views ».
+        # Repli sur « reach » si « views » venait à être refusé à son tour.
+        for metrique in ('views', 'reach'):
+            try:
+                ins = _get(f'{media_id}/insights', {'metric': metrique}, token=_page_token())
+                for m in ins.get('data') or []:
+                    vues = (m.get('values') or [{}])[0].get('value') or 0
+                if vues:
+                    break
+            except MetaError:
+                continue
         return {'views': int(vues), 'likes': int(base.get('like_count') or 0),
                 'comments': int(base.get('comments_count') or 0)}
     except MetaError:
