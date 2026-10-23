@@ -596,7 +596,8 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
         pdf.set_font('garamond', '', 13)
         pdf.multi_cell(PAGE_L, 7, _glyphes(meta['sous_titre']), align='C')
 
-    _stylo(pdf, cx_front, H * 0.74, 22, -8, encre=pal['stylo'], plume=pal['bec'])
+    # Un petit stylo en guise d'icône, sous le titre.
+    _stylo(pdf, cx_front, H * 0.70, 13, -8, encre=pal['stylo'], plume=pal['bec'])
 
     # ─── Dos ───
     if dos >= 9:
@@ -620,7 +621,6 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
     pdf.set_font('garamond', 'I', 11)
     pdf.multi_cell(PAGE_L - 40, 6, _glyphes(bio or _BIO_DEFAUT), align='L')
 
-    _stylo(pdf, cx_back, H - BLEED - 44, 15, -8, encre=pal['stylo'], plume=pal['bec'])
     # Emplacement du code-barres (laissé blanc, KDP l'ajoute) : rien à dessiner.
 
     return bytes(pdf.output())
