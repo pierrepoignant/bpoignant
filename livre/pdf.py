@@ -493,13 +493,25 @@ def _stylo(pdf, cx, cy, longueur, angle, encre=(22, 33, 62), plume=(201, 162, 77
         pdf.line(bec_base + h * 0.1, cy, pointe - h * 0.1, cy)
 
 
-def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None):
+# Palettes nommées pour la couverture : (texte, corps du stylo, bec du stylo,
+# cercle du portrait, filet/accent).
+PALETTES = {
+    'or':       {'texte': (22, 33, 62),  'stylo': (22, 33, 62),  'bec': (201, 162, 77), 'cercle': (201, 162, 77), 'accent': (201, 162, 77)},
+    'elysee':   {'texte': (0, 0, 145),   'stylo': (0, 0, 145),   'bec': (0, 0, 145),    'cercle': (225, 0, 15),   'accent': (225, 0, 15)},
+    'tricolore':{'texte': (0, 0, 145),   'stylo': (225, 0, 15),  'bec': (225, 0, 15),   'cercle': (0, 0, 145),    'accent': (0, 0, 145)},
+    'sobre':    {'texte': (0, 0, 145),   'stylo': (0, 0, 145),   'bec': (0, 0, 145),    'cercle': (0, 0, 145),    'accent': (225, 0, 15)},
+}
+
+
+def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palette='elysee'):
     """La couverture d'impression complète (quatrième + dos + première), fond
     blanc, pour un livre KDP 6×9. Photo de Bernard dans un rond, titre, et un
-    stylo-plume. Le dos est calculé d'après le nombre de pages."""
+    stylo-plume. Le dos est calculé d'après le nombre de pages. `palette`
+    choisit les couleurs (voir PALETTES)."""
+    pal = PALETTES.get(palette, PALETTES['elysee'])
     BLEED = 3.175
-    ENCRE = (22, 33, 62)
-    OR = (201, 162, 77)
+    ENCRE = pal['texte']
+    OR = pal['accent']
     GRIS = (90, 96, 110)
     dos = max(6.0, pages * 0.0572)              # papier blanc KDP : 0,0572 mm/page
     L = 2 * PAGE_L + dos + 2 * BLEED
@@ -524,7 +536,7 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None):
     if port and os.path.exists(port):
         d = 60
         pdf.image(port, x=cx_front - d / 2, y=BLEED + 24, w=d, h=d)
-        pdf.set_draw_color(*OR); pdf.set_line_width(0.6)
+        pdf.set_draw_color(*pal['cercle']); pdf.set_line_width(1.2)
         pdf.ellipse(cx_front - d / 2, BLEED + 24, d, d)
 
     pdf.set_text_color(*ENCRE)
@@ -547,7 +559,7 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None):
         pdf.set_font('garamond', '', 13)
         pdf.multi_cell(PAGE_L, 7, _glyphes(meta['sous_titre']), align='C')
 
-    _stylo(pdf, cx_front, H - BLEED - 34, 66, -18)
+    _stylo(pdf, cx_front, H - BLEED - 34, 66, -18, encre=pal['stylo'], plume=pal['bec'])
 
     # ─── Dos ───
     if dos >= 9:
@@ -571,7 +583,7 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None):
     pdf.set_font('garamond', 'I', 11)
     pdf.multi_cell(PAGE_L - 40, 6, _glyphes(bio or _BIO_DEFAUT), align='L')
 
-    _stylo(pdf, cx_back, BLEED + 24, 40, -18)
+    _stylo(pdf, cx_back, BLEED + 24, 40, -18, encre=pal['stylo'], plume=pal['bec'])
     # Emplacement du code-barres (laissé blanc, KDP l'ajoute) : rien à dessiner.
 
     return bytes(pdf.output())
