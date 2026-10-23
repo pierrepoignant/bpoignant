@@ -569,7 +569,7 @@ def _rendre_portee(titre, icone, cols, lignes, tri='total'):
 @admin_required
 def portee_videos():
     cols, lignes = _reach_videos()
-    return _rendre_portee('La Minute — portée totale', 'fas fa-film', cols, lignes)
+    return _rendre_portee('La Minute — portée totale', 'fas fa-film', cols, lignes, tri='date')
 
 
 @analytics_bp.route('/portee/articles')
