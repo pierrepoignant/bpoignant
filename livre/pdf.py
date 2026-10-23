@@ -17,6 +17,7 @@ livre de chroniques, qui est du texte courant.
 
 import io
 import logging
+import math
 import os
 import re
 from datetime import date, datetime
@@ -464,37 +465,73 @@ def couverture(titre, sous_titre, auteur, portrait=None):
     return bytes(pdf.output())
 
 
-def _stylo(pdf, cx, cy, longueur, angle, encre=(22, 33, 62), plume=(201, 162, 77)):
-    """Un stylo-plume élégant, dessiné à l'horizontale puis incliné de `angle`
-    degrés autour de (cx, cy). Corps en encre, bec et bague dorés."""
-    h = longueur * 0.085
+def _stylo(pdf, cx, cy, longueur, angle=-8, encre=(22, 33, 62), plume=(201, 162, 77)):
+    """Un stylo-plume dessiné à la façon du logo : un bec pointé vers le bas,
+    surmonté d'une section à bandes, et un trait d'encre en S qui descend du bec
+    pour donner du mouvement. (cx, cy) est la pointe du bec ; `longueur` la
+    taille d'ensemble ; `angle` une légère inclinaison. `encre` : la couleur du
+    stylo et du trait ; `plume` sert d'accent discret sur la section."""
+    s = longueur
+    ww = s * 0.17          # demi-largeur du bec, en haut
+    hn = s * 0.52          # hauteur du bec
+    ch = s * 0.22          # hauteur de la section (le « cap » à bandes)
     with pdf.rotation(angle, cx, cy):
-        gauche = cx - longueur / 2
-        corps_fin = cx + longueur * 0.22
-        # Corps.
+        # ─── Trait d'encre en S, du bec vers le bas ───
+        N = 56
+        ls = s * 1.0       # longueur du trait
+        amp = s * 0.34     # amplitude de la vague
+        wmax = s * 0.085   # épaisseur maximale
+        pts = []
+        for i in range(N + 1):
+            t = i / N
+            x = cx + amp * math.sin(t * math.pi * 1.7)
+            y = cy + t * ls
+            pts.append((x, y, t))
+        gauche, droite = [], []
+        for i, (x, y, t) in enumerate(pts):
+            # tangente par différences finies
+            x0, y0 = pts[max(0, i - 1)][0], pts[max(0, i - 1)][1]
+            x1, y1 = pts[min(N, i + 1)][0], pts[min(N, i + 1)][1]
+            dx, dy = x1 - x0, y1 - y0
+            n = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / n, dx / n
+            w = wmax * math.sin(t * math.pi) + s * 0.004   # fin aux deux bouts
+            gauche.append((x + nx * w, y + ny * w))
+            droite.append((x - nx * w, y - ny * w))
         pdf.set_fill_color(*encre)
-        pdf.rect(gauche, cy - h / 2, corps_fin - gauche, h, style='F', round_corners=True, corner_radius=h / 2)
-        # Bague dorée.
-        pdf.set_fill_color(*plume)
-        pdf.rect(corps_fin - h * 0.5, cy - h / 2, h * 0.6, h, style='F')
-        # Section (grip) vers le bec.
-        bec_base = cx + longueur * 0.30
+        pdf.polygon(gauche + list(reversed(droite)), style='F')
+
+        # ─── Section à bandes (au-dessus du bec) ───
+        y_haut_bec = cy - hn
         pdf.set_fill_color(*encre)
-        pdf.polygon([(corps_fin, cy - h / 2), (bec_base, cy - h * 0.34),
-                     (bec_base, cy + h * 0.34), (corps_fin, cy + h / 2)], style='F')
-        # Bec doré, pointe à droite.
-        pointe = cx + longueur / 2
+        pdf.polygon([(cx - ww * 1.05, y_haut_bec),
+                     (cx + ww * 1.05, y_haut_bec),
+                     (cx + ww * 1.30, y_haut_bec - ch),
+                     (cx - ww * 1.30, y_haut_bec - ch)], style='F')
+        # fin liseré d'accent en haut de la section
         pdf.set_fill_color(*plume)
-        pdf.polygon([(bec_base, cy - h * 0.34), (pointe, cy),
-                     (bec_base, cy + h * 0.34)], style='F')
-        # Fente du bec.
+        pdf.rect(cx - ww * 1.30, y_haut_bec - ch, ww * 2.60, ch * 0.14, style='F')
+
+        # ─── Bec pointé vers le bas ───
+        pdf.set_fill_color(*encre)
+        pdf.polygon([(cx - ww, y_haut_bec), (cx + ww, y_haut_bec), (cx, cy)], style='F')
+
+        # Trou d'aération (évidé) et fente, en blanc.
+        pdf.set_fill_color(255, 255, 255)
+        r = s * 0.055
+        pdf.ellipse(cx - r, cy - hn * 0.52 - r, 2 * r, 2 * r, style='F')
         pdf.set_draw_color(255, 255, 255)
-        pdf.set_line_width(0.4)
-        pdf.line(bec_base + h * 0.1, cy, pointe - h * 0.1, cy)
+        pdf.set_line_width(s * 0.018)
+        pdf.line(cx, cy - hn * 0.52, cx, cy - hn * 0.06)
+        # Deux bandes blanches sur la section.
+        for k in (0.42, 0.66):
+            yb = y_haut_bec - ch + ch * k
+            demi = (ww * 1.05) + (ww * 0.25) * (1 - k)
+            pdf.line(cx - demi, yb, cx + demi, yb)
 
 
-# Palettes nommées pour la couverture : (texte, corps du stylo, bec du stylo,
-# cercle du portrait, filet/accent).
+# Palettes nommées pour la couverture : (texte, corps du stylo, bec/accent du
+# stylo, cercle du portrait, filet/accent).
 PALETTES = {
     'or':       {'texte': (22, 33, 62),  'stylo': (22, 33, 62),  'bec': (201, 162, 77), 'cercle': (201, 162, 77), 'accent': (201, 162, 77)},
     'elysee':   {'texte': (0, 0, 145),   'stylo': (0, 0, 145),   'bec': (0, 0, 145),    'cercle': (225, 0, 15),   'accent': (225, 0, 15)},
@@ -559,7 +596,7 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
         pdf.set_font('garamond', '', 13)
         pdf.multi_cell(PAGE_L, 7, _glyphes(meta['sous_titre']), align='C')
 
-    _stylo(pdf, cx_front, H - BLEED - 34, 66, -18, encre=pal['stylo'], plume=pal['bec'])
+    _stylo(pdf, cx_front, H * 0.555, 56, -8, encre=pal['stylo'], plume=pal['bec'])
 
     # ─── Dos ───
     if dos >= 9:
@@ -583,7 +620,7 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
     pdf.set_font('garamond', 'I', 11)
     pdf.multi_cell(PAGE_L - 40, 6, _glyphes(bio or _BIO_DEFAUT), align='L')
 
-    _stylo(pdf, cx_back, BLEED + 24, 40, -18, encre=pal['stylo'], plume=pal['bec'])
+    _stylo(pdf, cx_back, BLEED + 30, 30, -8, encre=pal['stylo'], plume=pal['bec'])
     # Emplacement du code-barres (laissé blanc, KDP l'ajoute) : rien à dessiner.
 
     return bytes(pdf.output())
