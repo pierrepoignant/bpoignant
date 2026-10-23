@@ -93,6 +93,7 @@ class TikTokPost(db.Model):
     fb_profile_likes = db.Column(db.Integer, nullable=True)
     fb_profile_comments = db.Column(db.Integer, nullable=True)
     fb_profile_shares = db.Column(db.Integer, nullable=True)
+    fb_profile_views = db.Column(db.Integer, nullable=True)
     fb_profile_metrics_at = db.Column(db.DateTime, nullable=True)
     # Chiffres LinkedIn, repris de l'export : l'API n'en donne aucun pour la
     # publication d'un membre, et aucun scrapeur n'atteint les impressions,

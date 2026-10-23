@@ -229,6 +229,14 @@
            class="btn btn-sm {% if _p == '/admin/analytics/reseau/threads' %}btn-vert{% else %}btn-outline{% endif %}">
             Threads
         </a>
+        <a href="{{ url_for('analytics.portee_articles') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/portee/articles' %}btn-vert{% else %}btn-outline{% endif %}">
+            Portée articles
+        </a>
+        <a href="{{ url_for('analytics.portee_videos') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/portee/videos' %}btn-vert{% else %}btn-outline{% endif %}">
+            Portée La Minute
+        </a>
         <a href="{{ url_for('admin_sends.newsletter_stats') }}"
            class="btn btn-sm {% if _p.startswith('/admin/sends/stats') %}btn-vert{% else %}btn-outline{% endif %}">
             Newsletter

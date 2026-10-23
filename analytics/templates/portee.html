@@ -1,0 +1,45 @@
+{% extends 'admin_base.html' %}
+{% block title %}{{ titre }}{% endblock %}
+{% block admin_title %}<i class="{{ icone }}" style="color: var(--vert);"></i> {{ titre }}{% endblock %}
+{% block admin_subtitle %}<p>Vues cumulées tous réseaux, par publication. Chaque réseau compte à sa façon : c'est un ordre de grandeur de la portée, pas une mesure exacte.</p>{% endblock %}
+
+{% block admin_content %}
+    <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.4rem;">
+        <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Portée totale cumulée</div>
+        <div style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce);">{{ '{:,}'.format(total_general).replace(',', ' ') }}</div>
+        <div style="color: var(--gris); font-size: 0.82rem;">{{ lignes|length }} publication(s)</div>
+    </div>
+
+    <div class="admin-table-wrap" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.4rem 0.6rem; overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 640px;">
+        <thead>
+            <tr style="text-align: right; color: var(--gris); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em;">
+                <th style="text-align: left; padding: 0.6rem 0.5rem;">Publication</th>
+                {% for c in colonnes %}<th style="padding: 0.6rem 0.5rem;">{{ c }}</th>{% endfor %}
+                <th style="padding: 0.6rem 0.5rem; color: var(--vert-fonce);">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in lignes %}
+            <tr style="border-top: 1px solid var(--gris-clair);">
+                <td style="padding: 0.55rem 0.5rem; max-width: 280px;">
+                    <div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.titre }}</div>
+                    <div style="font-size: 0.74rem; color: var(--gris);">{{ r.date.strftime('%d/%m/%Y') if r.date else '—' }}</div>
+                </td>
+                {% for v in r.valeurs %}
+                <td style="padding: 0.55rem 0.5rem; text-align: right; font-variant-numeric: tabular-nums; {% if not v %}color: #c4c4c4;{% endif %}">{{ '{:,}'.format(v).replace(',', ' ') if v else '—' }}</td>
+                {% endfor %}
+                <td style="padding: 0.55rem 0.5rem; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums;">{{ '{:,}'.format(r.total).replace(',', ' ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="border-top: 2px solid var(--gris-clair); font-weight: 700;">
+                <td style="padding: 0.6rem 0.5rem;">Total</td>
+                {% for t in totaux %}<td style="padding: 0.6rem 0.5rem; text-align: right; font-variant-numeric: tabular-nums;">{{ '{:,}'.format(t).replace(',', ' ') }}</td>{% endfor %}
+                <td style="padding: 0.6rem 0.5rem; text-align: right; color: var(--vert-fonce); font-variant-numeric: tabular-nums;">{{ '{:,}'.format(total_general).replace(',', ' ') }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+{% endblock %}

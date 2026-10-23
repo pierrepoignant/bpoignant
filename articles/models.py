@@ -93,6 +93,7 @@ class Article(db.Model):
     fb_profile_likes = db.Column(db.Integer, nullable=True)
     fb_profile_comments = db.Column(db.Integer, nullable=True)
     fb_profile_shares = db.Column(db.Integer, nullable=True)
+    fb_profile_views = db.Column(db.Integer, nullable=True)
     fb_profile_metrics_at = db.Column(db.DateTime, nullable=True)
 
     # Threads : identifiant et date du post. API séparée de la Page/Instagram.

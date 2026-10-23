@@ -451,8 +451,12 @@ def _migrate_schema():
         if 'fb_profile_post_url' not in cols:
             for c in ('fb_profile_post_url VARCHAR(500) NULL', 'fb_profile_posted_at DATETIME NULL',
                       'fb_profile_likes INTEGER NULL', 'fb_profile_comments INTEGER NULL',
-                      'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL'):
+                      'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL',
+                      'fb_profile_views INTEGER NULL'):
                 db.session.execute(text(f"ALTER TABLE tiktok_posts ADD COLUMN {c}"))
+            db.session.commit()
+        if 'fb_profile_views' not in cols:
+            db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN fb_profile_views INTEGER NULL"))
             db.session.commit()
 
     if 'articles' in inspector.get_table_names():
@@ -464,8 +468,12 @@ def _migrate_schema():
         if 'fb_profile_post_url' not in cols:
             for c in ('fb_profile_post_url VARCHAR(500) NULL', 'fb_profile_posted_at DATETIME NULL',
                       'fb_profile_likes INTEGER NULL', 'fb_profile_comments INTEGER NULL',
-                      'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL'):
+                      'fb_profile_shares INTEGER NULL', 'fb_profile_metrics_at DATETIME NULL',
+                      'fb_profile_views INTEGER NULL'):
                 db.session.execute(text(f"ALTER TABLE articles ADD COLUMN {c}"))
+            db.session.commit()
+        if 'fb_profile_views' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN fb_profile_views INTEGER NULL"))
             db.session.commit()
         if 'threads_post_id' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN threads_post_id VARCHAR(60) NULL"))

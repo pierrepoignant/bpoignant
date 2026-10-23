@@ -507,3 +507,69 @@ def reseau_stats(reseau):
     if data is None:
         abort(404)
     return render_template('reseau_stats.html', reseau=reseau.lower(), data=data)
+
+
+# ─── Portée totale : vues cumulées tous réseaux, par publication ────
+#
+# Chaque réseau mesure une « vue » à sa façon (une lecture sur le site, une vue
+# TikTok, une impression X…) : les additionner donne un ordre de grandeur de la
+# portée, pas une mesure exacte. C'est assumé — une seule ligne, « combien de
+# monde ce texte a-t-il touché, en gros ».
+
+def _n(v):
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _reach_videos():
+    from tiktok.models import TikTokPost, VideoView
+    cols = ['Site', 'TikTok', 'X', 'YouTube', 'Facebook', 'Instagram', 'Profil FB']
+    vues_site = dict(db.session.query(VideoView.post_id, func.count(VideoView.id))
+                     .group_by(VideoView.post_id).all())
+    lignes = []
+    for p in TikTokPost.query.filter(TikTokPost.video_url.isnot(None)).all():
+        vals = [_n(vues_site.get(p.id)), _n(p.views), _n(p.x_view_count),
+                _n(p.youtube_views), _n(p.fb_views), _n(p.instagram_views),
+                _n(p.fb_profile_views)]
+        lignes.append({'titre': p.title, 'url': None, 'date': p.posted_at,
+                       'valeurs': vals, 'total': sum(vals)})
+    return cols, lignes
+
+
+def _reach_articles():
+    from articles.models import Article
+    from analytics.models import PageView
+    cols = ['Site', 'X', 'Threads', 'Profil FB']
+    vues_path = dict(db.session.query(PageView.path, func.count(PageView.id))
+                     .group_by(PageView.path).all())
+    lignes = []
+    for a in Article.query.filter(Article.published.is_(True)).all():
+        site = _n(vues_path.get(f'/articles/{a.slug}'))
+        vals = [site, _n(a.x_view_count), _n(a.threads_views), _n(a.fb_profile_views)]
+        lignes.append({'titre': a.title, 'url': None, 'date': a.created_at,
+                       'valeurs': vals, 'total': sum(vals)})
+    return cols, lignes
+
+
+def _rendre_portee(titre, icone, cols, lignes):
+    lignes.sort(key=lambda r: r['total'], reverse=True)
+    totaux = [sum(r['valeurs'][i] for r in lignes) for i in range(len(cols))]
+    return render_template('portee.html', titre=titre, icone=icone, colonnes=cols,
+                           lignes=lignes, totaux=totaux,
+                           total_general=sum(totaux))
+
+
+@analytics_bp.route('/portee/videos')
+@admin_required
+def portee_videos():
+    cols, lignes = _reach_videos()
+    return _rendre_portee('La Minute — portée totale', 'fas fa-film', cols, lignes)
+
+
+@analytics_bp.route('/portee/articles')
+@admin_required
+def portee_articles():
+    cols, lignes = _reach_articles()
+    return _rendre_portee('Articles — portée totale', 'fas fa-newspaper', cols, lignes)

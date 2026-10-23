@@ -624,12 +624,15 @@ def _fb_profile_apply(obj, item, maintenant):
     likes = entier(_fb_profile_pick(item, 'likes', 'likesCount', 'reactionsCount', 'reactions', 'topReactionsCount'))
     comm = entier(_fb_profile_pick(item, 'comments', 'commentsCount'))
     shares = entier(_fb_profile_pick(item, 'shares', 'sharesCount'))
+    views = entier(_fb_profile_pick(item, 'viewsCount', 'videoPostViewCount'))
     if likes is not None:
         obj.fb_profile_likes = likes
     if comm is not None:
         obj.fb_profile_comments = comm
     if shares is not None:
         obj.fb_profile_shares = shares
+    if views is not None:
+        obj.fb_profile_views = views
     obj.fb_profile_metrics_at = maintenant
 
 
