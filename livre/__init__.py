@@ -957,6 +957,34 @@ def livre_pdf_couverture():
                     headers={'Content-Disposition': 'inline; filename="couverture.pdf"'})
 
 
+@admin_livre_bp.route('/pdf/couverture-kindle')
+@admin_required
+def livre_couverture_kindle():
+    """La première de couverture seule, en JPEG (pour l'ebook Kindle)."""
+    from flask import Response
+    import livre.epub as epubmod
+    data = epubmod.couverture_image(_meta_livre())
+    return Response(data, mimetype='image/jpeg',
+                    headers={'Content-Disposition': 'attachment; filename="couverture-kindle.jpg"'})
+
+
+@admin_livre_bp.route('/pdf/epub')
+@admin_required
+def livre_epub():
+    """Le livre en EPUB recomposable, couverture intégrée (pour Kindle)."""
+    from flask import Response
+    import livre.epub as epubmod
+    meta = _meta_livre()
+    try:
+        cover = epubmod.couverture_image(meta)
+    except Exception as exc:
+        log.warning("Couverture Kindle indisponible : %s", exc)
+        cover = None
+    data = epubmod.construire_epub(_docs_par_theme(), meta, cover_bytes=cover)
+    return Response(data, mimetype='application/epub+zip',
+                    headers={'Content-Disposition': 'attachment; filename="chroniques-bernard-poignant.epub"'})
+
+
 @admin_livre_bp.route('/pdf/generer', methods=['POST'])
 @admin_required
 def livre_pdf_generer():
