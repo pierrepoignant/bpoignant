@@ -943,10 +943,17 @@ def livre_pdf_apercu():
 @admin_livre_bp.route('/pdf/couverture')
 @admin_required
 def livre_pdf_couverture():
+    import json
     from flask import Response
+    from settings.models import get_config
     from livre import pdf as pdfmod
-    titre, sous, auteur = _reglages_livre()
-    return Response(pdfmod.couverture(titre, sous, auteur), mimetype='application/pdf',
+    meta = _meta_livre()
+    pages = 529
+    try:
+        pages = int(json.loads(get_config(KEY_PDF_META) or '{}').get('pages') or 529)
+    except (ValueError, TypeError):
+        pages = 529
+    return Response(pdfmod.couverture_complete(meta, pages), mimetype='application/pdf',
                     headers={'Content-Disposition': 'inline; filename="couverture.pdf"'})
 
 
