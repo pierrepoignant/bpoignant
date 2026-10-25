@@ -26,40 +26,56 @@ def main():
     ap.add_argument('--db', default='ovh', choices=['ovh', 'local'])
     ap.add_argument('--clips', type=int, default=5)
     ap.add_argument('--nom', default='Bernard Poignant')
+    ap.add_argument('--file', nargs='*', default=None,
+                    help="Un ou plusieurs fichiers audio/vidéo locaux à utiliser "
+                         "comme échantillons (au lieu des clips TikTok).")
     args = ap.parse_args()
 
     app = create_app(args.db)
     with app.app_context():
         import podcast
-        from tiktok.models import TikTokPost
-        from init_db import db
         cle = podcast.api_key()
         if not cle:
             print("Clé ElevenLabs absente — renseignez-la dans Réglages → Podcast.")
             return
-        # Les plus longs d'abord : plus de voix propre pour le clonage.
-        clips = (TikTokPost.query.filter(TikTokPost.video_url.isnot(None))
-                 .order_by(db.func.coalesce(TikTokPost.duration_seconds, 0).desc(),
-                           TikTokPost.id.desc())
-                 .limit(args.clips).all())
-        if not clips:
-            print("Aucun clip avec vidéo.")
-            return
         with tempfile.TemporaryDirectory() as d:
             fichiers = []
-            for i, c in enumerate(clips):
-                try:
-                    r = requests.get(c.video_url, timeout=120)
-                    mp4 = os.path.join(d, f'clip{i}.mp4')
-                    open(mp4, 'wb').write(r.content)
+            if args.file:
+                # Échantillons fournis localement (vidéo WhatsApp, enregistrement…).
+                for i, src in enumerate(args.file):
+                    if not os.path.exists(src):
+                        print(f"introuvable : {src}")
+                        continue
                     mp3 = os.path.join(d, f'voix{i}.mp3')
-                    subprocess.run(['ffmpeg', '-y', '-i', mp4, '-vn', '-ac', '1',
+                    subprocess.run(['ffmpeg', '-y', '-i', src, '-vn', '-ac', '1',
                                     '-ar', '44100', '-b:a', '128k', mp3],
                                    check=True, capture_output=True)
                     fichiers.append(mp3)
-                    print(f"extrait : {c.title[:45]}")
-                except Exception as exc:  # noqa: BLE001
-                    print(f"clip ignoré ({c.title[:30]}): {exc}")
+                    print(f"extrait : {os.path.basename(src)}")
+            else:
+                from tiktok.models import TikTokPost
+                from init_db import db
+                # Les plus longs d'abord : plus de voix propre pour le clonage.
+                clips = (TikTokPost.query.filter(TikTokPost.video_url.isnot(None))
+                         .order_by(db.func.coalesce(TikTokPost.duration_seconds, 0).desc(),
+                                   TikTokPost.id.desc())
+                         .limit(args.clips).all())
+                if not clips:
+                    print("Aucun clip avec vidéo.")
+                    return
+                for i, c in enumerate(clips):
+                    try:
+                        r = requests.get(c.video_url, timeout=120)
+                        mp4 = os.path.join(d, f'clip{i}.mp4')
+                        open(mp4, 'wb').write(r.content)
+                        mp3 = os.path.join(d, f'voix{i}.mp3')
+                        subprocess.run(['ffmpeg', '-y', '-i', mp4, '-vn', '-ac', '1',
+                                        '-ar', '44100', '-b:a', '128k', mp3],
+                                       check=True, capture_output=True)
+                        fichiers.append(mp3)
+                        print(f"extrait : {c.title[:45]}")
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"clip ignoré ({c.title[:30]}): {exc}")
             if not fichiers:
                 print("Aucun audio extrait.")
                 return
