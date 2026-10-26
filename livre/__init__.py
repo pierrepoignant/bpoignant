@@ -643,6 +643,7 @@ CHAMPS_LIVRE = {
     'editeur':      'livre_editeur',        # nom de l'éditeur, page de copyright
     'isbn':         'livre_isbn',           # ISBN (KDP en fournit un gratuit)
     'depot_legal':  'livre_depot_legal',    # « octobre 2026 », exigé en France
+    'prix':         'livre_prix',           # prix public, imprimé en 4e de couverture
 }
 
 GEN = {'en_cours': False}

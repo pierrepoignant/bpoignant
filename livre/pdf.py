@@ -621,7 +621,14 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
     pdf.set_font('garamond', 'I', 11)
     pdf.multi_cell(PAGE_L - 40, 6, _glyphes(bio or _BIO_DEFAUT), align='L')
 
-    # Emplacement du code-barres (laissé blanc, KDP l'ajoute) : rien à dessiner.
+    # Prix public, en bas à gauche — le code-barres KDP occupe le bas à droite,
+    # qu'on laisse blanc.
+    prix = (meta.get('prix') or '').strip()
+    if prix:
+        pdf.set_xy(BLEED + 20, H - BLEED - 26)
+        pdf.set_text_color(*ENCRE)
+        pdf.set_font('garamond', 'B', 14)
+        pdf.cell(0, 8, _glyphes(prix))
 
     return bytes(pdf.output())
 
