@@ -1006,12 +1006,25 @@ def livre_pdf_etat():
 def livre_pdf_telecharger(quoi):
     import storage
     from flask import Response
-    cle = {'livre': S3_LIVRE, 'couverture': S3_COUVERTURE}.get(quoi)
+    if quoi == 'couverture':
+        # Toujours régénérée : prix, sous-titre et nombre de pages courants —
+        # jamais la version figée dans S3.
+        import json
+        from settings.models import get_config
+        from livre import pdf as pdfmod
+        meta = _meta_livre()
+        try:
+            pages = int(json.loads(get_config(KEY_PDF_META) or '{}').get('pages') or 529)
+        except (ValueError, TypeError):
+            pages = 529
+        data = pdfmod.couverture_complete(meta, pages)
+        return Response(data, mimetype='application/pdf',
+                        headers={'Content-Disposition': 'attachment; filename="couverture-chroniques.pdf"'})
+    cle = {'livre': S3_LIVRE}.get(quoi)
     if not cle:
         abort(404)
     data = storage.get_file(cle)
     if not data:
         abort(404)
-    nom = 'chroniques-bernard-poignant.pdf' if quoi == 'livre' else 'couverture-chroniques.pdf'
     return Response(data, mimetype='application/pdf',
-                    headers={'Content-Disposition': f'attachment; filename="{nom}"'})
+                    headers={'Content-Disposition': 'attachment; filename="chroniques-bernard-poignant.pdf"'})
