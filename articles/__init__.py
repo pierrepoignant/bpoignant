@@ -120,11 +120,27 @@ def public_list():
             .group_by(Comment.article_id)
             .all()
         )
+    # Carte « livre » en tête de la grille (hors recherche).
+    livre_card = None
+    if not query:
+        from settings.models import get_config
+        amazon = (get_config('livre_amazon_url') or '').strip()
+        cover = (get_config('livre_cover_url') or '').strip()
+        if amazon and cover:
+            livre_card = {
+                'url': amazon,
+                'cover': cover,
+                'titre': (get_config('livre_titre') or 'Une décennie de Chroniques').strip(),
+                'blurb': 'Dix ans de chroniques de la vie politique française, '
+                         'réunies pour la première fois. Disponible sur Amazon.',
+                'prix': (get_config('livre_prix') or '').strip(),
+            }
     return render_template(
         'articles_public_list.html',
         articles=articles,
         reactions_by_article=reactions_by_article,
         comments_by_article=comments_by_article,
+        livre_card=livre_card,
     )
 
 
