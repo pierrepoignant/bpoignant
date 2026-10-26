@@ -42,6 +42,12 @@
             </div>
             <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">moyenne sur la période</div>
         </div>
+        <div class="kpi-card"
+             style="background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div class="kpi-label" style="color: var(--gris); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;"><i class="fab fa-amazon"></i> Clics Amazon (livre)</div>
+            <div class="kpi-value" style="font-size: 2.2rem; font-weight: 800; color: #000091; margin-top: 0.3rem;">{{ '{:,}'.format(amazon_clicks).replace(',', ' ') }}</div>
+            <div class="kpi-sub" style="color: var(--gris); font-size: 0.8rem; margin-top: 0.2rem;">{{ '{:,}'.format(amazon_uniques).replace(',', ' ') }} visiteur{{ 's' if amazon_uniques != 1 else '' }} unique{{ 's' if amazon_uniques != 1 else '' }}</div>
+        </div>
     </div>
 
     <!-- Daily chart — metric chosen via the KPI cards above -->

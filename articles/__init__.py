@@ -144,6 +144,16 @@ def public_list():
     )
 
 
+@articles_bp.route('/livre/amazon')
+def livre_amazon():
+    """Redirection suivie vers la fiche Amazon du livre. Le passage par cette
+    URL interne fait enregistrer un PageView (/articles/livre/amazon) : on
+    compte ainsi les clics sur le lien Amazon, par jour, source et pays."""
+    from settings.models import get_config
+    cible = (get_config('livre_amazon_url') or 'https://www.amazon.fr/dp/B0HPCQGF4N/').strip()
+    return redirect(cible, code=302)
+
+
 @articles_bp.route('/<slug>')
 def public_show(slug):
     article = Article.query.filter_by(slug=slug, published=True).first()

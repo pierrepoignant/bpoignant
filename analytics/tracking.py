@@ -386,6 +386,14 @@ def dashboard():
         for p in series
     ]
 
+    # Clics sur le lien Amazon du livre (via la redirection suivie
+    # /articles/livre/amazon) sur la fenêtre : total et visiteurs uniques.
+    amazon_window = window + [PageView.path == '/articles/livre/amazon']
+    amazon_clicks = db.session.query(func.count(PageView.id)).filter(*amazon_window).scalar() or 0
+    amazon_uniques = db.session.query(
+        func.count(func.distinct(PageView.visitor_hash))
+    ).filter(*amazon_window).scalar() or 0
+
     recent = PageView.query.order_by(PageView.created_at.desc()).limit(25).all()
 
     # Quick country breakdown when available.
@@ -409,6 +417,8 @@ def dashboard():
         chart_data=chart_data,
         max_views=max_views,
         recent=recent,
+        amazon_clicks=amazon_clicks,
+        amazon_uniques=amazon_uniques,
         countries=country_rows,
         top_searches=top_searches,
         empty_searches=empty_searches,

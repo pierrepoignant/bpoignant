@@ -67,7 +67,7 @@
     {% if articles or livre_card %}
     <div class="themes-grid">
         {% if livre_card %}
-        <a href="{{ livre_card.url }}" target="_blank" rel="noopener" class="theme-tile livre-tile"
+        <a href="{{ url_for('articles.livre_amazon') }}" target="_blank" rel="noopener" class="theme-tile livre-tile"
            style="background: linear-gradient(160deg, #fff, #f3f5fb); border: 1px solid rgba(0,0,145,0.18);">
             <div style="position: absolute; top: 14px; right: 16px; background: var(--rouge); color: #fff; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 3px 10px; border-radius: 50px;">Le livre</div>
             <div style="display: flex; justify-content: center; margin: 0.4rem 0 1rem;">
