@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
 UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos'
+THUMBNAIL_URL = 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set'
 CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels'
 
 # Téléverser une vidéo, lire les statistiques publiques (vues, likes,
@@ -246,7 +247,59 @@ def _description(titre, caption):
     return (corps[:4800] + pieds).strip()
 
 
-def upload(path, title, caption=None, privacy_status=None, made_for_kids=False):
+def _premiere_image(path):
+    """La toute première image d'une vidéo, en JPEG (ffmpeg). None si l'outil
+    manque ou échoue — on ne bloque jamais une publication pour une vignette."""
+    import subprocess
+    import tempfile
+    out = None
+    try:
+        fd, out = tempfile.mkstemp(suffix='.jpg')
+        os.close(fd)
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', path,
+                        '-frames:v', '1', '-q:v', '2', out],
+                       check=True, capture_output=True, timeout=120)
+        with open(out, 'rb') as fh:
+            data = fh.read()
+        return data or None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Première image indisponible (%s) : %s", os.path.basename(path or ''), exc)
+        return None
+    finally:
+        if out and os.path.exists(out):
+            try:
+                os.remove(out)
+            except OSError:
+                pass
+
+
+def set_thumbnail(video_id, image_bytes, token=None):
+    """Définir la miniature d'une vidéo YouTube. Renvoie (ok, détail).
+
+    Nécessite le scope force-ssl (déjà demandé) et une chaîne vérifiée par
+    Google ; sinon l'API renvoie 403. Best-effort : l'appelant ne doit pas
+    faire échouer la publication si la vignette est refusée."""
+    if not image_bytes:
+        return False, "image vide"
+    try:
+        token = token or _access_token()
+    except YouTubeError as exc:
+        return False, str(exc)
+    try:
+        r = requests.post(
+            THUMBNAIL_URL,
+            params={'videoId': video_id, 'uploadType': 'media'},
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'image/jpeg'},
+            data=image_bytes, timeout=120)
+    except requests.RequestException as exc:
+        return False, f"connexion interrompue : {exc}"
+    if r.status_code not in (200, 201):
+        return False, _explain(r, "miniature refusée")
+    return True, 'ok'
+
+
+def upload(path, title, caption=None, privacy_status=None, made_for_kids=False,
+           thumbnail_first_frame=True):
     """Envoyer un fichier sur YouTube. Renvoie (ok, video_id_ou_erreur).
 
     Téléversement « resumable » : un POST ouvre la session et renvoie l'adresse
@@ -304,6 +357,15 @@ def upload(path, title, caption=None, privacy_status=None, made_for_kids=False):
     vid = (envoi.json() or {}).get('id')
     if not vid:
         return False, "YouTube n'a pas renvoyé d'identifiant de vidéo."
+
+    # Miniature = première image de la vidéo. Best-effort : on n'échoue pas la
+    # publication si l'extraction (ffmpeg) ou l'envoi de la vignette rate.
+    if thumbnail_first_frame:
+        img = _premiere_image(path)
+        if img:
+            ok_vignette, detail_vignette = set_thumbnail(vid, img, token=token)
+            if not ok_vignette:
+                log.warning("Miniature non définie pour %s : %s", vid, detail_vignette)
     return True, vid
 
 

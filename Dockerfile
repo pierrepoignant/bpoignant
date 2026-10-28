@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN apt-get update && apt-get install -y tzdata curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y tzdata curl ffmpeg && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Europe/Paris
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
