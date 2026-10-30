@@ -159,7 +159,7 @@ class Livre(FPDF):
             f"© {annee} {self.auteur}",
             "Tous droits réservés.",
             "",
-            _glyphes(self.titre_livre) + (f" — {_glyphes(self.sous_titre)}" if self.sous_titre else ""),
+            _glyphes(self.titre_livre) + (f" - {_glyphes(self.sous_titre)}" if self.sous_titre else ""),
             "Chroniques parues sur bernardpoignant.fr.",
             "",
         ]
@@ -625,10 +625,17 @@ def couverture_complete(meta, pages, portrait=None, blurb=None, bio=None, palett
     # qu'on laisse blanc.
     prix = (meta.get('prix') or '').strip()
     if prix:
-        pdf.set_xy(BLEED + 20, H - BLEED - 26)
+        pdf.set_xy(BLEED + 20, H - BLEED - 28)
         pdf.set_text_color(*ENCRE)
         pdf.set_font('garamond', 'B', 14)
         pdf.cell(0, 8, _glyphes(prix))
+
+    depot = (meta.get('depot_legal') or '').strip()
+    if depot:
+        pdf.set_xy(BLEED + 20, H - BLEED - 16)
+        pdf.set_text_color(*GRIS)
+        pdf.set_font('garamond', '', 9)
+        pdf.cell(0, 6, _glyphes(f"Dépôt légal : {depot}"))
 
     return bytes(pdf.output())
 
@@ -639,9 +646,10 @@ _BLURB_DEFAUT = (
     "le socialisme, la Bretagne : cent cinquante-cinq de ces textes, choisis parmi "
     "près d'un millier, composent ce livre.\n\n"
     "Un livre singulier : conçu, classé, corrigé et mis au jour avec l'aide de "
-    "l'intelligence artificielle — mais écrit, lui, de la seule main de son auteur."
+    "l'intelligence artificielle - mais écrit, lui, de la seule main de son auteur."
 )
 _BIO_DEFAUT = (
-    "Bernard Poignant, socialiste, ancien maire de Quimper, ancien député "
-    "européen, ancien conseiller de François Hollande."
+    "Bernard Poignant, socialiste, ancien maire de Quimper, ancien député à "
+    "l'Assemblée nationale, ancien député européen, ancien conseiller de "
+    "François Hollande."
 )
