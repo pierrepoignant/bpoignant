@@ -61,7 +61,7 @@ def main():
                     with os.fdopen(fd, 'wb') as fh:
                         for chunk in r.iter_content(1024 * 256):
                             fh.write(chunk)
-                img = youtube._premiere_image(tmp)
+                img = youtube._vignette(tmp, p.banner_title or p.title)
                 if not img:
                     print(f"  ✗ {p.youtube_video_id} : extraction image impossible")
                     ko_n += 1

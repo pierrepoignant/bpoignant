@@ -863,7 +863,8 @@ def post_to_youtube_backend(post, texte=None):
             with os.fdopen(fd, 'wb') as fh:
                 for chunk in resp.iter_content(1024 * 256):
                     fh.write(chunk)
-        ok, detail = youtube.upload(tmp, post.title, caption=legende)
+        ok, detail = youtube.upload(tmp, post.title, caption=legende,
+                                    thumbnail_title=(post.banner_title or post.title))
     finally:
         if tmp:
             try:

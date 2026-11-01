@@ -273,6 +273,78 @@ def _premiere_image(path):
                 pass
 
 
+def _vignette(path, titre):
+    """Première image de la vidéo, avec le titre incrusté en bas sur un bandeau
+    sombre (police EB Garamond, filet rouge). Renvoie le JPEG. En cas d'échec,
+    renvoie la première image brute, et None si même ça échoue."""
+    frame = _premiere_image(path)
+    if not frame:
+        return None
+    titre = (titre or '').strip()
+    if not titre:
+        return frame
+    try:
+        import io as _io
+        from PIL import Image, ImageDraw, ImageFont
+
+        img = Image.open(_io.BytesIO(frame)).convert('RGB')
+        W, H = img.size
+        draw = ImageDraw.Draw(img, 'RGBA')
+        fontpath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'livre', 'fonts', 'ebg-700-normal.ttf')
+        marge = int(W * 0.07)
+        maxw = W - 2 * marge
+
+        def _lignes(font):
+            lignes, cur = [], ''
+            for mot in titre.split():
+                essai = (cur + ' ' + mot).strip()
+                if draw.textlength(essai, font=font) <= maxw:
+                    cur = essai
+                else:
+                    if cur:
+                        lignes.append(cur)
+                    cur = mot
+            if cur:
+                lignes.append(cur)
+            return lignes
+
+        size = max(20, int(W / 13))
+        font = ImageFont.truetype(fontpath, size)
+        lignes = _lignes(font)
+        while len(lignes) > 3 and size > 20:
+            size = int(size * 0.88)
+            font = ImageFont.truetype(fontpath, size)
+            lignes = _lignes(font)
+
+        asc, desc = font.getmetrics()
+        lh = asc + desc + int(size * 0.18)
+        band_h = lh * len(lignes) + int(size * 1.0)
+        band_top = H - band_h
+
+        # Bandeau dégradé (transparent en haut, sombre en bas) pour la lisibilité.
+        overlay = Image.new('RGBA', (W, band_h), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+        for i in range(band_h):
+            od.line([(0, i), (W, i)], fill=(10, 15, 30, int(210 * (i / band_h))))
+        img.paste(overlay, (0, band_top), overlay)
+        # Filet rouge (marque).
+        draw.rectangle([0, band_top, W, band_top + max(4, int(H * 0.006))], fill=(225, 0, 15, 255))
+
+        y = band_top + int(size * 0.6)
+        for ln in lignes:
+            tw = draw.textlength(ln, font=font)
+            draw.text(((W - tw) / 2, y), ln, font=font, fill=(255, 255, 255, 255))
+            y += lh
+
+        out = _io.BytesIO()
+        img.save(out, 'JPEG', quality=90)
+        return out.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Vignette titrée indisponible : %s", exc)
+        return frame
+
+
 def set_thumbnail(video_id, image_bytes, token=None):
     """Définir la miniature d'une vidéo YouTube. Renvoie (ok, détail).
 
@@ -299,7 +371,7 @@ def set_thumbnail(video_id, image_bytes, token=None):
 
 
 def upload(path, title, caption=None, privacy_status=None, made_for_kids=False,
-           thumbnail_first_frame=True):
+           thumbnail_first_frame=True, thumbnail_title=None):
     """Envoyer un fichier sur YouTube. Renvoie (ok, video_id_ou_erreur).
 
     Téléversement « resumable » : un POST ouvre la session et renvoie l'adresse
@@ -361,7 +433,7 @@ def upload(path, title, caption=None, privacy_status=None, made_for_kids=False,
     # Miniature = première image de la vidéo. Best-effort : on n'échoue pas la
     # publication si l'extraction (ffmpeg) ou l'envoi de la vignette rate.
     if thumbnail_first_frame:
-        img = _premiere_image(path)
+        img = _vignette(path, thumbnail_title if thumbnail_title is not None else title)
         if img:
             ok_vignette, detail_vignette = set_thumbnail(vid, img, token=token)
             if not ok_vignette:
