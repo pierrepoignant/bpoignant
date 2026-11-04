@@ -701,7 +701,7 @@ politique français, pour un bandeau affiché à l'écran.
 soutient.
 
 Règles :
-- 44 caractères maximum, espaces compris. Contrainte stricte : le bandeau tient \
+- 52 caractères maximum, espaces compris. Contrainte stricte : le bandeau tient \
 sur deux lignes au plus.
 - Le propos, pas l'étiquette du sujet. Pour une vidéo qui montre que Le Pen et \
 Mélenchon veulent toujours quitter l'Union sans l'avouer, on écrit \
@@ -712,7 +712,7 @@ convient, l'infinitif aussi.
 - Pas de ponctuation finale, pas de guillemets, pas d'emoji.
 Réponds uniquement par le titre."""
 
-BANNER_MAX_CHARS = 44
+BANNER_MAX_CHARS = 52
 
 
 def generate_banner_title(transcript_text):
@@ -730,21 +730,44 @@ def generate_banner_title(transcript_text):
 
     import anthropic
     client = anthropic.Anthropic(api_key=key, timeout=45.0, max_retries=1)
-    resp = client.messages.create(
-        model=MODEL, max_tokens=100,
-        system=[{'type': 'text', 'text': BANNER_PROMPT,
-                 'cache_control': {'type': 'ephemeral'}}],
-        messages=[{'role': 'user',
-                   'content': f"Transcription :\n{transcript_text[:4000]}"}],
-    )
-    text = ''.join(b.text for b in resp.content if b.type == 'text')
-    # Keep the first non-empty line, drop any quoting, and enforce the limit
-    # here rather than trusting the model to have counted.
-    for line in (text or '').splitlines():
-        line = line.strip().strip('«»"“”\'').strip()
-        if line:
-            return line[:BANNER_MAX_CHARS].strip()
-    return None
+    messages = [{'role': 'user', 'content': f"Transcription :\n{transcript_text[:4000]}"}]
+    line = None
+    # The model does not count reliably: a title over the limit is sent back
+    # once with its length, rather than cut (« … DE L'EXTRÊME DROIT », 04/11/2026).
+    for _ in range(2):
+        resp = client.messages.create(
+            model=MODEL, max_tokens=100,
+            system=[{'type': 'text', 'text': BANNER_PROMPT,
+                     'cache_control': {'type': 'ephemeral'}}],
+            messages=messages,
+        )
+        text = ''.join(b.text for b in resp.content if b.type == 'text')
+        # Keep the first non-empty line, drop any quoting.
+        line = next((l.strip().strip('«»"“”\'').strip() for l in (text or '').splitlines()
+                     if l.strip().strip('«»"“”\'').strip()), None)
+        if not line or len(line) <= BANNER_MAX_CHARS:
+            return line
+        messages += [{'role': 'assistant', 'content': line},
+                     {'role': 'user', 'content': f"Ce titre fait {len(line)} caractères. Raccourcis-le à "
+                                                 f"{BANNER_MAX_CHARS} caractères maximum, espaces compris."}]
+    return _cut_title(line)
+
+
+# Words a title cannot end on: cut after them, it reads as unfinished.
+_TITLE_TAIL = {'DE', 'DU', 'DES', 'LE', 'LA', 'LES', 'UN', 'UNE', 'ET', 'OU', 'À', 'AU', 'AUX', 'EN', 'POUR',
+               'PAR', 'SUR', 'SANS', 'AVEC', 'DANS', 'QUE', 'QUI', 'SON', 'SA', 'SES', 'NOTRE', 'NOS', 'CE', 'CES'}
+
+
+def _cut_title(line):
+    """Last resort when the model stays over the limit. A few characters over are kept whole: a cut can change the
+    meaning (« DE L'EXTRÊME DROITE » → « DE L'EXTRÊME »), and the band absorbs them. Beyond, cut between words, never
+    inside one, and drop a dangling article or conjunction."""
+    if len(line) <= BANNER_MAX_CHARS + 8:
+        return line
+    words = line[:BANNER_MAX_CHARS + 1].rsplit(' ', 1)[0].split() if len(line) > BANNER_MAX_CHARS else line.split()
+    while words and (words[-1].upper() in _TITLE_TAIL or words[-1].endswith(("'", '’'))):
+        words.pop()
+    return ' '.join(words) or line[:BANNER_MAX_CHARS].strip()
 
 
 def write_caption(transcript_text):
