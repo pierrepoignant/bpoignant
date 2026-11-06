@@ -16,10 +16,19 @@
             Publiez depuis l'application TikTok, puis récupérez les posts pour leur
             rattacher le montage{% if not video_enabled %} (depuis le serveur de développement){% endif %}.
         </p>
-        <a href="{{ url_for('admin_tiktok.list_posts') }}" class="btn btn-sm btn-outline"
-           style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;">
-            <i class="fa-brands fa-tiktok"></i> Posts TikTok{% if a_rattacher %} · {{ a_rattacher }} à rattacher{% endif %}
-        </a>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <form method="POST" action="{{ url_for('admin_tiktok.refresh_facebook_videos') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline"
+                        style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;"
+                        title="Relève le profil Facebook et rattache les chiffres aux vidéos (lien posé à la main, ou légende à 90 %)">
+                    <i class="fa-brands fa-facebook" style="color:#1877F2;"></i> Rafraîchir le profil Facebook
+                </button>
+            </form>
+            <a href="{{ url_for('admin_tiktok.list_posts') }}" class="btn btn-sm btn-outline"
+               style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;">
+                <i class="fa-brands fa-tiktok"></i> Posts TikTok{% if a_rattacher %} · {{ a_rattacher }} à rattacher{% endif %}
+            </a>
+        </div>
     </div>
 
     {% if clips %}

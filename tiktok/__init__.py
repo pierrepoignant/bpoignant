@@ -327,6 +327,20 @@ def update_themes(post_id):
     return redirect(url_for('admin_tiktok.edit', post_id=post.id))
 
 
+@admin_tiktok_bp.route('/videos/refresh-facebook', methods=['POST'])
+@admin_required
+def refresh_facebook_videos():
+    """Relever le profil Facebook et rattacher ses chiffres aux vidéos
+    (par URL posée à la main, puis par le texte de la légende à 90 %)."""
+    from articles import refresh_facebook_profile
+    try:
+        n = refresh_facebook_profile()
+        flash(f"Profil Facebook relevé : {n} publication(s) mise(s) à jour.", 'success')
+    except Exception as exc:  # noqa: BLE001
+        flash(f"Relevé Facebook impossible : {exc}", 'danger')
+    return redirect(url_for('admin_tiktok.videos'))
+
+
 @admin_tiktok_bp.route('/videos')
 @admin_required
 def videos():
@@ -1056,6 +1070,9 @@ def update(post_id):
 
     if 'posted_url' in request.form:
         post.posted_url = (request.form.get('posted_url') or '').strip() or None
+
+    if 'fb_profile_post_url' in request.form:
+        post.fb_profile_post_url = (request.form.get('fb_profile_post_url') or '').strip() or None
 
     if not post.title:
         post.title = _title_from_caption(post.caption) or 'Clip TikTok'

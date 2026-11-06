@@ -685,12 +685,28 @@ def _fb_video_index():
 
 
 def _fb_match_video(poste_txt, paires):
+    """Retrouver la vidéo citée par le texte d'un post de profil.
+
+    1. Correspondance exacte / sous-chaîne (Bernard a collé la légende telle
+       quelle) — la plus sûre.
+    2. À défaut, correspondance « à 90 % » : au moins 90 % des mots de notre
+       légende se retrouvent dans le texte du post. Encaisse les petites
+       retouches (mot changé, emoji ôté, ajout d'une phrase)."""
     if not poste_txt:
         return None
     for norm, v in paires:
         if norm == poste_txt or norm in poste_txt:
             return v
-    return None
+    mots_poste = set(poste_txt.split())
+    meilleur, meilleur_score = None, 0.0
+    for norm, v in paires:
+        mots = set(norm.split())
+        if len(mots) < 5:          # trop court : une coïncidence est trop facile
+            continue
+        couverture = len(mots & mots_poste) / len(mots)
+        if couverture > meilleur_score:
+            meilleur, meilleur_score = v, couverture
+    return meilleur if meilleur_score >= 0.90 else None
 
 
 def refresh_facebook_profile(log_fn=print):
@@ -710,8 +726,21 @@ def refresh_facebook_profile(log_fn=print):
         return 0
     maintenant = datetime.utcnow()
     videos = _fb_video_index()
+    # Liens posés à la main (ou lors d'un relevé précédent) : on reconnaît le
+    # post à son URL, quel que soit le texte. Priorité sur la reconnaissance
+    # au texte, qui reste pour la découverte automatique.
+    from tiktok.models import TikTokPost
+    par_url = {}
+    for obj in (Article.query.filter(Article.fb_profile_post_url.isnot(None)).all()
+                + TikTokPost.query.filter(TikTokPost.fb_profile_post_url.isnot(None)).all()):
+        par_url[_fb_norm(obj.fb_profile_post_url)] = obj
     n = 0
     for item in items or []:
+        url = _fb_norm(_fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl'))
+        if url and url in par_url:
+            _fb_profile_apply(par_url[url], item, maintenant)
+            n += 1
+            continue
         slug = _fb_profile_slug(item)
         if slug:
             article = Article.query.filter_by(slug=slug).first()

@@ -67,6 +67,14 @@
                        placeholder="https://www.tiktok.com/@bernardpoignant/video/…"
                        style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; margin-bottom: 1rem;">
 
+                <label style="display:block; font-size:0.72rem; color:var(--gris); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.25rem;">
+                    Lien du post sur le profil Facebook
+                    <span style="text-transform:none; letter-spacing:0; color:#bbb;">— pour rattacher les j'aime / vues du profil à cette vidéo</span>
+                </label>
+                <input type="url" name="fb_profile_post_url" value="{{ p.fb_profile_post_url or '' }}"
+                       placeholder="https://www.facebook.com/bernard.poignant.1/posts/…"
+                       style="width: 100%; padding: 9px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: inherit; font-size: 0.88rem; margin-bottom: 1rem;">
+
                 <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Enregistrer</button>
             </form>
 
