@@ -666,6 +666,22 @@ def _fb_norm(texte):
     return re.sub(r'\s+', ' ', (texte or '').lower()).strip()
 
 
+# Un même post Facebook se présente sous plusieurs URL : /reel/<id>,
+# /<profil>/videos/<id>, /<profil>/posts/<id>, permalink.php?story_fbid=<id>…
+# On compare donc sur l'identifiant numérique, pas sur l'URL entière.
+_FB_ID_RE = re.compile(r'(?:/reel/|/videos/|/posts/|/permalink/|story_fbid=|[?&]v=|fbid=)(\d+)')
+
+
+def _fb_url_id(url):
+    if not url:
+        return None
+    m = _FB_ID_RE.search(url)
+    if m:
+        return m.group(1)
+    nums = re.findall(r'\d{6,}', url)   # repli : la plus longue suite de chiffres
+    return nums[-1] if nums else None
+
+
 def _fb_video_index():
     """{texte normalisé → vidéo} pour retrouver une vidéo à partir du texte d'un
     post de profil : Bernard colle notre légende, donc elle s'y retrouve. On
@@ -730,15 +746,18 @@ def refresh_facebook_profile(log_fn=print):
     # post à son URL, quel que soit le texte. Priorité sur la reconnaissance
     # au texte, qui reste pour la découverte automatique.
     from tiktok.models import TikTokPost
-    par_url = {}
+    par_id = {}
     for obj in (Article.query.filter(Article.fb_profile_post_url.isnot(None)).all()
                 + TikTokPost.query.filter(TikTokPost.fb_profile_post_url.isnot(None)).all()):
-        par_url[_fb_norm(obj.fb_profile_post_url)] = obj
+        cle = _fb_url_id(obj.fb_profile_post_url)
+        if cle:
+            par_id[cle] = obj
     n = 0
     for item in items or []:
-        url = _fb_norm(_fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl'))
-        if url and url in par_url:
-            _fb_profile_apply(par_url[url], item, maintenant)
+        url = _fb_profile_pick(item, 'url', 'topLevelUrl', 'postUrl', 'facebookUrl')
+        cle = _fb_url_id(url)
+        if cle and cle in par_id:
+            _fb_profile_apply(par_id[cle], item, maintenant)
             n += 1
             continue
         slug = _fb_profile_slug(item)
