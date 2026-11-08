@@ -5,6 +5,15 @@
 {% block admin_subtitle %}<p>Totaux actuels et classement des publications. {{ data.note or '' }}</p>{% endblock %}
 
 {% block admin_content %}
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+        <form method="POST" action="{{ url_for('analytics.reseau_refresh', reseau=reseau) }}" style="margin: 0;"
+              onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Relevé en cours…';">
+            <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;">
+                <i class="fas fa-rotate"></i> Rafraîchir les chiffres{% if reseau in ('facebook-profil', 'profil-facebook') %} <span style="color: var(--gris);">(Apify)</span>{% endif %}
+            </button>
+        </form>
+    </div>
+
     {# Totaux #}
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.8rem;">
         {% for t in data.totaux %}

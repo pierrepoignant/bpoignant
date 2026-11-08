@@ -2,7 +2,7 @@ import hashlib
 import re
 from datetime import datetime, date, time, timedelta
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import func
 
@@ -504,7 +504,30 @@ def _reseau_data(reseau):
                        {'label': "j'aime articles", 'valeur': somme(arts, 'fb_page_likes')},
                        {'label': 'commentaires articles', 'valeur': somme(arts, 'fb_page_comments')}],
             'posts': items,
-            'note': 'Le profil personnel de Bernard est suivi à part, sur la fiche de chaque article.',
+            'note': 'La Page officielle, via l’API. Le profil personnel de Bernard est suivi à part (onglet « FB Profil »).',
+        }
+    if reseau in ('facebook-profil', 'profil-facebook'):
+        # Le profil PERSONNEL de Bernard, relevé par scraping (Apify) : articles
+        # (par lien) et vidéos (par légende / URL de reel). Champs fb_profile_*.
+        vids = TikTokPost.query.filter(TikTokPost.fb_profile_metrics_at.isnot(None)).all()
+        arts = Article.query.filter(Article.fb_profile_metrics_at.isnot(None)).all()
+        items = ([{'titre': v.title, 'url': v.fb_profile_post_url, 'date': v.fb_profile_posted_at, 'genre': 'vidéo',
+                   'metriques': [{'label': 'vues', 'valeur': v.fb_profile_views},
+                                 {'label': "j'aime", 'valeur': v.fb_profile_likes},
+                                 {'label': 'comm.', 'valeur': v.fb_profile_comments}]} for v in vids]
+                 + [{'titre': a.title, 'url': a.fb_profile_post_url, 'date': a.fb_profile_posted_at, 'genre': 'article',
+                     'metriques': [{'label': 'vues', 'valeur': a.fb_profile_views},
+                                   {'label': "j'aime", 'valeur': a.fb_profile_likes},
+                                   {'label': 'comm.', 'valeur': a.fb_profile_comments}]} for a in arts])
+        items.sort(key=lambda i: i['date'] or datetime.min, reverse=True)
+        return {
+            'titre': 'Facebook (Profil de Bernard)', 'icone': 'fa-brands fa-facebook', 'couleur': '#0866FF',
+            'totaux': [{'label': 'publications', 'valeur': len(vids) + len(arts)},
+                       {'label': 'vues', 'valeur': somme(vids, 'fb_profile_views') + somme(arts, 'fb_profile_views')},
+                       {'label': "j'aime", 'valeur': somme(vids, 'fb_profile_likes') + somme(arts, 'fb_profile_likes')},
+                       {'label': 'commentaires', 'valeur': somme(vids, 'fb_profile_comments') + somme(arts, 'fb_profile_comments')}],
+            'posts': items,
+            'note': 'Profil personnel (non API), relevé par scraping. Le rafraîchissement consomme un crédit Apify.',
         }
     return None
 
@@ -517,6 +540,40 @@ def reseau_stats(reseau):
     if data is None:
         abort(404)
     return render_template('reseau_stats.html', reseau=reseau.lower(), data=data)
+
+
+@analytics_bp.route('/reseau/<reseau>/refresh', methods=['POST'])
+@admin_required
+def reseau_refresh(reseau):
+    """Relever à la demande les chiffres d'un réseau, puis revenir à sa page."""
+    from flask import abort
+    reseau = (reseau or '').lower()
+    msgs = []
+    try:
+        if reseau == 'youtube':
+            import tiktok
+            msgs.append(f"{tiktok.refresh_youtube_stats()} vidéo(s) YouTube")
+        elif reseau == 'instagram':
+            import tiktok
+            msgs.append(f"{tiktok.refresh_meta_stats()} publication(s) Meta (Instagram / Page)")
+        elif reseau == 'facebook':
+            import tiktok
+            from articles import refresh_article_social_stats
+            nv = tiktok.refresh_meta_stats()
+            na = refresh_article_social_stats(lambda m: None)
+            msgs.append(f"{nv} vidéo(s) Page + {na} article(s) Page/Threads")
+        elif reseau == 'threads':
+            from articles import refresh_article_social_stats
+            msgs.append(f"{refresh_article_social_stats(lambda m: None)} article(s) Threads/Page")
+        elif reseau in ('facebook-profil', 'profil-facebook'):
+            from articles import refresh_facebook_profile
+            msgs.append(f"{refresh_facebook_profile()} publication(s) du profil")
+        else:
+            abort(404)
+        flash("Chiffres mis à jour : " + " · ".join(msgs), 'success')
+    except Exception as exc:  # noqa: BLE001
+        flash(f"Relevé impossible : {exc}", 'danger')
+    return redirect(url_for('analytics.reseau_stats', reseau=reseau))
 
 
 # ─── Portée totale : vues cumulées tous réseaux, par publication ────

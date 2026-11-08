@@ -219,7 +219,11 @@
         </a>
         <a href="{{ url_for('analytics.reseau_stats', reseau='facebook') }}"
            class="btn btn-sm {% if _p == '/admin/analytics/reseau/facebook' %}btn-vert{% else %}btn-outline{% endif %}">
-            Facebook
+            FB Page
+        </a>
+        <a href="{{ url_for('analytics.reseau_stats', reseau='facebook-profil') }}"
+           class="btn btn-sm {% if _p == '/admin/analytics/reseau/facebook-profil' %}btn-vert{% else %}btn-outline{% endif %}">
+            FB Profil
         </a>
         <a href="{{ url_for('analytics.reseau_stats', reseau='instagram') }}"
            class="btn btn-sm {% if _p == '/admin/analytics/reseau/instagram' %}btn-vert{% else %}btn-outline{% endif %}">
