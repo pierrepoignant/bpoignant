@@ -617,7 +617,7 @@ def _n(v):
 
 def _reach_videos():
     from tiktok.models import TikTokPost, VideoView
-    cols = ['Site', 'TikTok', 'X', 'YouTube', 'Facebook', 'Instagram', 'Profil FB']
+    cols = ['Site', 'TikTok', 'X', 'YouTube', 'FB Page', 'Instagram', 'FB Profil']
     vues_site = dict(db.session.query(VideoView.post_id, func.count(VideoView.id))
                      .group_by(VideoView.post_id).all())
     lignes = []
@@ -633,7 +633,7 @@ def _reach_videos():
 def _reach_articles():
     from articles.models import Article
     from analytics.models import PageView
-    cols = ['Site', 'X', 'Threads', 'Profil FB']
+    cols = ['Site', 'X', 'Threads', 'FB Profil']
     vues_path = dict(db.session.query(PageView.path, func.count(PageView.id))
                      .group_by(PageView.path).all())
     lignes = []
