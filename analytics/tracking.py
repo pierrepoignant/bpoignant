@@ -1,5 +1,6 @@
 import hashlib
 import re
+import threading
 from datetime import datetime, date, time, timedelta
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
@@ -442,7 +443,7 @@ def _reseau_data(reseau):
 
     if reseau == 'youtube':
         vids = TikTokPost.query.filter(TikTokPost.youtube_video_id.isnot(None)).all()
-        items = sorted(vids, key=lambda v: (v.youtube_views or 0), reverse=True)
+        items = sorted(vids, key=lambda v: v.youtube_posted_at or datetime.min, reverse=True)
         return {
             'titre': 'YouTube', 'icone': 'fa-brands fa-youtube', 'couleur': '#FF0000',
             'totaux': [{'label': 'vidéos', 'valeur': len(vids)},
@@ -456,7 +457,7 @@ def _reseau_data(reseau):
         }
     if reseau == 'instagram':
         vids = TikTokPost.query.filter(TikTokPost.instagram_media_id.isnot(None)).all()
-        items = sorted(vids, key=lambda v: (v.instagram_views or 0), reverse=True)
+        items = sorted(vids, key=lambda v: v.instagram_posted_at or datetime.min, reverse=True)
         return {
             'titre': 'Instagram', 'icone': 'fa-brands fa-instagram', 'couleur': '#E4405F',
             'totaux': [{'label': 'Reels', 'valeur': len(vids)},
@@ -470,7 +471,7 @@ def _reseau_data(reseau):
         }
     if reseau == 'threads':
         arts = Article.query.filter(Article.threads_post_id.isnot(None)).all()
-        items = sorted(arts, key=lambda a: (a.threads_views or 0), reverse=True)
+        items = sorted(arts, key=lambda a: a.threads_posted_at or datetime.min, reverse=True)
         return {
             'titre': 'Threads', 'icone': 'fa-brands fa-threads', 'couleur': '#000',
             'totaux': [{'label': 'articles', 'valeur': len(arts)},
@@ -542,37 +543,61 @@ def reseau_stats(reseau):
     return render_template('reseau_stats.html', reseau=reseau.lower(), data=data)
 
 
+_RESEAUX_RELEVABLES = {'youtube', 'instagram', 'facebook', 'threads', 'facebook-profil', 'profil-facebook'}
+_RESEAU_EN_COURS = set()   # relevés en cours (garde-fou best-effort contre le double-clic)
+
+
+def _executer_reseau_refresh(reseau):
+    """Le travail de relevé d'un réseau. Renvoie un message résumé."""
+    if reseau == 'youtube':
+        import tiktok
+        return f"{tiktok.refresh_youtube_stats()} vidéo(s) YouTube"
+    if reseau == 'instagram':
+        import tiktok
+        return f"{tiktok.refresh_meta_stats()} publication(s) Meta (Instagram / Page)"
+    if reseau == 'facebook':
+        import tiktok
+        from articles import refresh_article_social_stats
+        nv = tiktok.refresh_meta_stats()
+        na = refresh_article_social_stats(lambda m: None)
+        return f"{nv} vidéo(s) Page + {na} article(s) Page/Threads"
+    if reseau == 'threads':
+        from articles import refresh_article_social_stats
+        return f"{refresh_article_social_stats(lambda m: None)} article(s) Threads/Page"
+    if reseau in ('facebook-profil', 'profil-facebook'):
+        from articles import refresh_facebook_profile
+        return f"{refresh_facebook_profile()} publication(s) du profil"
+    return ''
+
+
+def _reseau_refresh_travail(app, reseau):
+    with app.app_context():
+        with app.test_request_context('/', base_url='https://bernardpoignant.fr'):
+            try:
+                msg = _executer_reseau_refresh(reseau)
+                app.logger.info("Relevé %s terminé : %s", reseau, msg)
+            except Exception:  # noqa: BLE001
+                app.logger.exception("Relevé %s échoué", reseau)
+            finally:
+                _RESEAU_EN_COURS.discard(reseau)
+
+
 @analytics_bp.route('/reseau/<reseau>/refresh', methods=['POST'])
 @admin_required
 def reseau_refresh(reseau):
-    """Relever à la demande les chiffres d'un réseau, puis revenir à sa page."""
+    """Lancer le relevé d'un réseau en arrière-plan, puis revenir à sa page."""
     from flask import abort
     reseau = (reseau or '').lower()
-    msgs = []
-    try:
-        if reseau == 'youtube':
-            import tiktok
-            msgs.append(f"{tiktok.refresh_youtube_stats()} vidéo(s) YouTube")
-        elif reseau == 'instagram':
-            import tiktok
-            msgs.append(f"{tiktok.refresh_meta_stats()} publication(s) Meta (Instagram / Page)")
-        elif reseau == 'facebook':
-            import tiktok
-            from articles import refresh_article_social_stats
-            nv = tiktok.refresh_meta_stats()
-            na = refresh_article_social_stats(lambda m: None)
-            msgs.append(f"{nv} vidéo(s) Page + {na} article(s) Page/Threads")
-        elif reseau == 'threads':
-            from articles import refresh_article_social_stats
-            msgs.append(f"{refresh_article_social_stats(lambda m: None)} article(s) Threads/Page")
-        elif reseau in ('facebook-profil', 'profil-facebook'):
-            from articles import refresh_facebook_profile
-            msgs.append(f"{refresh_facebook_profile()} publication(s) du profil")
-        else:
-            abort(404)
-        flash("Chiffres mis à jour : " + " · ".join(msgs), 'success')
-    except Exception as exc:  # noqa: BLE001
-        flash(f"Relevé impossible : {exc}", 'danger')
+    if reseau not in _RESEAUX_RELEVABLES:
+        abort(404)
+    if reseau in _RESEAU_EN_COURS:
+        flash("Un relevé est déjà en cours pour ce réseau — patientez un instant.", 'info')
+        return redirect(url_for('analytics.reseau_stats', reseau=reseau))
+    _RESEAU_EN_COURS.add(reseau)
+    app = current_app._get_current_object()
+    threading.Thread(target=_reseau_refresh_travail, args=(app, reseau),
+                     name=f'reseau-refresh-{reseau}', daemon=True).start()
+    flash("Relevé lancé en arrière-plan — rechargez la page dans un instant pour voir les chiffres à jour.", 'success')
     return redirect(url_for('analytics.reseau_stats', reseau=reseau))
 
 
