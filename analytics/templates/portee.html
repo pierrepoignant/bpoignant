@@ -4,10 +4,19 @@
 {% block admin_subtitle %}<p>Vues cumulées tous réseaux, par publication. Chaque réseau compte à sa façon : c'est un ordre de grandeur de la portée, pas une mesure exacte.</p>{% endblock %}
 
 {% block admin_content %}
-    <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.4rem;">
-        <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Portée totale cumulée</div>
-        <div style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce);">{{ '{:,}'.format(total_general).replace(',', ' ') }}</div>
-        <div style="color: var(--gris); font-size: 0.82rem;">{{ lignes|length }} publication(s)</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.4rem;">
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Portée totale cumulée</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--vert-fonce);">{{ '{:,}'.format(total_general).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.82rem;">{{ lignes|length }} publication(s)</div>
+        </div>
+        {% if moyenne_recent %}
+        <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Moyenne des {{ n_recent }} dernières</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: var(--bleu, #000091);">{{ '{:,}'.format(moyenne_recent).replace(',', ' ') }}</div>
+            <div style="color: var(--gris); font-size: 0.82rem;">portée moyenne par publication récente</div>
+        </div>
+        {% endif %}
     </div>
 
     <div class="admin-table-wrap" style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 0.4rem 0.6rem; overflow-x: auto;">

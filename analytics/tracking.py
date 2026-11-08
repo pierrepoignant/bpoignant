@@ -570,9 +570,14 @@ def _rendre_portee(titre, icone, cols, lignes, tri='total'):
     else:
         lignes.sort(key=lambda r: r['total'], reverse=True)
     totaux = [sum(r['valeurs'][i] for r in lignes) for i in range(len(cols))]
+    # Moyenne de portée des 7 publications les plus récentes (par date) : un
+    # repère de la performance actuelle, indépendant du cumul historique.
+    recents = sorted(lignes, key=lambda r: r['date'] or _dt.min, reverse=True)[:7]
+    moyenne_recent = round(sum(r['total'] for r in recents) / len(recents)) if recents else 0
     return render_template('portee.html', titre=titre, icone=icone, colonnes=cols,
                            lignes=lignes, totaux=totaux,
-                           total_general=sum(totaux))
+                           total_general=sum(totaux),
+                           moyenne_recent=moyenne_recent, n_recent=len(recents))
 
 
 @analytics_bp.route('/portee/videos')
