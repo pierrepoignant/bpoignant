@@ -1,6 +1,38 @@
 import os
+import socket
 import ssl
 from datetime import datetime
+
+# ── Resolve IPv4 first: this cluster advertises IPv6 but cannot route it ─────
+# A connect to a AAAA address fails instantly here with
+# [Errno 101] Network is unreachable (verified from a pod: IPv4 connects, the
+# same host over IPv6 does not). Google and Meta are dual-stack, the resolver
+# returns A and AAAA in a varying order, and neither requests/urllib3 nor
+# httplib2 falls back to the next address — they try the first and give up.
+#
+# That is why the YouTube backfill failed on 5, 6 and 9 November and succeeded
+# on 4, 7 and 8 with nothing in the app changing: a coin toss in the resolver.
+# It is also the shape of the api.twitter.com failures in October.
+#
+# Patched at getaddrinfo rather than in urllib3, because both stacks are in
+# use here (requests for most calls, httplib2 under googleapiclient) and only
+# this covers both. IPv6 is still reachable for a host that has no A record at
+# all, so this prefers IPv4 rather than forbidding IPv6.
+_real_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_first(host, port, family=0, *args, **kwargs):
+    if family == 0:
+        try:
+            v4 = _real_getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
+            if v4:
+                return v4
+        except socket.gaierror:
+            pass            # no A record — let the real lookup answer
+    return _real_getaddrinfo(host, port, family, *args, **kwargs)
+
+
+socket.getaddrinfo = _ipv4_first
 
 from flask import Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, current_user
