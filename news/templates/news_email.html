@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"></head>
+<body style="margin:0; background:#f4f5f7; font-family:Georgia,'Times New Roman',serif; color:#1c1e26;">
+  <div style="max-width:620px; margin:0 auto; padding:24px 16px;">
+    <div style="background:#10213E; color:#fff; border-radius:12px 12px 0 0; padding:18px 22px;">
+      <div style="font-size:0.78rem; letter-spacing:0.06em; text-transform:uppercase; color:#b9c0d0;">Veille du {{ jour }}</div>
+      <div style="font-size:1.35rem; font-weight:700; margin-top:4px;">{{ suggestions|length }} idée{{ 's' if suggestions|length > 1 else '' }} de Minute</div>
+    </div>
+    <div style="background:#fff; border-radius:0 0 12px 12px; padding:8px 22px 22px;">
+      {% for s in suggestions %}
+      <div style="border-bottom:1px solid #eee; padding:16px 0;">
+        <div style="font-weight:700; font-size:1.05rem; color:#000091;">{{ s.angle or s.news_titre }}</div>
+        {% if s.accroche %}<div style="font-style:italic; margin:6px 0; color:#333;">« {{ s.accroche }} »</div>{% endif %}
+        {% if s.bandeau %}<div style="margin:6px 0;"><span style="background:#10213E;color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:5px;">{{ s.bandeau }}</span></div>{% endif %}
+        <div style="font-size:0.85rem; color:#555; margin-top:6px;">
+          {% if s.pertinence is not none %}Pertinence {{ s.pertinence }} · {% endif %}
+          {% if s.news_url %}<a href="{{ s.news_url }}" style="color:#E1000F; text-decoration:none;">Actualité ({{ s.news_source or 'source' }}) →</a>{% endif %}
+        </div>
+        {% if s.echo_titre %}<div style="font-size:0.82rem; color:#888; margin-top:3px;">Écho : {{ s.echo_titre }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <div style="text-align:center; padding-top:18px;">
+        <a href="{{ lien }}" style="display:inline-block; background:#000091; color:#fff; text-decoration:none; padding:11px 22px; border-radius:8px; font-size:0.95rem;">Voir et retenir sur le site →</a>
+      </div>
+    </div>
+    <div style="text-align:center; color:#999; font-size:0.72rem; padding:14px;">bernardpoignant.fr — veille automatique</div>
+  </div>
+</body>
+</html>

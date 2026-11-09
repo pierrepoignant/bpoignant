@@ -1,0 +1,65 @@
+{% extends 'admin_base.html' %}
+{% block title %}Veille{% endblock %}
+{% block admin_title %}<i class="fas fa-binoculars" style="color: var(--vert);"></i> Veille{% endblock %}
+{% block admin_subtitle %}<p>Chaque soir, l'actualité politique croisée avec ce que Bernard a déjà écrit : des idées de « Minute » dans son ton, avec les liens et l'écho de ses textes.</p>{% endblock %}
+
+{% block admin_content %}
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem;">
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+            {% for key, lib in [('', 'À traiter'), ('retenu', 'Retenues'), ('produit', 'Produites'), ('ecarte', 'Écartées')] %}
+            <a href="{{ url_for('admin_news.index', statut=key) }}"
+               class="btn btn-sm {% if statut == key %}btn-vert{% else %}btn-outline{% endif %}"
+               style="{% if statut != key %}color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ lib }}</a>
+            {% endfor %}
+        </div>
+        <form method="POST" action="{{ url_for('admin_news.generer') }}" style="margin: 0;"
+              onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Génération…';">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-wand-magic-sparkles"></i> Générer maintenant</button>
+        </form>
+    </div>
+
+    {% if not jours %}
+    <div style="text-align: center; padding: 3rem; color: var(--gris);">
+        <i class="fas fa-binoculars" style="font-size: 2.6rem; margin-bottom: 1rem;"></i>
+        <p>Aucune suggestion pour l'instant.<br>Le relevé tourne chaque soir à 19 h — ou lancez-en un avec « Générer maintenant ».</p>
+    </div>
+    {% endif %}
+
+    {% for jour in jours %}
+    <h2 style="font-size: 1rem; color: var(--gris); margin: 1.6rem 0 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{ jour.strftime('%A %d/%m/%Y') }} · {{ par_jour[jour]|length }} idée{{ 's' if par_jour[jour]|length > 1 else '' }}
+    </h2>
+    {% for s in par_jour[jour] %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.3rem; margin-bottom: 0.9rem; border-left: 4px solid {% if s.statut == 'retenu' %}var(--vert){% elif s.statut == 'produit' %}var(--bleu, #000091){% else %}#e0e0e0{% endif %};">
+        <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: start;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 700; font-size: 1.02rem; margin-bottom: 0.2rem;">{{ s.angle or s.news_titre }}</div>
+                <div style="font-size: 0.82rem; color: var(--gris);">
+                    {% if s.pertinence is not none %}<span style="background: var(--gris-clair); border-radius: 50px; padding: 1px 9px;">pertinence {{ s.pertinence }}</span> · {% endif %}
+                    {% if s.theme %}thème : {{ s.theme }}{% endif %}
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+                {% if s.statut != 'retenu' %}
+                <form method="POST" action="{{ url_for('admin_news.statut', sid=s.id) }}" style="margin:0;"><input type="hidden" name="statut" value="retenu"><button class="btn btn-sm btn-vert" title="Retenir"><i class="fas fa-check"></i></button></form>
+                {% endif %}
+                {% if s.statut != 'produit' %}
+                <form method="POST" action="{{ url_for('admin_news.statut', sid=s.id) }}" style="margin:0;"><input type="hidden" name="statut" value="produit"><button class="btn btn-sm btn-outline" style="color:var(--noir); border-color:#e0e0e0;" title="Marquer produite"><i class="fas fa-film"></i></button></form>
+                {% endif %}
+                <form method="POST" action="{{ url_for('admin_news.statut', sid=s.id) }}" style="margin:0;"><input type="hidden" name="statut" value="ecarte"><button class="btn btn-sm btn-outline" style="color:var(--gris); border-color:#e0e0e0;" title="Écarter"><i class="fas fa-xmark"></i></button></form>
+            </div>
+        </div>
+
+        {% if s.accroche %}<p style="margin: 0.7rem 0 0.3rem; font-style: italic; color: var(--noir);">« {{ s.accroche }} »</p>{% endif %}
+        {% if s.script %}<p style="margin: 0.3rem 0; font-size: 0.92rem; line-height: 1.6; white-space: pre-wrap;">{{ s.script }}</p>{% endif %}
+        {% if s.bandeau %}<div style="margin: 0.5rem 0;"><span style="background: #10213E; color: #fff; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em; padding: 3px 10px; border-radius: 6px;">{{ s.bandeau }}</span></div>{% endif %}
+        {% if s.legende %}<details style="margin-top: 0.4rem;"><summary style="cursor: pointer; font-size: 0.82rem; color: var(--gris);">Légende</summary><p style="font-size: 0.88rem; line-height: 1.55; margin: 0.4rem 0 0;">{{ s.legende }}</p></details>{% endif %}
+
+        <div style="display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 0.7rem; font-size: 0.82rem;">
+            {% if s.news_url %}<a href="{{ s.news_url }}" target="_blank" rel="noopener" style="color: var(--rouge);"><i class="far fa-newspaper"></i> {{ s.news_source or 'actualité' }}</a>{% endif %}
+            {% if s.echo_titre %}<span style="color: var(--gris);"><i class="fas fa-link"></i> écho : {% if s.echo_url %}<a href="{{ s.echo_url }}" target="_blank" rel="noopener" style="color: var(--gris); text-decoration: underline;">{{ s.echo_titre }}</a>{% else %}{{ s.echo_titre }}{% endif %}</span>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+{% endblock %}

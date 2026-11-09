@@ -639,3 +639,44 @@ spec:
               resources:
                 requests: { cpu: 50m, memory: 256Mi }
                 limits: { cpu: "1", memory: 768Mi }
+---
+# Veille quotidienne : actualité politique FR croisée avec le corpus de Bernard
+# → suggestions de « Minute » + digest e-mail aux administrateurs.
+#
+# Schedule: tous les jours à 19:00 Europe/Paris.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bpoignant-veille
+  namespace: default
+spec:
+  schedule: "0 19 * * *"          # 19:00
+  timeZone: "Europe/Paris"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: ovh-registry-secret
+          containers:
+            - name: veille
+              image: 8ie06lx5.c1.gra9.container-registry.ovh.net/reachagent/bpoignant:latest
+              imagePullPolicy: Always
+              command: ["python", "news_daily.py"]
+              envFrom:
+                - secretRef:
+                    name: bpoignant-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi

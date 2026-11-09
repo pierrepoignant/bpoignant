@@ -187,6 +187,9 @@ def create_app(db_name='ovh'):
     app.register_blueprint(admin_podcast_bp)
     app.register_blueprint(public_podcast_bp)
 
+    from news import admin_news_bp
+    app.register_blueprint(admin_news_bp)
+
     # Veilleur d'enchaînement après montage : uniquement là où les fichiers
     # sont, c'est-à-dire sur la machine de développement.
     try:
