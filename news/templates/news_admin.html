@@ -12,10 +12,16 @@
                style="{% if statut != key %}color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ lib }}</a>
             {% endfor %}
         </div>
-        <form method="POST" action="{{ url_for('admin_news.generer') }}" style="margin: 0;"
-              onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Génération…';">
-            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-wand-magic-sparkles"></i> Générer maintenant</button>
-        </form>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+            <form method="POST" action="{{ url_for('admin_news.envoyer') }}" style="margin: 0;">
+                <button type="submit" class="btn btn-sm btn-outline" style="color: var(--noir); border-color: #e0e0e0;"
+                        title="Envoyer le digest du jour par e-mail aux administrateurs"><i class="far fa-envelope"></i> Envoyer par e-mail</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_news.generer') }}" style="margin: 0;"
+                  onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Génération…';">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-wand-magic-sparkles"></i> Générer maintenant</button>
+            </form>
+        </div>
     </div>
 
     {% if not jours %}

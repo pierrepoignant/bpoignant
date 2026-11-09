@@ -183,9 +183,24 @@ _SCHEMA = (
 )
 
 
+def _norm(texte):
+    return re.sub(r'\s+', ' ', (texte or '').lower()).strip()
+
+
+def _recent_suggestions(days=7):
+    """Les suggestions des `days` derniers jours (hors écartées), pour ne pas
+    reproposer deux fois le même sujet."""
+    from datetime import timedelta
+    depuis = date.today() - timedelta(days=days)
+    return (NewsSuggestion.query
+            .filter(NewsSuggestion.jour >= depuis, NewsSuggestion.statut != 'ecarte')
+            .order_by(NewsSuggestion.jour.desc()).all())
+
+
 def generer_suggestions(log_fn=print):
     """Lit l'actu, la croise avec le corpus, et stocke les suggestions du jour.
-    Renvoie le nombre de suggestions créées."""
+    Évite de reproposer un sujet déjà soumis ces 7 derniers jours. Renvoie le
+    nombre de suggestions créées."""
     from articles.ai_summary import _api_key, MODEL
     key = _api_key()
     if not key:
@@ -198,6 +213,12 @@ def generer_suggestions(log_fn=print):
     news = news[:40]
     themes, refs = _corpus()
 
+    # Mémoire courte : ce qui a déjà été proposé ces 7 derniers jours, pour ne
+    # pas se répéter — on le dit au modèle, et on filtre à l'enregistrement.
+    recents = _recent_suggestions(7)
+    recent_news = {_norm(r.news_titre) for r in recents}
+    recent_angles = {_norm(r.angle) for r in recents if r.angle}
+
     lettres = [chr(65 + i) for i in range(len(news))]  # A, B, C…
     bloc_news = '\n'.join(f"[{lettres[i]}] {n['titre']} ({n['source']})"
                           for i, n in enumerate(news))
@@ -207,9 +228,12 @@ def generer_suggestions(log_fn=print):
     systeme = (_STYLE + "\n\nTu proposes des sujets de vidéo « La Minute » à partir "
                "de l'actualité, uniquement quand ils recoupent ses thèmes ou ce "
                "qu'il a déjà écrit. " + _SCHEMA)
+    bloc_recent = '\n'.join(f"- {r.angle or r.news_titre}" for r in recents[:40])
+    rappel = (f"\n\nDÉJÀ PROPOSÉ CES 7 DERNIERS JOURS (ne REPROPOSE PAS ces sujets, "
+              f"trouve du neuf) :\n{bloc_recent}" if bloc_recent else '')
     user = (f"SES THÈMES : {', '.join(themes)}\n\n"
             f"CE QU'IL A DÉJÀ ÉCRIT :\n{bloc_refs}\n\n"
-            f"ACTUALITÉS DU JOUR :\n{bloc_news}\n\n"
+            f"ACTUALITÉS DU JOUR :\n{bloc_news}{rappel}\n\n"
             f"Propose au maximum {max_suggestions()} sujets.")
 
     import anthropic
@@ -241,6 +265,14 @@ def generer_suggestions(log_fn=print):
             nw = None
         if not nw:
             continue
+        # Garde-fou anti-répétition : même actualité ou même angle que ces 7
+        # derniers jours → on saute.
+        ang = _norm(p.get('angle') or '')
+        if _norm(nw['titre']) in recent_news or (ang and ang in recent_angles):
+            continue
+        recent_news.add(_norm(nw['titre']))
+        if ang:
+            recent_angles.add(ang)
         echo = None
         er = p.get('echo_ref')
         if isinstance(er, int) and 1 <= er <= len(refs):
@@ -354,6 +386,30 @@ def generer():
 
     threading.Thread(target=_travail, name='veille-generer', daemon=True).start()
     flash("Génération lancée en arrière-plan — rechargez la page dans un instant.", 'success')
+    return redirect(url_for('admin_news.index'))
+
+
+@admin_news_bp.route('/envoyer', methods=['POST'])
+@admin_required
+def envoyer():
+    """Envoyer tout de suite le digest du jour (ou du dernier jour disponible)
+    aux administrateurs."""
+    rows = (NewsSuggestion.query.filter(NewsSuggestion.statut != 'ecarte')
+            .order_by(NewsSuggestion.jour.desc(), NewsSuggestion.pertinence.desc(),
+                      NewsSuggestion.id.desc()).all())
+    if not rows:
+        flash("Aucune suggestion à envoyer.", 'info')
+        return redirect(url_for('admin_news.index'))
+    jour = rows[0].jour
+    du_jour = [s for s in rows if s.jour == jour]
+    try:
+        n = envoyer_digest(du_jour, log_fn=lambda m: current_app.logger.info("veille: %s", m))
+        if n:
+            flash(f"Digest du {jour.strftime('%d/%m/%Y')} envoyé à {n} administrateur(s).", 'success')
+        else:
+            flash("Aucun e-mail envoyé (SendGrid non configuré ou aucun admin avec e-mail).", 'info')
+    except Exception as exc:  # noqa: BLE001
+        flash(f"Envoi impossible : {exc}", 'danger')
     return redirect(url_for('admin_news.index'))
 
 
