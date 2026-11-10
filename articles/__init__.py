@@ -1333,6 +1333,11 @@ def _save_article(article):
         if created_at is not None:
             article.created_at = created_at
 
+    # Robustesse : un article publié doit porter une date de parution (tri,
+    # newsletter, relevés, publication auto). À défaut, la date de création.
+    if article.published and not article.published_at:
+        article.published_at = article.created_at or datetime.utcnow()
+
     # Explicit ticks always win; the AI only fills a blank slate.
     auto_theme = False
     if chosen_themes:

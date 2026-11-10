@@ -633,13 +633,15 @@ def _reach_videos():
 def _reach_articles():
     from articles.models import Article
     from analytics.models import PageView
-    cols = ['Site', 'X', 'Threads', 'FB Profil']
+    # « FB Profil » pour un article = j'aime du profil : une publication de lien
+    # sur un profil personnel n'a pas de compteur de vues, mais des j'aime.
+    cols = ['Site', 'X', 'Threads', 'FB Profil (j\'aime)']
     vues_path = dict(db.session.query(PageView.path, func.count(PageView.id))
                      .group_by(PageView.path).all())
     lignes = []
     for a in Article.query.filter(Article.published.is_(True)).all():
         site = _n(vues_path.get(f'/articles/{a.slug}'))
-        vals = [site, _n(a.x_view_count), _n(a.threads_views), _n(a.fb_profile_views)]
+        vals = [site, _n(a.x_view_count), _n(a.threads_views), _n(a.fb_profile_likes)]
         lignes.append({'titre': a.title, 'url': None, 'date': a.created_at,
                        'valeurs': vals, 'total': sum(vals)})
     return cols, lignes
