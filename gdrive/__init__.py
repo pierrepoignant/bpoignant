@@ -155,6 +155,10 @@ def exchange_code(code, redirect_uri):
             "Google n'a pas renvoyé de refresh token. Réessayez la connexion."
         )
     set_config(KEY_REFRESH_TOKEN, refresh_token.strip())
+    # Une reconnexion réussie efface aussitôt l'erreur et son bandeau : sinon il
+    # subsiste alors que le jeton est tout neuf (il fallait faire un appel
+    # réussi ou cliquer « Vérifier » pour le lever).
+    record_success()
 
 
 def connection_error():
