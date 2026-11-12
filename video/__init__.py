@@ -53,15 +53,22 @@ MIN_GAP_TO_CUT = 0.25
 WHISPER_MODEL = os.environ.get('VIDEO_WHISPER_MODEL', 'medium')
 
 # Amorce passée à Whisper : biaise la reconnaissance vers les noms que Bernard
-# cite, que le modèle écorche sinon (« Glucksmann », « Knafo », « Bardella »…).
+# cite, que le modèle écorche sinon. Dressée à partir de son corpus (articles +
+# chroniques) : les figures qu'il nomme le plus, et les candidats actuels.
 WHISPER_NOMS = (
-    'Vᵉ République, De Gaulle, Mitterrand, Emmanuel Macron, Édouard Philippe, '
-    'Jean-Luc Mélenchon, La France insoumise, Raphaël Glucksmann, Place publique, '
-    'Olivier Faure, Parti socialiste, Fabien Roussel, Parti communiste, '
-    'Les Républicains, Bruno Retailleau, Laurent Wauquiez, Rassemblement national, '
-    'Marine Le Pen, Jordan Bardella, Reconquête, Éric Zemmour, Sarah Knafo, '
-    'Les Écologistes, Marine Tondelier, François Ruffin, Gabriel Attal, '
-    'Gérald Darmanin, François Hollande, Teddy Riner, Quimper, Bretagne, Finistère.'
+    'François Mitterrand, François Hollande, Charles de Gaulle, Lionel Jospin, '
+    'Léon Blum, Michel Rocard, Emmanuel Macron, Jean-Luc Mélenchon, Marine Le Pen, '
+    'Jean-Marie Le Pen, Jean Jaurès, Jacques Chirac, Pierre Mendès France, '
+    'Guy Mollet, Victor Hugo, Nicolas Sarkozy, Georges Clemenceau, Benoît Hamon, '
+    'Laurent Fabius, Jacques Delors, Albert Camus, Olivier Faure, Georges Pompidou, '
+    'Maréchal Pétain, Ségolène Royal, Laurent Berger, Bernard Cazeneuve, '
+    'Raphaël Glucksmann, Jordan Bardella, Éric Zemmour, Sarah Knafo, Fabien Roussel, '
+    'Gabriel Attal, Gérald Darmanin, Bruno Retailleau, Laurent Wauquiez, '
+    'Marine Tondelier, François Ruffin, Édouard Philippe, Teddy Riner, '
+    'Parti socialiste, La France insoumise, Place publique, Rassemblement national, '
+    'Front national, Les Républicains, Reconquête, Les Écologistes, Parti communiste, '
+    'Front populaire, Assemblée nationale, Sénat, Vᵉ République, Éducation nationale, '
+    'France, Bretagne, Quimper, Finistère, Europe, Union européenne, Allemagne, Paris.'
 )
 
 # Loudness target. TikTok, Instagram and YouTube all normalise playback to
