@@ -50,7 +50,19 @@ PAD = 0.08
 # sound unnaturally clipped, and each cut adds a node to the filter graph.
 MIN_GAP_TO_CUT = 0.25
 
-WHISPER_MODEL = os.environ.get('VIDEO_WHISPER_MODEL', 'small')
+WHISPER_MODEL = os.environ.get('VIDEO_WHISPER_MODEL', 'medium')
+
+# Amorce passée à Whisper : biaise la reconnaissance vers les noms que Bernard
+# cite, que le modèle écorche sinon (« Glucksmann », « Knafo », « Bardella »…).
+WHISPER_NOMS = (
+    'Vᵉ République, De Gaulle, Mitterrand, Emmanuel Macron, Édouard Philippe, '
+    'Jean-Luc Mélenchon, La France insoumise, Raphaël Glucksmann, Place publique, '
+    'Olivier Faure, Parti socialiste, Fabien Roussel, Parti communiste, '
+    'Les Républicains, Bruno Retailleau, Laurent Wauquiez, Rassemblement national, '
+    'Marine Le Pen, Jordan Bardella, Reconquête, Éric Zemmour, Sarah Knafo, '
+    'Les Écologistes, Marine Tondelier, François Ruffin, Gabriel Attal, '
+    'Gérald Darmanin, François Hollande, Teddy Riner, Quimper, Bretagne, Finistère.'
+)
 
 # Loudness target. TikTok, Instagram and YouTube all normalise playback to
 # roughly -14 LUFS; delivering at that level means the platform leaves the
@@ -636,7 +648,8 @@ def _whisper():
 
 def transcribe(path, language='fr'):
     """Return {'text', 'segments': [{'start','end','text'}]}."""
-    segments, _info = _whisper().transcribe(path, language=language, vad_filter=True)
+    segments, _info = _whisper().transcribe(path, language=language, vad_filter=True,
+                                            initial_prompt=WHISPER_NOMS)
     out = []
     for s in segments:
         out.append({'start': round(s.start, 2), 'end': round(s.end, 2),
