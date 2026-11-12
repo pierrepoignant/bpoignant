@@ -108,6 +108,9 @@ class TikTokPost(db.Model):
     # so the statistics leave them out rather than average the two together.
     boosted = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Masquée du site public (ex. rendu à refaire) sans perdre la fiche.
+    hidden = db.Column(db.Boolean, default=False, nullable=False)
+
     # Figures from the last Apify scrape.
     views = db.Column(db.Integer, nullable=True)
     likes = db.Column(db.Integer, nullable=True)

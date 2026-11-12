@@ -493,6 +493,9 @@ def _migrate_schema():
         if 'fb_profile_views' not in cols:
             db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN fb_profile_views INTEGER NULL"))
             db.session.commit()
+        if 'hidden' not in cols:
+            db.session.execute(text("ALTER TABLE tiktok_posts ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
 
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}

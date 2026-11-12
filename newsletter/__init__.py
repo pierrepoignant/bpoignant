@@ -85,6 +85,7 @@ def minute_landing():
     videos = (
         TikTokPost.query
         .filter(TikTokPost.video_url.isnot(None),
+                TikTokPost.hidden.is_(False),
                 TikTokPost.posted_at >= datetime(2026, 1, 1))
         .order_by(TikTokPost.posted_at.desc())
         .all()
