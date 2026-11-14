@@ -358,7 +358,7 @@ def videos():
 
     clips = (
         TikTokPost.query
-        .filter(TikTokPost.video_url.isnot(None))
+        .filter(TikTokPost.video_url.isnot(None), TikTokPost.hidden.is_(False))
         .order_by(TikTokPost.posted_at.desc())
         .all()
     )
