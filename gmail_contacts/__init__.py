@@ -351,7 +351,7 @@ def _headers(token, message_id):
     return out
 
 
-def recent_contacts(limit=100, scan=600, before=None, after=None):
+def recent_contacts(limit=100, scan=600, before=None, after=None, include_trash=True):
     """The people Bernard has most recently written to or heard from.
 
     Walks the sent box and the inbox newest-first and keeps one entry per
@@ -376,9 +376,18 @@ def recent_contacts(limit=100, scan=600, before=None, after=None):
     # perdre les messages du jour du dernier balayage.
     if after:
         borne += f' after:{(after - timedelta(days=1)):%Y/%m/%d}'
-    for requete, direction in ((f'in:sent{borne}', 'envoyé'),
-                               (f'to:me -in:chats -in:sent{borne}', 'reçu')):
-        for mid in _messages(token, requete, scan // 2):
+    # Par défaut, la recherche Gmail ignore la corbeille. On ajoute donc des
+    # passes explicites `in:trash` pour récupérer aussi les correspondants des
+    # messages supprimés — un contact reste un contact, même si l'échange a été
+    # jeté depuis.
+    requetes = [(f'in:sent{borne}', 'envoyé'),
+                (f'to:me -in:chats -in:sent{borne}', 'reçu')]
+    if include_trash:
+        requetes += [(f'in:trash from:me -in:chats{borne}', 'envoyé'),
+                     (f'in:trash to:me -in:chats{borne}', 'reçu')]
+    par_requete = max(50, scan // len(requetes))
+    for requete, direction in requetes:
+        for mid in _messages(token, requete, par_requete):
             h = _headers(token, mid)
             time.sleep(PAUSE_ENTRE_LECTURES)
             if not h:
