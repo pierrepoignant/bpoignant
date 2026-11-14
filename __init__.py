@@ -499,6 +499,11 @@ def _migrate_schema():
 
     if 'articles' in inspector.get_table_names():
         cols = {c['name'] for c in inspector.get_columns('articles')}
+        if 'corrige_at' not in cols:
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN content_avant_correction TEXT NULL"))
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN titre_avant_correction VARCHAR(300) NULL"))
+            db.session.execute(text("ALTER TABLE articles ADD COLUMN corrige_at DATETIME NULL"))
+            db.session.commit()
         if 'fb_page_post_id' not in cols:
             db.session.execute(text("ALTER TABLE articles ADD COLUMN fb_page_post_id VARCHAR(60) NULL"))
             db.session.execute(text("ALTER TABLE articles ADD COLUMN fb_page_posted_at DATETIME NULL"))

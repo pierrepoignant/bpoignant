@@ -964,6 +964,30 @@ def edit_article_autosave(article_id):
     return jsonify(ok=True, at=datetime.utcnow().strftime('%H:%M:%S'))
 
 
+@admin_articles_bp.route('/<int:article_id>/corriger', methods=['POST'])
+@admin_required
+def corriger_article_route(article_id):
+    """Lancer la relecture orthographe/typographie à la demande (tâche de fond)."""
+    from articles.correction import corriger_en_fond
+    article = db.session.get(Article, article_id) or abort(404)
+    corriger_en_fond(current_app._get_current_object(), article.id)
+    flash("Relecture lancée en arrière-plan — rechargez dans un instant.", 'success')
+    return redirect(url_for('admin_articles.edit_article', article_id=article.id))
+
+
+@admin_articles_bp.route('/<int:article_id>/correction/annuler', methods=['POST'])
+@admin_required
+def annuler_correction_route(article_id):
+    """Restituer le texte d'avant la dernière correction."""
+    from articles.correction import annuler_article
+    article = db.session.get(Article, article_id) or abort(404)
+    if annuler_article(article):
+        flash("Correction annulée — texte d'origine rétabli.", 'info')
+    else:
+        flash("Rien à annuler.", 'info')
+    return redirect(url_for('admin_articles.edit_article', article_id=article.id))
+
+
 @admin_articles_bp.route('/<int:article_id>/stats')
 @admin_required
 def article_stats(article_id):
@@ -1273,6 +1297,8 @@ def _save_article(article):
     if image_url.lower() in ('none', 'null', 'undefined'):
         image_url = ''
     content_html = clean_article_html(_clean_html(request.form.get('content_html')))
+    # Le corps a-t-il changé ? (pour ne relancer la relecture que si utile)
+    _ancien_html = '' if article is None else (article.content_html or '')
     published = request.form.get('published') == 'on'
     created_at = _parse_created_date(request.form.get('created_date'))
     author = _resolve_author()
@@ -1349,6 +1375,15 @@ def _save_article(article):
         auto_theme = bool(found)
 
     db.session.commit()
+
+    # Relecture orthographe/typographie en tâche de fond, à l'enregistrement
+    # d'un article publié dont le corps a changé. Réversible (bouton « Annuler
+    # la correction »). Désactivable via la config articles_autocorrect.
+    if content_html and _ancien_html != content_html:
+        from articles.correction import autocorrect_actif, corriger_en_fond
+        if autocorrect_actif():
+            corriger_en_fond(current_app._get_current_object(), article.id)
+
     if auto_summary and auto_social:
         flash("Article enregistré. Résumé et accroche X générés automatiquement — pensez à les relire.", 'success')
     elif auto_summary:

@@ -58,6 +58,11 @@ class Article(db.Model):
     # e-mail; persisted so it re-appears if the article is sent again.
     newsletter_intro = db.Column(db.Text, nullable=True)
     content_html = db.Column(db.Text, nullable=False, default='')
+    # Relecture orthographe/typographie : état d'avant la dernière correction,
+    # pour pouvoir l'annuler, et l'horodatage de la correction.
+    content_avant_correction = db.Column(db.Text, nullable=True)
+    titre_avant_correction = db.Column(db.String(300), nullable=True)
+    corrige_at = db.Column(db.DateTime, nullable=True)
     published = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
