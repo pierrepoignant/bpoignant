@@ -28,6 +28,14 @@
                style="color: var(--noir); border-color: #e0e0e0; white-space: nowrap;">
                 <i class="fa-brands fa-tiktok"></i> Posts TikTok{% if a_rattacher %} · {{ a_rattacher }} à rattacher{% endif %}
             </a>
+            {% if n_masquees or montrer_masquees %}
+            <a href="{{ url_for('admin_tiktok.videos', masquees='0' if montrer_masquees else '1') }}"
+               class="btn btn-sm {% if montrer_masquees %}btn-vert{% else %}btn-outline{% endif %}"
+               style="{% if not montrer_masquees %}color: var(--gris); border-color: #e0e0e0;{% endif %} white-space: nowrap;">
+                <i class="fas fa-eye{% if not montrer_masquees %}-slash{% endif %}"></i>
+                {% if montrer_masquees %}Cacher les masquées{% else %}Afficher les masquées ({{ n_masquees }}){% endif %}
+            </a>
+            {% endif %}
         </div>
     </div>
 
@@ -51,7 +59,13 @@
         {% endif %}
 
         <div class="fiche-corps">
-            <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="fiche-titre">{{ c.title|truncate(90) }}</a>
+            <a href="{{ url_for('admin_tiktok.edit', post_id=c.id) }}" class="fiche-titre">{{ c.title|truncate(90) }}{% if c.hidden %} <span style="background: var(--gris-clair); color: var(--gris); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 50px; vertical-align: middle;"><i class="fas fa-eye-slash"></i> masquée</span>{% endif %}</a>
+            <form method="POST" action="{{ url_for('admin_tiktok.toggle_visibilite', post_id=c.id) }}" style="display: inline; margin-left: 0.4rem;">
+                <button type="submit" class="btn btn-sm btn-outline" style="padding: 1px 9px; font-size: 0.72rem; color: var(--gris); border-color: #e0e0e0;"
+                        title="{{ 'Réafficher sur le site' if c.hidden else 'Masquer du site' }}">
+                    <i class="fas fa-eye{% if not c.hidden %}-slash{% endif %}"></i> {{ 'Réafficher' if c.hidden else 'Masquer' }}
+                </button>
+            </form>
             <div class="fiche-meta">
                 {{ c.posted_at.strftime('%d/%m/%Y') if c.posted_at else '—' }}
                 {% if c.duration_seconds %} · {{ '%.0f'|format(c.duration_seconds) }} s{% endif %}

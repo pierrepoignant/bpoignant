@@ -356,12 +356,13 @@ def videos():
     from newsletter import _mailable_query
     from newsletter.models import MinuteSend
 
-    clips = (
-        TikTokPost.query
-        .filter(TikTokPost.video_url.isnot(None), TikTokPost.hidden.is_(False))
-        .order_by(TikTokPost.posted_at.desc())
-        .all()
-    )
+    montrer_masquees = request.args.get('masquees') == '1'
+    q = TikTokPost.query.filter(TikTokPost.video_url.isnot(None))
+    if not montrer_masquees:
+        q = q.filter(TikTokPost.hidden.is_(False))
+    clips = q.order_by(TikTokPost.posted_at.desc()).all()
+    n_masquees = TikTokPost.query.filter(TikTokPost.video_url.isnot(None),
+                                         TikTokPost.hidden.is_(True)).count()
     envois = {}
     for m in MinuteSend.query.order_by(MinuteSend.sent_at.desc()).all():
         envois.setdefault(m.post_id, m)
@@ -375,6 +376,7 @@ def videos():
     return render_template(
         'tiktok_admin_videos.html', clips=clips, minute_sends=envois,
         a_rattacher=a_rattacher,
+        montrer_masquees=montrer_masquees, n_masquees=n_masquees,
         commentaires=__import__('tiktok.comments', fromlist=['compter']).compter([c.id for c in clips]),
         site_views=vues, minute_count=_mailable_query('minute').count(),
         linkedin_ok=linkedin.is_configured(),
@@ -445,6 +447,17 @@ def stats():
                            days=data['days'], group=data['group'],
                            excluded=data['excluded'],
                            ranges=RANGES, groups=GROUPS)
+
+
+@admin_tiktok_bp.route('/<int:post_id>/visibilite', methods=['POST'])
+@admin_required
+def toggle_visibilite(post_id):
+    """Masquer / réafficher une vidéo du site public (La Minute)."""
+    post = db.session.get(TikTokPost, post_id) or abort(404)
+    post.hidden = not post.hidden
+    db.session.commit()
+    flash("Vidéo masquée du site." if post.hidden else "Vidéo réaffichée sur le site.", 'success')
+    return redirect(request.referrer or url_for('admin_tiktok.videos'))
 
 
 @admin_tiktok_bp.route('/<int:post_id>/boosted', methods=['POST'])
