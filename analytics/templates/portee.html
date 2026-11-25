@@ -4,6 +4,35 @@
 {% block admin_subtitle %}<p>Vues cumulées tous réseaux, par publication. Chaque réseau compte à sa façon : c'est un ordre de grandeur de la portée, pas une mesure exacte.</p>{% endblock %}
 
 {% block admin_content %}
+    {# Fenêtre temporelle : filtre les publications parues dans la période
+       (les vues sont des cumuls à vie, pas d'historique quotidien). #}
+    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.2rem; align-items: center;">
+        <span style="color: var(--gris); font-size: 0.8rem; margin-right: 0.3rem;">Parues :</span>
+        {% for lib, val in [('Tout', 0), ('7 j', 7), ('30 j', 30), ('90 j', 90), ('1 an', 365)] %}
+        <a href="{{ url_for(request.endpoint, jours=val or none) }}"
+           class="btn btn-sm {% if (jours or 0) == val %}btn-vert{% else %}btn-outline{% endif %}"
+           style="{% if (jours or 0) != val %}color: var(--noir); border-color: #e0e0e0;{% endif %}">{{ lib }}</a>
+        {% endfor %}
+    </div>
+
+    {# Répartition par plateforme, avec la part (%) de la portée de la fenêtre. #}
+    {% if total_general %}
+    <div style="background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 1.1rem 1.4rem; margin-bottom: 1.4rem;">
+        <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem;">Vues par plateforme</div>
+        {% for p in par_plateforme %}{% if p.total %}
+        <div style="margin-bottom: 0.55rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.86rem; margin-bottom: 2px;">
+                <span style="font-weight: 600;">{{ p.label }}</span>
+                <span style="color: var(--gris); font-variant-numeric: tabular-nums;">{{ '{:,}'.format(p.total).replace(',', ' ') }} · <strong style="color: var(--noir);">{{ p.pct }} %</strong></span>
+            </div>
+            <div style="background: var(--gris-clair); border-radius: 50px; height: 8px; overflow: hidden;">
+                <div style="width: {{ p.pct }}%; height: 100%; background: var(--vert); border-radius: 50px;"></div>
+            </div>
+        </div>
+        {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.4rem;">
         <div style="background: white; padding: 1.2rem 1.4rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
             <div style="color: var(--gris); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Portée totale cumulée</div>

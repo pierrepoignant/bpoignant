@@ -647,20 +647,34 @@ def _reach_articles():
     return cols, lignes
 
 
-def _rendre_portee(titre, icone, cols, lignes, tri='total'):
-    from datetime import datetime as _dt
+def _rendre_portee(titre, icone, cols, lignes, tri='total', jours=None):
+    from datetime import datetime as _dt, timedelta
+    # Fenêtre temporelle : les vues sont des cumuls à vie par publication (pas
+    # d'historique quotidien), donc la fenêtre filtre les publications PARUES
+    # dans la période — « la portée des publications des N derniers jours ».
+    if jours:
+        seuil = _dt.utcnow() - timedelta(days=jours)
+        lignes = [r for r in lignes if r['date'] and r['date'] >= seuil]
     if tri == 'date':
         lignes.sort(key=lambda r: r['date'] or _dt.min, reverse=True)
     else:
         lignes.sort(key=lambda r: r['total'], reverse=True)
     totaux = [sum(r['valeurs'][i] for r in lignes) for i in range(len(cols))]
+    total_general = sum(totaux)
+    # Répartition par plateforme : total et part (%) de la portée de la fenêtre.
+    par_plateforme = sorted(
+        [{'label': cols[i], 'total': totaux[i],
+          'pct': round(100 * totaux[i] / total_general, 1) if total_general else 0.0}
+         for i in range(len(cols))],
+        key=lambda d: d['total'], reverse=True)
     # Moyenne de portée des 7 publications les plus récentes (par date) : un
     # repère de la performance actuelle, indépendant du cumul historique.
     recents = sorted(lignes, key=lambda r: r['date'] or _dt.min, reverse=True)[:7]
     moyenne_recent = round(sum(r['total'] for r in recents) / len(recents)) if recents else 0
     return render_template('portee.html', titre=titre, icone=icone, colonnes=cols,
                            lignes=lignes, totaux=totaux,
-                           total_general=sum(totaux),
+                           par_plateforme=par_plateforme, jours=jours,
+                           total_general=total_general,
                            moyenne_recent=moyenne_recent, n_recent=len(recents))
 
 
@@ -668,11 +682,13 @@ def _rendre_portee(titre, icone, cols, lignes, tri='total'):
 @admin_required
 def portee_videos():
     cols, lignes = _reach_videos()
-    return _rendre_portee('La Minute — portée totale', 'fas fa-film', cols, lignes, tri='date')
+    return _rendre_portee('La Minute — portée totale', 'fas fa-film', cols, lignes,
+                          tri='date', jours=request.args.get('jours', type=int))
 
 
 @analytics_bp.route('/portee/articles')
 @admin_required
 def portee_articles():
     cols, lignes = _reach_articles()
-    return _rendre_portee('Articles — portée totale', 'fas fa-newspaper', cols, lignes, tri='date')
+    return _rendre_portee('Articles — portée totale', 'fas fa-newspaper', cols, lignes,
+                          tri='date', jours=request.args.get('jours', type=int))
